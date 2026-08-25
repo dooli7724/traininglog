@@ -1,0 +1,2429 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#F3EFE6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>PT 일지</title>
+  <style>
+    :root {
+      --bg: #F3EFE6; --card: #FFFcf7; --line: #E2D9CB; --text: #2C2A26;
+      --muted: #7A7468; --accent: #1E3A5F; --ok: #1B5E46; --danger: #B4232C;
+      --shadow: 0 8px 24px rgba(44, 42, 38, 0.06); --tap: 48px; --nav: 64px; --radius: 16px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; min-height: 100%; min-height: 100dvh; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    html { overflow-x: hidden; }
+    body {
+      padding-bottom: calc(var(--nav) + 12px + env(safe-area-inset-bottom, 0px));
+      overflow-x: hidden;
+    }
+    body.share { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+    body.share.client #shareBack { display: none; }
+    button, input, textarea, select { font: inherit; color: var(--text); }
+    button { cursor: pointer; touch-action: manipulation; }
+    .btn, .tile, .back, .seg button, .cal-cell, .acc-h, .tabbar button { touch-action: manipulation; }
+    .hidden { display: none !important; }
+    .top {
+      position: sticky; top: 0; z-index: 20; background: rgba(243,239,230,.94);
+      backdrop-filter: blur(10px);
+      padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .top h1 { margin: 0; font-size: clamp(1.05rem, 4.6vw, 1.28rem); letter-spacing: -.03em; }
+    .top p { margin: 4px 0 0; color: var(--muted); font-size: .84rem; }
+    .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .top .row h1 { flex: 1; min-width: 0; font-size: clamp(.95rem, 4vw, 1.12rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hdr-btn { min-height: 40px !important; padding: 0 10px !important; font-size: .75rem !important; flex-shrink: 0; white-space: nowrap; }
+    .back {
+      width: 40px; height: 40px; min-height: 40px; padding: 0; flex-shrink: 0;
+      border: 1px solid var(--line); border-radius: 12px; background: #F7F2E8; color: var(--text);
+      font-size: 1.35rem; font-weight: 600; line-height: 1;
+    }
+    .back:active { transform: scale(.96); }
+    .page { padding: 12px 14px 8px; max-width: 560px; margin: 0 auto; width: 100%; }
+    .btn {
+      min-height: var(--tap); border: 0; border-radius: 14px; padding: 0 14px;
+      font-weight: 700; background: var(--accent); color: #fff;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn.soft { background: #F7F2E8; color: var(--text); border: 1px solid var(--line); }
+    .btn.danger { background: #F8ECEC; color: var(--danger); border: 1px solid #E8C9C9; min-height: 40px; font-size: .84rem; }
+    .btn.wide { width: 100%; }
+    .field, select.field {
+      width: 100%; min-height: var(--tap); border: 1px solid var(--line);
+      background: #FFFcf7; border-radius: 14px; padding: 12px 14px; outline: none;
+    }
+    .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(30,58,95,.14); }
+    textarea.field { min-height: 88px; resize: vertical; line-height: 1.5; }
+    .cap { display: block; margin: 10px 0 6px; font-size: .78rem; font-weight: 800; color: var(--muted); }
+    .add { display: flex; gap: 8px; margin-bottom: 12px; }
+    .add .btn { flex-shrink: 0; }
+    .add .field { flex: 1; min-width: 0; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; margin-bottom: 10px; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .stat { text-align: center; padding: 14px 8px; width: 100%; }
+    button.stat { cursor: pointer; }
+    button.stat:active { transform: scale(.98); }
+    .stat b { display: block; font-size: 1.35rem; color: var(--accent); }
+    .stat span { color: var(--muted); font-size: .75rem; }
+    .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 8px 0 10px; }
+    .seg button {
+      min-height: 40px; border: 1px solid var(--line); border-radius: 12px;
+      background: #F7F2E8; color: var(--text); font-weight: 800; font-size: .82rem;
+    }
+    .seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .cal-overlay {
+      position: fixed; inset: 0; z-index: 45; background: rgba(44,42,38,.5);
+      display: flex; align-items: center; justify-content: center;
+      padding: max(8px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px));
+    }
+    .cal-modal {
+      width: min(980px, 100%); height: min(94dvh, 920px);
+      display: flex; flex-direction: column; overflow: hidden;
+      background: var(--card); border-radius: 20px; box-shadow: 0 24px 64px rgba(44,42,38,.22);
+      padding: 12px 12px 8px;
+    }
+    .cal-modal h2 { margin: 0; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .cal-nav h3 { flex: 1; margin: 0; text-align: center; font-size: .88rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cal-nav .btn { min-height: 40px; min-width: 40px; padding: 0 10px; }
+    .cal-scroll { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+    .cal-scroll.locking { overflow: hidden; touch-action: none; }
+    .tl { --hour: 56px; --gutter: 52px; position: relative; min-width: 100%; }
+    .tl.day { --hour: 64px; }
+    .tl-head, .tl-grid { display: grid; }
+    .tl-head { position: sticky; top: 0; z-index: 4; background: var(--card); border-bottom: 1px solid var(--line); }
+    .tl.week .tl-head, .tl.week .tl-grid { grid-template-columns: var(--gutter) repeat(7, minmax(44px, 1fr)); min-width: 0; }
+    .tl.day .tl-head, .tl.day .tl-grid { grid-template-columns: var(--gutter) 1fr; }
+    .tl-head span { padding: 8px 4px; text-align: center; font-size: .72rem; font-weight: 800; color: var(--muted); }
+    .tl-head span.today { color: var(--accent); }
+    .tl-head span.sun b, .tl-head span.holiday b, .tl-head span.holiday, .tl-head span.sun { color: var(--danger); }
+    .tl-head span.today.holiday b, .tl-head span.today.sun b { color: var(--danger); }
+    .tl-head b { display: block; color: inherit; font-size: .92rem; }
+    .tl-head .hol { display: block; font-size: .58rem; font-weight: 800; color: var(--danger); line-height: 1.2; }
+    .tl-grid { position: relative; }
+    .tl-time {
+      grid-column: 1; display: flex; flex-direction: column; color: var(--muted);
+      font-size: .68rem; font-weight: 800; text-align: right; padding-right: 6px;
+    }
+    .tl-time i { display: block; height: var(--hour); font-style: normal; transform: translateY(-7px); }
+    .tl-time i.tl-end { height: 0; }
+    .tl-time i em { display: block; color: var(--accent); font-size: .62rem; font-weight: 800; font-style: normal; }
+    .tl-col { position: relative; border-left: 1px solid var(--line); background-image: repeating-linear-gradient(to bottom, transparent, transparent calc(var(--hour) - 1px), var(--line) calc(var(--hour) - 1px), var(--line) var(--hour)); }
+    .tl-block {
+      position: absolute; left: 3px; right: auto; overflow: hidden;
+      border: 0; border-radius: 8px; padding: 5px 6px; text-align: left; color: #fff;
+      box-shadow: 0 4px 12px rgba(30,58,95,.18); z-index: 2;
+      cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none;
+    }
+    .tl-block.dragging { z-index: 9; cursor: grabbing; box-shadow: 0 10px 22px rgba(30,58,95,.28); opacity: .95; touch-action: none; }
+    .tl-block b, .tl-block small { display: block; }
+    .tl-block b { font-size: .74rem; line-height: 1.25; }
+    .tl-block small { font-size: .64rem; opacity: .92; }
+    .now-line {
+      position: absolute; left: 0; right: 0; height: 2px; background: #E03131; z-index: 5; pointer-events: none;
+    }
+    .now-line::before {
+      content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px;
+      border-radius: 50%; background: #E03131;
+    }
+    .cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .cal-weekdays span { text-align: center; font-size: .7rem; font-weight: 800; color: var(--muted); padding: 4px 0; }
+    .cal-weekdays span.sun { color: var(--danger); }
+    .cal-cell {
+      min-height: 64px; border: 1px solid var(--line); border-radius: 10px; background: #FFFcf7;
+      padding: 6px 4px 4px; text-align: center; color: inherit;
+    }
+    .cal-cell.on { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(30,58,95,.16); }
+    .cal-cell b { display: block; font-size: .88rem; }
+    .cal-cell.sun b, .cal-cell.holiday b { color: var(--danger); }
+    .cal-cell small { display: block; color: var(--accent); font-size: .68rem; font-weight: 800; }
+    .cal-cell .hol { color: var(--danger); font-size: .6rem; font-weight: 800; display: block; }
+    .label { margin: 16px 0 8px; font-size: .78rem; font-weight: 800; color: var(--muted); letter-spacing: .06em; }
+    .hint { color: var(--muted); font-size: .8rem; margin: 0 0 10px; line-height: 1.45; }
+    .prev { color: var(--ok); font-size: .78rem; margin: -4px 0 8px 54px; }
+    .tile {
+      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 12px; margin-bottom: 8px; min-height: 64px; color: inherit;
+    }
+    .tile > span:first-child { min-width: 0; flex: 1; }
+    .tile b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tile small { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chev { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+    .split-tile { display: flex; gap: 8px; margin-bottom: 8px; }
+    .split-tile .tile { flex: 1; margin-bottom: 0; min-width: 0; }
+    .split-tile .side {
+      width: 68px; flex-shrink: 0; margin-bottom: 0; min-height: 68px; padding: 8px 6px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 800; line-height: 1.2; text-align: center;
+    }
+    .empty { text-align: center; color: var(--muted); padding: 26px 8px; line-height: 1.5; }
+    .kv { margin: 0 0 8px; font-size: .92rem; line-height: 1.45; }
+    .kv span { color: var(--muted); display: inline-block; min-width: 78px; }
+    .ex-head { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+    .ex-head h2 { flex: 1; margin: 0; font-size: 1.05rem; }
+    .ex-acc { margin-bottom: 10px; }
+    .ex-top { display: flex; align-items: stretch; gap: 0; }
+    .ex-top .acc-h { padding-right: 8px; }
+    .ex-top .ex-title { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+    .ex-top .ex-title b { font-size: 1.02rem; }
+    .ex-top .btn.danger { margin: 6px 8px 6px 0; flex-shrink: 0; }
+    .badge { display: inline-block; margin-left: 6px; background: #E8EEF4; color: var(--accent); border-radius: 999px; padding: 2px 8px; font-size: .72rem; }
+    .set-row { display: grid; grid-template-columns: 54px 1fr 1fr 40px; gap: 6px; align-items: center; margin-bottom: 8px; }
+    .set-n { font-weight: 800; color: var(--accent); font-size: .9rem; }
+    .set-row .field, .set-add .field { min-height: 44px; padding: 8px; text-align: center; }
+    .set-add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }
+    .media { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+    .thumb { width: 76px; height: 76px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #EBE6DB; position: relative; display: block; }
+    .thumb.lg { width: 100%; height: 150px; }
+    .thumb img, .thumb video { width: 100%; height: 100%; object-fit: cover; }
+    .thumb .x { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; padding: 0; }
+    .chip { display: flex; align-items: center; gap: 6px; background: #EBE6DB; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; font-size: .85rem; }
+    .chip a { color: var(--accent); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; }
+    .file input { position: absolute; inset: 0; opacity: 0; }
+    .tabbar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: 1fr 1fr 1fr;
+      height: calc(var(--nav) + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background: #FFFcf7; border-top: 1px solid var(--line);
+    }
+    body.share .tabbar { display: none; }
+    .tabbar button {
+      border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: .7rem;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      min-height: var(--nav); padding: 4px 4px 0;
+    }
+    .tabbar button.on { color: var(--accent); }
+    .tabbar .ico { font-size: 1.15rem; line-height: 1; }
+    .viewer { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .viewer img, .viewer video { max-width: 100%; max-height: 80dvh; border-radius: 12px; }
+    #closeViewer { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 16px; }
+    .modal-bg {
+      position: fixed; inset: 0; z-index: 40; background: rgba(44,42,38,.45);
+      display: flex; align-items: center; justify-content: center;
+      padding: max(12px, env(safe-area-inset-top, 0px)) 14px max(12px, env(safe-area-inset-bottom, 0px));
+    }
+    .modal {
+      width: min(560px, 100%); max-height: min(88dvh, 100%); overflow: auto;
+      background: var(--card); border-radius: 20px;
+      box-shadow: 0 24px 64px rgba(44,42,38,.22);
+      padding: 16px;
+    }
+    .modal h2 { margin: 0 0 8px; font-size: 1.12rem; }
+    .class-overlay {
+      position: fixed; inset: 0; z-index: 55; background: rgba(44,42,38,.45);
+      display: flex; align-items: center; justify-content: center;
+      padding: max(12px, env(safe-area-inset-top, 0px)) 14px max(12px, env(safe-area-inset-bottom, 0px));
+    }
+    .class-modal {
+      width: min(420px, 100%); max-height: min(88dvh, 100%); overflow: auto;
+      background: var(--card); border-radius: 20px;
+      box-shadow: 0 24px 64px rgba(44,42,38,.22); padding: 16px;
+    }
+    .class-modal h2 { margin: 0 0 8px; font-size: 1.08rem; }
+    .actions { display: flex; gap: 8px; margin-top: 14px; }
+    .actions .btn { flex: 1; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th, .table td { text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+    .table th { color: var(--muted); }
+    .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pack { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .pack .card { margin: 0; text-align: center; padding: 12px 6px; }
+    .pack b { display: block; font-size: 1.4rem; color: var(--accent); }
+    .pack span { color: var(--muted); font-size: .72rem; font-weight: 700; }
+    .act4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .act4 .btn { min-height: 44px; font-size: .78rem; padding: 8px 6px; white-space: normal; line-height: 1.25; }
+    .acc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 10px; overflow: hidden; }
+    .acc-h {
+      width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 0 14px; border: 0; background: transparent; color: var(--text);
+      font-weight: 800; font-size: .95rem; text-align: left;
+    }
+    .acc-h em { font-style: normal; color: var(--muted); font-size: .78rem; font-weight: 600; }
+    .acc-h .arr { color: var(--muted); transition: transform .15s; }
+    .acc.open .arr { transform: rotate(180deg); }
+    .acc-b { display: none; padding: 0 14px 14px; border-top: 1px solid var(--line); }
+    .acc.open .acc-b { display: block; }
+    .acc-b .card { margin: 0; padding: 10px 0 0; border: 0; box-shadow: none; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; font-size: .75rem; color: var(--muted); }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+    .chart-wrap { background: #F7F2E8; border: 1px solid var(--line); border-radius: 14px; padding: 8px 4px 2px; }
+    .chart { width: 100%; height: 228px; display: block; }
+    .chart-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 10px; }
+    .chart-stats div { text-align: center; background: #FFFcf7; border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; }
+    .chart-stats b { display: block; font-size: .95rem; color: var(--text); }
+    .chart-stats span { color: var(--muted); font-size: .7rem; font-weight: 700; }
+    .chart-stats em { font-style: normal; font-size: .72rem; font-weight: 700; }
+    .ex-note { min-height: 64px; margin-top: 10px; text-align: left; font-size: .9rem; }
+    .share-bar { display: flex; gap: 8px; margin: 12px 0 4px; }
+    .share-bar .btn { flex: 1; font-size: .84rem; min-height: 44px; }
+    .log-ex { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+    .log-ex:last-child { border-bottom: 0; margin-bottom: 0; }
+    .log-ex h3 { margin: 0 0 6px; font-size: 1rem; }
+    .log-ex .kv { font-size: .86rem; }
+    .log-ex .kv span { min-width: 88px; }
+    .set-line { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; font-size: .9rem; }
+    .set-line span { color: var(--muted); }
+    .meal-pills { display: flex; gap: 6px; margin: 8px 0; }
+    .meal-pills button {
+      flex: 1; min-height: 40px; border: 1px solid var(--line); background: #F7F2E8; color: var(--text);
+      border-radius: 12px; font-weight: 700; font-size: .78rem;
+    }
+    .meal-pills button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .share-hero { margin: 4px 0 14px; }
+    .share-hero h2 { margin: 0 0 4px; font-size: 1.22rem; letter-spacing: -.03em; }
+    .share-hero p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.45; }
+    .share-goal { background: #E8EEF4; border: 1px solid #D3DDE8; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+    .share-goal span { display: block; font-size: .72rem; font-weight: 800; color: var(--accent); margin-bottom: 4px; }
+    .share-goal b { font-size: 1.02rem; }
+    .tag { display: inline-block; margin-left: 6px; background: #E8EEF4; color: var(--accent); border-radius: 999px; padding: 1px 7px; font-size: .68rem; font-weight: 800; }
+    .hist { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .hist:last-child { border-bottom: 0; }
+    .hist .meta { flex: 1; min-width: 0; }
+    .hist b { display: block; font-size: .9rem; }
+    .hist small { color: var(--muted); }
+    .hist .thumb { width: 56px; height: 56px; flex-shrink: 0; }
+    .line { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
+    .line:last-child { border-bottom: 0; }
+    .line small { color: var(--muted); }
+    @media (max-width: 640px) {
+      .tl { --hour: 52px; --gutter: 38px; }
+      .tl.day { --hour: 58px; }
+      .tl-head span { font-size: .6rem; padding: 6px 1px; }
+      .tl-head b { font-size: .78rem; }
+      .tl-head .hol { font-size: .48rem; }
+      .tl-time { font-size: .6rem; padding-right: 4px; }
+      .tl-block { padding: 3px 4px; }
+      .tl-block b { font-size: .62rem; }
+      .tl-block small { font-size: .54rem; }
+      .cal-overlay { padding: env(safe-area-inset-top, 0px) 0 0; align-items: stretch; }
+      .cal-modal {
+        width: 100%; height: 100%; height: 100dvh; max-height: none;
+        border-radius: 16px 16px 0 0; padding: 10px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+      }
+      .class-modal { width: min(420px, 100%); border-radius: 20px; }
+      .cal-cell { min-height: 56px; padding: 4px 2px; }
+      .cal-cell b { font-size: .8rem; }
+      .cal-cell .hol { font-size: .52rem; }
+      .grid3 { grid-template-columns: 1fr 1fr; }
+      .pack { gap: 6px; }
+      .pack .card { padding: 10px 4px; }
+      .pack b { font-size: 1.2rem; }
+      .kv span { min-width: 64px; }
+    }
+    @media (max-width: 380px) {
+      .split-tile .side { width: 58px; font-size: .68rem; }
+      .hdr-btn { padding: 0 8px !important; }
+      .page { padding: 10px 10px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div id="barHome"><h1>홈</h1><p id="homeDate"></p></div>
+    <div id="barLog" class="hidden">
+      <div id="logPickHead"><h1>운동 일지</h1><p>기록할 회원을 선택하세요</p></div>
+      <div id="logArchiveHead" class="row hidden">
+        <button class="back" id="logArchiveBack" type="button" aria-label="뒤로">‹</button>
+        <h1 id="logArchiveName"></h1>
+        <button class="btn soft hdr-btn" id="logToProfile" type="button">프로필</button>
+      </div>
+      <div id="logWorkHead" class="row hidden">
+        <button class="back" id="logBack" type="button" aria-label="뒤로">‹</button>
+        <h1 id="logName"></h1>
+        <button class="btn soft hdr-btn" id="logWorkProfile" type="button">프로필</button>
+        <button class="btn soft hdr-btn" id="logClientLink" type="button">회원용 링크</button>
+        <button class="btn soft hdr-btn" id="logShare" type="button">공유</button>
+      </div>
+    </div>
+    <div id="barMembers" class="hidden"><h1>회원 관리</h1><p>프로필 · 체성분 · 공유</p></div>
+    <div id="barDetail" class="hidden">
+      <div class="row">
+        <button class="back" id="detailBack" type="button" aria-label="뒤로">‹</button>
+        <h1 id="detailName"></h1>
+      </div>
+    </div>
+    <div id="barShare" class="hidden">
+      <div class="row">
+        <button class="back" id="shareBack" type="button" aria-label="뒤로">‹</button>
+        <h1 id="shareTitle">내 운동 기록</h1>
+      </div>
+      <p id="shareSub">프로필 · 체성분 · 수업 일지</p>
+    </div>
+  </header>
+
+  <main>
+    <section id="pageHome" class="page">
+      <div class="stats">
+        <button class="card stat" id="statMembersBtn" type="button"><b id="statMembers">0</b><span>회원(명)</span></button>
+        <button class="card stat" id="statTodayBtn" type="button"><b id="statToday">0</b><span>오늘 수업(개)</span></button>
+      </div>
+      <div class="label">최근 등록한 회원</div>
+      <div id="homeNewMembers"></div>
+      <div class="label">오늘 기록한 수업</div>
+      <div id="homeToday"></div>
+      <div class="label">최근 기록</div>
+      <div id="homeRecent"></div>
+    </section>
+
+    <section id="pageLog" class="page hidden">
+      <div id="logPicker"></div>
+      <div id="logArchive" class="hidden">
+        <p class="hint">날짜별 일지를 고르거나, 새 날짜를 추가해 작성하세요.</p>
+        <div class="add">
+          <input class="field" id="newLogDate" type="date" />
+          <button class="btn" id="addLogDate" type="button">새 날짜</button>
+        </div>
+        <div id="logDateList"></div>
+      </div>
+      <div id="logWork" class="hidden">
+        <p class="label" id="logDay"></p>
+        <p class="hint" id="logPrevHint"></p>
+        <div class="grid2" style="margin-bottom:10px">
+          <div>
+            <label class="cap">수업 시작</label>
+            <input class="field" id="logStart" type="time" />
+          </div>
+          <div>
+            <label class="cap">진행 시간</label>
+            <select class="field" id="logMins">
+              <option value="30">30분</option>
+              <option value="50">50분</option>
+              <option value="60">60분</option>
+              <option value="90">90분</option>
+            </select>
+          </div>
+        </div>
+        <div class="acc open" data-log-acc="program">
+          <button class="acc-h" type="button" data-log-toggle="program">오늘 프로그램 <span class="arr">▾</span></button>
+          <div class="acc-b">
+            <textarea class="field ex-note" id="logProgram" placeholder="오늘 전체 운동 계획 · 루틴"></textarea>
+          </div>
+        </div>
+        <div class="label">운동 종목</div>
+        <div class="add">
+          <input class="field" id="exName" placeholder="종목 (예: 스쿼트)" autocomplete="off" />
+          <button class="btn" id="addEx" type="button">추가</button>
+        </div>
+        <div id="exercises"></div>
+        <div class="acc open" data-log-acc="feedback">
+          <button class="acc-h" type="button" data-log-toggle="feedback">피드백 <span class="arr">▾</span></button>
+          <div class="acc-b">
+            <textarea class="field ex-note" id="logFeedback" placeholder="오늘 전체 수업 총평 · 코칭 피드백"></textarea>
+          </div>
+        </div>
+        <div class="acc open" data-log-acc="memo">
+          <button class="acc-h" type="button" data-log-toggle="memo">메모 <span class="arr">▾</span></button>
+          <div class="acc-b">
+            <textarea class="field ex-note" id="logMemo" placeholder="기타 특이사항"></textarea>
+          </div>
+        </div>
+        <div class="share-bar">
+          <button class="btn" id="logShareWide" type="button">이 날 일지 공유</button>
+          <button class="btn soft" id="logClientLinkWide" type="button">회원용 링크 복사</button>
+        </div>
+        <p class="hint">회원용 링크는 프로필·체성분·전체 일지를 보여주는 전용 화면입니다. 이 날 일지 공유는 해당 날짜만 읽기 전용입니다.</p>
+      </div>
+    </section>
+
+    <section id="pageMembers" class="page hidden">
+      <button class="btn wide" id="openCreate" type="button" style="margin-bottom:12px">새 회원 등록</button>
+      <div id="memberList"></div>
+    </section>
+
+    <section id="pageDetail" class="page hidden">
+      <div class="pack">
+        <div class="card"><b id="packTotal">0</b><span>총 회차</span></div>
+        <div class="card"><b id="packUsed">0</b><span>쓴 횟수</span></div>
+        <div class="card"><b id="packLeft">0</b><span>잔여 횟수</span></div>
+      </div>
+      <div class="act4">
+        <button class="btn" id="packUse" type="button">차감</button>
+        <button class="btn soft" id="packAdjust" type="button">잔여 조정</button>
+        <button class="btn soft" id="packBuy" type="button">회차 구매</button>
+        <button class="btn" id="packLog" type="button">날짜별 일지</button>
+      </div>
+      <div class="act4">
+        <button class="btn" id="packTodayLog" type="button">오늘 일지 작성</button>
+        <button class="btn soft" id="packCal" type="button">캘린더</button>
+      </div>
+      <div class="add">
+        <button class="btn soft" id="editProfile" type="button" style="flex:1">프로필 수정</button>
+        <button class="btn soft" id="shareMember" type="button" style="flex:1">회원용 링크 복사</button>
+      </div>
+      <div class="acc" data-acc="profile">
+        <button class="acc-h" type="button">기본 프로필 <span class="arr">▾</span></button>
+        <div class="acc-b" id="profileCard"></div>
+      </div>
+
+      <div class="acc" data-acc="attend">
+        <button class="acc-h" type="button">출석 기록 <em id="attendCount"></em><span class="arr">▾</span></button>
+        <div class="acc-b" id="attendList"></div>
+      </div>
+      <div class="acc" data-acc="injury">
+        <button class="acc-h" type="button">특이사항 및 부상 이력 <span class="arr">▾</span></button>
+        <div class="acc-b">
+          <textarea class="field" id="injuryText" placeholder="통증, 수술 이력, 주의 동작 등"></textarea>
+        </div>
+      </div>
+      <div class="acc" data-acc="consult">
+        <button class="acc-h" type="button">상담 카드 <span class="arr">▾</span></button>
+        <div class="acc-b">
+          <textarea class="field" id="consultText" placeholder="오늘 상담 내용을 적고 추가하세요"></textarea>
+          <button class="btn wide" id="addConsult" type="button" style="margin:8px 0">상담 추가</button>
+          <div id="consultList"></div>
+        </div>
+      </div>
+
+      <div class="acc open" data-acc="body">
+        <button class="acc-h" type="button">신체 정보 <span class="arr">▾</span></button>
+        <div class="acc-b">
+          <p class="hint" id="bodyTrend"></p>
+          <div class="legend">
+            <span><i style="background:#1E3A5F"></i>체중</span>
+            <span><i style="background:#1B5E46"></i>골격근량</span>
+            <span><i style="background:#C45C26"></i>체지방률</span>
+          </div>
+          <p class="hint">항목마다 스케일이 달라, 세 선의 오르내림을 한눈에 비교할 수 있습니다.</p>
+          <div class="chart-wrap" id="bodyChart"></div>
+          <div class="chart-stats" id="bodyStats"></div>
+          <div class="grid3" style="margin-top:10px">
+            <input class="field" id="bw" inputmode="decimal" placeholder="체중 kg" />
+            <input class="field" id="bm" inputmode="decimal" placeholder="골격근 kg" />
+            <input class="field" id="bf" inputmode="decimal" placeholder="체지방 %" />
+          </div>
+          <label class="btn soft file wide" style="margin-top:8px">사진 함께 첨부<input type="file" accept="image/*" id="bodyFile" /></label>
+          <button class="btn wide" id="addBody" type="button" style="margin-top:8px">오늘 수치 저장</button>
+          <div id="bodyList"></div>
+          <div class="ba" style="margin-top:12px">
+            <div>
+              <p class="cap" style="margin-top:0">Before</p>
+              <div id="beforeBox"></div>
+              <label class="btn soft file wide" style="margin-top:8px">사진 추가<input type="file" accept="image/*" id="beforeFile" /></label>
+            </div>
+            <div>
+              <p class="cap" style="margin-top:0">After</p>
+              <div id="afterBox"></div>
+              <label class="btn soft file wide" style="margin-top:8px">사진 추가<input type="file" accept="image/*" id="afterFile" /></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="acc open" data-acc="workouts">
+        <button class="acc-h" type="button">수업 운동 기록 <span class="arr">▾</span></button>
+        <div class="acc-b" id="workoutList"></div>
+      </div>
+      <div class="acc" data-acc="self">
+        <button class="acc-h" type="button">개인 운동 기록 <em>회원 입력</em><span class="arr">▾</span></button>
+        <div class="acc-b" id="selfWorkoutList"></div>
+      </div>
+      <div class="acc" data-acc="diet">
+        <button class="acc-h" type="button">식단 기록 <em>트레이너 · 회원</em><span class="arr">▾</span></button>
+        <div class="acc-b">
+          <textarea class="field" id="dietText" placeholder="식사, 간식, 수분 섭취 등"></textarea>
+          <label class="btn soft file wide" style="margin-top:8px">식단 사진 첨부<input type="file" accept="image/*" id="dietFile" /></label>
+          <p class="hint" id="dietFileHint" style="margin:6px 0 0"></p>
+          <button class="btn wide" id="addDiet" type="button" style="margin:8px 0">식단 추가</button>
+          <div id="dietList"></div>
+        </div>
+      </div>
+      <button class="btn danger wide" id="deleteMember" type="button">회원 삭제</button>
+    </section>
+
+    <section id="pageShare" class="page hidden"><div id="shareBody"></div></section>
+  </main>
+
+  <nav class="tabbar">
+    <button type="button" data-tab="home" class="on"><span class="ico">⌂</span>홈</button>
+    <button type="button" data-tab="log"><span class="ico">✎</span>운동 일지</button>
+    <button type="button" data-tab="members"><span class="ico">☰</span>회원 관리</button>
+  </nav>
+
+  <div id="modalBg" class="modal-bg hidden">
+    <form class="modal" id="profileForm">
+      <h2 id="modalTitle">회원 프로필</h2>
+      <label class="cap">이름</label>
+      <input class="field" id="pName" required placeholder="이름" />
+      <div class="grid2">
+        <div>
+          <label class="cap">성별</label>
+          <select class="field" id="pGender"><option value="">선택</option><option>남</option><option>여</option><option>기타</option></select>
+        </div>
+        <div>
+          <label class="cap">연령</label>
+          <input class="field" id="pAge" inputmode="numeric" placeholder="예: 34" />
+        </div>
+      </div>
+      <label class="cap">목표</label>
+      <input class="field" id="pGoal" placeholder="체지방 감소, 근력 증가 등" />
+      <label class="cap">병력 및 통증 히스토리</label>
+      <textarea class="field" id="pHistory" placeholder="허리, 무릎 통증 등"></textarea>
+      <label class="cap">운동 경력</label>
+      <input class="field" id="pExp" placeholder="예: 헬스 1년" />
+      <label class="cap">참고사항</label>
+      <textarea class="field" id="pNotes" placeholder="직업, 수면, 식단, 주의점"></textarea>
+      <div class="actions">
+        <button class="btn soft" id="closeModal" type="button">취소</button>
+        <button class="btn" type="submit">저장</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="calBg" class="cal-overlay hidden">
+    <div class="cal-modal" role="dialog" aria-labelledby="calTitle">
+      <div class="row">
+        <h2 id="calTitle" style="flex:1">수업 캘린더</h2>
+        <button class="btn soft hdr-btn" id="closeCal" type="button">닫기</button>
+      </div>
+      <div class="seg">
+        <button type="button" data-cal-mode="day">일간</button>
+        <button type="button" data-cal-mode="week" class="on">주간</button>
+        <button type="button" data-cal-mode="month">월간</button>
+      </div>
+      <div class="cal-nav">
+        <button class="btn soft" id="calPrev" type="button">‹</button>
+        <h3 id="calLabel"></h3>
+        <button class="btn soft" id="calNext" type="button">›</button>
+      </div>
+      <div id="calBody" class="cal-scroll"></div>
+    </div>
+  </div>
+
+  <div id="classBg" class="class-overlay hidden">
+    <form class="class-modal" id="classForm">
+      <h2 id="classTitle">수업 추가</h2>
+      <input type="hidden" id="classFromId" />
+      <input type="hidden" id="classFromDate" />
+      <label class="cap">회원</label>
+      <select class="field" id="classMember" required></select>
+      <label class="cap">날짜</label>
+      <input class="field" id="classDate" type="date" required />
+      <div class="grid2">
+        <div>
+          <label class="cap">시작 시간</label>
+          <input class="field" id="classStart" type="time" required />
+        </div>
+        <div>
+          <label class="cap">진행 시간</label>
+          <select class="field" id="classMins">
+            <option value="30">30분</option>
+            <option value="50">50분</option>
+            <option value="60" selected>60분</option>
+            <option value="90">90분</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn soft" id="classCancel" type="button">취소</button>
+        <button class="btn danger hidden" id="classDelete" type="button">삭제</button>
+        <button class="btn" type="submit">저장</button>
+      </div>
+      <button class="btn soft wide hidden" id="classOpenLog" type="button" style="margin-top:8px">운동 일지 열기</button>
+    </form>
+  </div>
+
+  <div id="viewer" class="viewer hidden">
+    <button class="btn" id="closeViewer" type="button">닫기</button>
+    <div id="viewerBody"></div>
+  </div>
+
+  <script>
+    const DATA_KEY = "pt-logger-v3";
+    const OLD_KEY = "pt-logger-v2";
+    const DB_NAME = "pt-logger-media";
+    const STORE = "files";
+    const $ = (id) => document.getElementById(id);
+    const urls = new Map();
+    const today = () => {
+      const d = new Date();
+      return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+    };
+    const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const shareCode = () => Math.random().toString(36).slice(2, 8);
+    const esc = (s) => String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const prettyDate = (iso) => {
+      if (!iso) return "";
+      if (iso === today()) return "오늘";
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      const yiso = [y.getFullYear(), String(y.getMonth() + 1).padStart(2, "0"), String(y.getDate()).padStart(2, "0")].join("-");
+      if (iso === yiso) return "어제";
+      const p = iso.split("-");
+      return Number(p[1]) + "월 " + Number(p[2]) + "일";
+    };
+    const weekAgo = () => {
+      const d = new Date(); d.setDate(d.getDate() - 7);
+      return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+    };
+    const emptyProfile = () => ({ gender: "", age: "", goal: "", history: "", experience: "", notes: "" });
+    function normalizeExercise(e) {
+      e = e || {};
+      return Object.assign({}, e, { feedback: e.feedback || "" });
+    }
+    function normalizeSession(s) {
+      s = Object.assign({ program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60 }, s || {});
+      const rawEx = s.exercises || [];
+      if (!s.program) {
+        const bits = rawEx.map((e) => e.program || e.note || "").filter(Boolean);
+        if (bits.length) s.program = bits.join("\n\n");
+      }
+      s.program = s.program || "";
+      s.feedback = s.feedback || "";
+      s.memo = s.memo || "";
+      s.exercises = rawEx.map(normalizeExercise);
+      return s;
+    }
+    function normalizeMember(m) {
+      const profile = Object.assign(emptyProfile(), m.profile || {});
+      const sessions = {};
+      Object.keys(m.sessions || {}).forEach((d) => { sessions[d] = normalizeSession(m.sessions[d]); });
+      return {
+        id: m.id || uid(), name: m.name || "이름 없음", share: m.share || shareCode(),
+        createdAt: m.createdAt || 0,
+        profile,
+        body: m.body || [], photos: m.photos || [], sessions,
+        pack: { total: Number((m.pack && m.pack.total) || 0), used: Number((m.pack && m.pack.used) || 0) },
+        pattern: m.pattern || "",
+        injuries: m.injuries != null ? m.injuries : (profile.history || ""),
+        consults: m.consults || [],
+        painLogs: m.painLogs || [],
+        dietLogs: m.dietLogs || [],
+        selfWorkouts: m.selfWorkouts || []
+      };
+    }
+    function loadData() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(DATA_KEY) || localStorage.getItem(OLD_KEY) || "null");
+        return { members: ((raw && raw.members) || []).map(normalizeMember) };
+      } catch { return { members: [] }; }
+    }
+    const liveCh = ("BroadcastChannel" in window) ? new BroadcastChannel("pt-logger-v3") : null;
+    function saveData() {
+      localStorage.setItem(DATA_KEY, JSON.stringify(state));
+      if (liveCh) liveCh.postMessage({ t: Date.now() });
+    }
+    function refreshLiveViews() {
+      if (tab === "detail") renderDetail();
+      if (tab === "share" && shareCtx.code) {
+        const el = document.activeElement;
+        const busy = el && $("pageShare").contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+        if (!busy) renderShareLive();
+      }
+      if (tab === "home") renderHome();
+    }
+    window.addEventListener("storage", (e) => {
+      if (e.key !== DATA_KEY || !e.newValue) return;
+      try { state = { members: (JSON.parse(e.newValue).members || []).map(normalizeMember) }; }
+      catch { return; }
+      refreshLiveViews();
+    });
+    if (liveCh) liveCh.onmessage = () => {
+      try { state = loadData(); } catch { return; }
+      refreshLiveViews();
+    };
+    function openDb() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function putFile(id, blob) {
+      const db = await openDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).put(blob, id);
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+      });
+    }
+    async function getFile(id) {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function delFile(id) {
+      const db = await openDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).delete(id);
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+      });
+      const u = urls.get(id); if (u) { URL.revokeObjectURL(u); urls.delete(id); }
+    }
+    async function fileUrl(id) {
+      if (urls.has(id)) return urls.get(id);
+      const blob = await getFile(id);
+      if (!blob) return "";
+      const u = URL.createObjectURL(blob); urls.set(id, u); return u;
+    }
+    function compressImage(file) {
+      return new Promise((resolve) => {
+        const img = new Image(); const src = URL.createObjectURL(file);
+        img.onload = () => {
+          const max = 1280; let w = img.width, h = img.height;
+          if (Math.max(w, h) > max) { const r = max / Math.max(w, h); w = Math.round(w * r); h = Math.round(h * r); }
+          const c = document.createElement("canvas"); c.width = w; c.height = h;
+          c.getContext("2d").drawImage(img, 0, 0, w, h);
+          c.toBlob((b) => { URL.revokeObjectURL(src); resolve(b || file); }, "image/jpeg", 0.72);
+        };
+        img.onerror = () => { URL.revokeObjectURL(src); resolve(file); };
+        img.src = src;
+      });
+    }
+
+    let state = loadData();
+    let tab = "home";
+    let fromTab = "home";
+    let fromCal = false;
+    let currentId = null;
+    let logDate = null;
+    let calMode = "week";
+    let calIso = null;
+    let calDragging = false;
+    let calDidDrag = false;
+    let calDrag = null;
+    let editingId = null;
+    let logExCollapsed = new Set();
+    let logSessionCollapsed = new Set();
+    const memberBy = (id) => state.members.find((m) => m.id === id);
+    const currentMember = () => memberBy(currentId);
+    function sessionOf(m, date) {
+      m = m || currentMember();
+      if (!m) return null;
+      const d = date || logDate || today();
+      m.sessions = m.sessions || {};
+      if (!m.sessions[d]) m.sessions[d] = { program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60 };
+      if (m.sessions[d].program == null) m.sessions[d].program = "";
+      if (m.sessions[d].feedback == null) m.sessions[d].feedback = "";
+      if (m.sessions[d].memo == null) m.sessions[d].memo = "";
+      if (!m.sessions[d].start) m.sessions[d].start = "16:00";
+      if (!m.sessions[d].minutes) m.sessions[d].minutes = 60;
+      return m.sessions[d];
+    }
+    function isoFromDate(d) {
+      return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+    }
+    function dateFromIso(iso) {
+      const p = (iso || today()).split("-").map(Number);
+      return new Date(p[0], p[1] - 1, p[2]);
+    }
+    function addDays(iso, n) {
+      const d = dateFromIso(iso); d.setDate(d.getDate() + n); return isoFromDate(d);
+    }
+    function weekStart(iso) {
+      const d = dateFromIso(iso);
+      const off = (d.getDay() + 6) % 7;
+      d.setDate(d.getDate() - off);
+      return isoFromDate(d);
+    }
+    function weekdayName(iso) { return "일월화수목금토"[dateFromIso(iso).getDay()]; }
+    function hasClass(m, date) {
+      const s = (m.sessions && m.sessions[date]) || null;
+      if (!s) return false;
+      const st = dayStats(m, date);
+      return !!(st.sets || st.memo || s.booked);
+    }
+    function classesOn(date) { return state.members.filter((m) => hasClass(m, date)); }
+    function archivedDates(m) {
+      return Object.keys(m.sessions || {}).filter((d) => {
+        const s = m.sessions[d] || {};
+        const st = dayStats(m, d);
+        return st.sets || st.memo || (s.exercises || []).length || s.booked;
+      }).sort().reverse();
+    }
+    function dayStats(m, date) {
+      const s = (m.sessions && m.sessions[date]) || { exercises: [] };
+      const sets = (s.exercises || []).reduce((n, e) => n + (e.sets || []).length, 0);
+      const notes = !!(s.program || s.feedback || s.memo || (s.exercises || []).some((e) => e.feedback || e.note));
+      return { exercises: (s.exercises || []).length, sets, memo: notes || "" };
+    }
+    function packEx(e) {
+      return {
+        name: e.name,
+        feedback: e.feedback || "",
+        sets: (e.sets || []).map((st) => ({ weight: st.weight, reps: st.reps }))
+      };
+    }
+    function packSession(s) {
+      return {
+        program: s.program || "",
+        feedback: s.feedback || "",
+        memo: s.memo || "",
+        exercises: (s.exercises || []).map(packEx)
+      };
+    }
+    function prevSession(m, before) {
+      const cut = before || logDate || today();
+      const dates = Object.keys(m.sessions || {}).filter((d) => d < cut && dayStats(m, d).sets).sort();
+      if (!dates.length) return null;
+      const date = dates[dates.length - 1];
+      return { date, session: m.sessions[date] };
+    }
+    function lastWeekSession(m) {
+      const d = weekAgo();
+      if (!m.sessions[d] || !dayStats(m, d).sets) return null;
+      return { date: d, session: m.sessions[d] };
+    }
+    function prevSets(m, name) {
+      const prev = prevSession(m);
+      if (!prev) return null;
+      const ex = (prev.session.exercises || []).find((e) => e.name === name);
+      return { date: prev.date, sets: (ex && ex.sets) || [] };
+    }
+    function fmtSets(sets) {
+      return (sets || []).map((s, i) => (i + 1) + "세트 " + s.weight + "kg × " + s.reps).join(" · ");
+    }
+    function show(id, on) { $(id).classList.toggle("hidden", !on); }
+    function setTab(next, keep) {
+      tab = next;
+      if (!keep) { currentId = null; logDate = null; fromCal = false; }
+      document.body.classList.toggle("share", next === "share");
+      document.body.classList.toggle("client", next === "share" && !!clientViewId());
+      show("pageHome", next === "home"); show("barHome", next === "home");
+      show("pageLog", next === "log"); show("barLog", next === "log");
+      show("pageMembers", next === "members"); show("barMembers", next === "members");
+      show("pageDetail", next === "detail"); show("barDetail", next === "detail");
+      show("pageShare", next === "share"); show("barShare", next === "share");
+      document.querySelectorAll(".tabbar button").forEach((b) => {
+        b.classList.toggle("on", b.dataset.tab === (next === "detail" ? "members" : next));
+      });
+      window.scrollTo(0, 0);
+      if (next === "home") renderHome();
+      if (next === "log") renderLog();
+      if (next === "members") renderMembers();
+      if (next === "detail") renderDetail();
+    }
+    function renderHome() {
+      const d = today();
+      $("homeDate").textContent = prettyDate(d) + " · " + d;
+      $("statMembers").textContent = state.members.length;
+      const todayList = state.members.filter((m) => hasClass(m, d));
+      $("statToday").textContent = todayList.length;
+      $("homeToday").innerHTML = todayList.length
+        ? todayList.map((m) => {
+            const st = dayStats(m, d);
+            const s = m.sessions[d] || {};
+            const sub = st.sets || st.memo ? st.exercises + "종목 · " + st.sets + "세트" : koClock(s.start || "16:00") + " 예약";
+            return `<button class="tile" type="button" data-goto-log="${m.id}" data-log-date="${d}"><span><b>${esc(m.name)}</b><small>${sub}</small></span><span class="chev">›</span></button>`;
+          }).join("")
+        : '<div class="empty">오늘 기록된 수업이 없습니다.</div>';
+      const recent = [];
+      state.members.forEach((m) => Object.keys(m.sessions || {}).forEach((date) => {
+        const st = dayStats(m, date);
+        if (st.sets || st.memo) recent.push({ id: m.id, name: m.name, date, ...st });
+      }));
+      recent.sort((a, b) => b.date.localeCompare(a.date));
+      $("homeRecent").innerHTML = recent.length
+        ? recent.slice(0, 8).map((r) => `<button class="tile" type="button" data-goto-log="${r.id}" data-log-date="${r.date}"><span><b>${esc(r.name)}</b><small>${prettyDate(r.date)} · ${r.exercises}종목 · ${r.sets}세트</small></span><span class="chev">›</span></button>`).join("")
+        : '<div class="empty">아직 저장된 운동 기록이 없습니다.</div>';
+      const newest = [...state.members]
+        .map((m, i) => ({ m, i }))
+        .sort((a, b) => (b.m.createdAt || b.i) - (a.m.createdAt || a.i))
+        .slice(0, 5)
+        .map((x) => x.m);
+      $("homeNewMembers").innerHTML = newest.length
+        ? newest.map((m) => {
+            const p = packOf(m);
+            const n = archivedDates(m).length;
+            const sub = [p.left + "회 남음", (m.profile && m.profile.goal) || "", n ? n + "개 일지" : "일지 없음"].filter(Boolean).join(" · ");
+            return `<div class="split-tile">
+              <button class="tile" type="button" data-goto-detail="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>
+              <button class="tile side" type="button" data-open-archive="${m.id}">일지</button>
+            </div>`;
+          }).join("")
+        : '<div class="empty">등록된 회원이 없습니다. 회원 관리에서 추가하세요.</div>';
+    }
+    function renderLog() {
+      const m = currentMember();
+      const mode = !m ? "pick" : (logDate ? "work" : "archive");
+      show("logPickHead", mode === "pick");
+      show("logArchiveHead", mode === "archive");
+      show("logWorkHead", mode === "work");
+      show("logPicker", mode === "pick");
+      show("logArchive", mode === "archive");
+      show("logWork", mode === "work");
+      if (mode === "pick") {
+        $("logPicker").innerHTML = state.members.length
+          ? state.members.map((x) => {
+              const dates = archivedDates(x);
+              const st = dayStats(x, today()); const prev = prevSession(x, today());
+              const sub = dates.length ? dates.length + "개 일지" : "아직 일지 없음";
+              return `<button class="tile" type="button" data-open="${x.id}"><span><b>${esc(x.name)}</b><small>${sub}${st.sets ? " · 오늘 " + st.sets + "세트" : (prev ? " · 직전 " + prettyDate(prev.date) : "")}</small></span><span class="chev">›</span></button>`;
+            }).join("")
+          : '<div class="empty">먼저 회원 관리에서 회원을 등록하세요.</div>';
+        return;
+      }
+      if (mode === "archive") {
+        $("logArchiveName").textContent = m.name;
+        $("newLogDate").value = today();
+        const dates = archivedDates(m);
+        $("logDateList").innerHTML = dates.length
+          ? dates.map((d) => {
+              const st = dayStats(m, d);
+              const names = ((m.sessions[d] && m.sessions[d].exercises) || []).map((e) => e.name).join(" · ");
+              return `<button class="tile" type="button" data-open-date="${d}"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${st.exercises}종목 · ${st.sets}세트${names ? " · " + esc(names) : ""}</small></span><span class="chev">›</span></button>`;
+            }).join("")
+          : '<div class="empty">저장된 날짜가 없습니다. 위에서 새 날짜를 추가하세요.</div>';
+        return;
+      }
+      $("logName").textContent = m.name;
+      $("logDay").textContent = prettyDate(logDate) + " · " + logDate + " 수업";
+      const prev = prevSession(m, logDate); const lw = lastWeekSession(m);
+      let hint = "";
+      if (prev) hint += "직전 수업 " + prettyDate(prev.date);
+      if (lw && lw.date < logDate && (!prev || lw.date !== prev.date)) hint += (hint ? " · " : "") + "지난주 " + prettyDate(lw.date);
+      $("logPrevHint").textContent = hint ? hint + " 기록이 종목 아래에 표시됩니다." : "이전 수업 기록이 없습니다.";
+      const sess = sessionOf(m, logDate);
+      $("logStart").value = sess.start || "16:00";
+      $("logMins").value = String(sess.minutes || 60);
+      $("logProgram").value = sess.program || "";
+      $("logFeedback").value = sess.feedback || "";
+      $("logMemo").value = sess.memo || "";
+      ["program", "feedback", "memo"].forEach((key) => {
+        const box = document.querySelector(`[data-log-acc="${key}"]`);
+        if (box) box.classList.toggle("open", !logSessionCollapsed.has(key));
+      });
+      renderExercises();
+    }
+    async function mediaHtml(ex) {
+      const parts = [];
+      for (const media of ex.media || []) {
+        if (media.kind === "link") continue;
+        const url = await fileUrl(media.id); if (!url) continue;
+        const inner = media.kind === "video" ? `<video src="${url}" muted></video>` : `<img src="${url}" alt="" />`;
+        parts.push(`<button class="thumb" type="button" data-view="${media.id}:${media.kind}">${inner}<span class="x" data-del-media="${ex.id}:${media.id}">×</span></button>`);
+      }
+      return parts.join("");
+    }
+    async function renderExercises() {
+      const m = currentMember(); const s = sessionOf(m); const box = $("exercises");
+      if (!s || !s.exercises.length) { box.innerHTML = '<div class="empty">종목을 추가한 뒤 세트를 기록하세요.</div>'; return; }
+      const cards = [];
+      for (const ex of s.exercises) {
+        const prev = prevSets(m, ex.name);
+        const lw = lastWeekSession(m);
+        const lwEx = lw ? (lw.session.exercises || []).find((e) => e.name === ex.name) : null;
+        let ref = "";
+        if (prev && prev.sets.length) ref += `<p class="hint">직전(${prettyDate(prev.date)}): ${esc(fmtSets(prev.sets))}</p>`;
+        if (lwEx && lwEx.sets && lwEx.sets.length && (!prev || lw.date !== prev.date)) ref += `<p class="hint">지난주(${prettyDate(lw.date)}): ${esc(fmtSets(lwEx.sets))}</p>`;
+        const rows = (ex.sets || []).map((st, i) => {
+          const pset = prev && prev.sets[i];
+          return `<div class="set-row"><div class="set-n">${i + 1}세트</div>
+            <input class="field" inputmode="decimal" data-set-w="${ex.id}:${st.id}" value="${st.weight}" placeholder="kg" />
+            <input class="field" inputmode="numeric" data-set-r="${ex.id}:${st.id}" value="${st.reps}" placeholder="회" />
+            <button class="btn danger" type="button" data-del-set="${ex.id}:${st.id}">×</button></div>
+            ${pset ? `<p class="prev">직전 ${pset.weight}kg × ${pset.reps}회</p>` : ""}`;
+        }).join("");
+        const n = (ex.sets || []).length;
+        const open = !logExCollapsed.has(ex.id);
+        cards.push(`<article class="acc ex-acc${open ? " open" : ""}" data-ex-acc="${ex.id}">
+          <div class="ex-top">
+            <button class="acc-h" type="button" data-ex-toggle="${ex.id}">
+              <span class="ex-title"><b>${esc(ex.name)}</b><span class="badge">${n}세트</span></span>
+              <span class="arr">▾</span>
+            </button>
+            <button class="btn danger" type="button" data-del-ex="${ex.id}">삭제</button>
+          </div>
+          <div class="acc-b">
+          ${ref}
+          ${rows || '<div class="empty" style="padding:8px">세트 없음</div>'}
+          <div class="set-add">
+            <input class="field" inputmode="decimal" data-new-w="${ex.id}" placeholder="중량(kg)" />
+            <input class="field" inputmode="numeric" data-new-r="${ex.id}" placeholder="횟수" />
+            <button class="btn" type="button" data-add-set="${ex.id}">세트+</button></div>
+          <div class="label" style="margin-top:12px">사진 · 영상</div>
+          <div class="media">${await mediaHtml(ex)}</div>
+          <div class="add" style="margin:0"><label class="btn soft file" style="flex:1">앨범에서 첨부<input type="file" accept="image/*,video/*" multiple data-files="${ex.id}" /></label></div>
+          <label class="cap">피드백</label>
+          <textarea class="field ex-note" data-ex-feedback="${ex.id}" placeholder="이 종목에 대한 코칭 피드백">${esc(ex.feedback || "")}</textarea>
+          </div></article>`);
+      }
+      box.innerHTML = cards.join("");
+    }
+    function findEx(id) { const s = sessionOf(); return s ? s.exercises.find((e) => e.id === id) : null; }
+    function renderMembers() {
+      $("memberList").innerHTML = state.members.length
+        ? state.members.map((m) => {
+            const p = m.profile || {};
+            const n = archivedDates(m).length;
+            const sub = [p.gender, p.age ? p.age + "세" : "", p.goal, n ? n + "개 일지" : "일지 없음"].filter(Boolean).join(" · ") || "프로필 미입력";
+            return `<div class="split-tile">
+              <button class="tile" type="button" data-detail="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>
+              <button class="tile side" type="button" data-open-archive="${m.id}">일지</button>
+            </div>`;
+          }).join("")
+        : '<div class="empty">등록된 회원이 없습니다.</div>';
+    }
+    function profileHtml(p, name) {
+      p = p || {};
+      return `<div class="card">
+        <p class="kv"><span>이름</span>${esc(name)}</p>
+        <p class="kv"><span>성별</span>${esc(p.gender || "-")}</p>
+        <p class="kv"><span>연령</span>${esc(p.age ? p.age + "세" : "-")}</p>
+        <p class="kv"><span>목표</span>${esc(p.goal || "-")}</p>
+        <p class="kv"><span>병력/통증</span>${esc(p.history || "-")}</p>
+        <p class="kv"><span>운동 경력</span>${esc(p.experience || "-")}</p>
+        <p class="kv"><span>참고</span>${esc(p.notes || "-")}</p></div>`;
+    }
+    async function photoCol(kind) {
+      const m = currentMember();
+      const list = (m.photos || []).filter((p) => p.kind === kind);
+      if (!list.length) return '<div class="empty" style="padding:12px">없음</div>';
+      const parts = [];
+      for (const p of list) {
+        const url = await fileUrl(p.id); if (!url) continue;
+        parts.push(`<button class="thumb lg" type="button" data-view="${p.id}:image" style="margin-bottom:6px"><img src="${url}" alt="" /><span class="x" data-del-photo="${p.id}">×</span></button><p class="hint">${prettyDate(p.date)}</p>`);
+      }
+      return parts.join("") || '<div class="empty" style="padding:12px">없음</div>';
+    }
+    function packOf(m) {
+      m.pack = m.pack || { total: 0, used: 0 };
+      const total = Math.max(0, Number(m.pack.total) || 0);
+      const used = Math.max(0, Number(m.pack.used) || 0);
+      return { total, used, left: Math.max(0, total - used) };
+    }
+    function bodyChartSvg(rows) {
+      const asc = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+      if (!asc.length) return '<p class="hint" style="margin:8px">체성분 수치를 저장하면 그래프가 그려집니다.</p>';
+      if (asc.length < 2) return '<p class="hint" style="margin:8px">같은 항목을 한 번 더 저장하면 변화 선이 표시됩니다.</p>';
+      const W = 360, H = 220, pl = 12, pr = 48, pt = 18, pb = 36;
+      const iw = W - pl - pr, ih = H - pt - pb;
+      const n = asc.length;
+      const xAt = (i) => pl + (n === 1 ? iw / 2 : i * iw / (n - 1));
+      const grid = [0, 0.25, 0.5, 0.75, 1].map((t) => {
+        const y = pt + t * ih;
+        return `<line x1="${pl}" y1="${y.toFixed(1)}" x2="${pl + iw}" y2="${y.toFixed(1)}" stroke="#E2D9CB" stroke-width="1" ${t === 1 || t === 0 ? "" : 'stroke-dasharray="3 4"'} />`;
+      }).join("");
+      function series(key, color) {
+        const pts = asc.map((r, i) => {
+          const v = Number(r[key]);
+          return Number.isFinite(v) ? { x: xAt(i), v, i } : null;
+        }).filter(Boolean);
+        if (pts.length < 2) return "";
+        const vs = pts.map((p) => p.v);
+        let min = Math.min(...vs), max = Math.max(...vs);
+        if (min === max) { min -= 1; max += 1; }
+        const pad = (max - min) * 0.18;
+        min -= pad; max += pad;
+        const y = (v) => pt + (1 - (v - min) / (max - min)) * ih;
+        const d = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + "," + y(p.v).toFixed(1)).join(" ");
+        const last = pts[pts.length - 1];
+        const area = `${d} L${last.x.toFixed(1)},${(pt + ih).toFixed(1)} L${pts[0].x.toFixed(1)},${(pt + ih).toFixed(1)} Z`;
+        const dots = pts.map((p, i) => {
+          const lastPt = i === pts.length - 1;
+          return `<circle cx="${p.x.toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="${lastPt ? 5.2 : 4}" fill="${color}" stroke="#FFFcf7" stroke-width="2" />`;
+        }).join("");
+        const label = `<text x="${(last.x + 8).toFixed(1)}" y="${(y(last.v) + 4).toFixed(1)}" font-size="10" font-weight="700" fill="${color}">${last.v.toFixed(1)}</text>`;
+        return `<path d="${area}" fill="${color}" opacity="0.08" /><path d="${d}" fill="none" stroke="${color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" />${dots}${label}`;
+      }
+      const step = n > 6 ? Math.ceil((n - 1) / 5) : 1;
+      const labels = asc.map((r, i) => {
+        if (i !== 0 && i !== n - 1 && i % step) return "";
+        return `<text x="${xAt(i).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#7A7468">${esc(r.date.slice(5).replace("-", "/"))}</text>`;
+      }).join("");
+      const axis = `<text x="${pl}" y="${H - 10}" text-anchor="start" font-size="9" fill="#A89F90">측정일</text>`;
+      return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${grid}${series("weight", "#1E3A5F")}${series("muscle", "#1B5E46")}${series("fat", "#C45C26")}${labels}${axis}</svg>`;
+    }
+    function bodyStatsHtml(rows) {
+      const asc = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+      if (!asc.length) return "";
+      const first = asc[0], last = asc[asc.length - 1];
+      function cell(label, key, unit, color) {
+        const a = Number(first[key]), b = Number(last[key]);
+        const has = Number.isFinite(b);
+        let delta = "";
+        if (Number.isFinite(a) && Number.isFinite(b) && asc.length > 1) {
+          const n = b - a;
+          const col = n === 0 ? "#7A7468" : (key === "fat" ? (n < 0 ? "#1B5E46" : "#B4232C") : (n > 0 ? "#1B5E46" : "#B4232C"));
+          delta = `<em style="color:${col}">${n > 0 ? "+" : ""}${n.toFixed(1)}${unit}</em>`;
+        }
+        return `<div><span style="color:${color}">${label}</span><b>${has ? b.toFixed(1) + unit : "-"}</b>${delta}</div>`;
+      }
+      return cell("체중", "weight", "kg", "#1E3A5F") + cell("골격근량", "muscle", "kg", "#1B5E46") + cell("체지방률", "fat", "%", "#C45C26");
+    }
+    async function notesHtml(list, key) {
+      if (!(list || []).length) return '<div class="empty" style="padding:12px">아직 기록이 없습니다.</div>';
+      const parts = [];
+      for (const n of [...list].reverse()) {
+        let img = "";
+        if (n.photoId) {
+          const url = await fileUrl(n.photoId);
+          if (url) img = `<button class="thumb" type="button" data-view="${n.photoId}:image"><img src="${url}" alt="" /></button>`;
+        } else if (n.photoData) {
+          img = `<button class="thumb" type="button" data-src-view="1"><img src="${n.photoData}" alt="" /></button>`;
+        }
+        parts.push(`<div class="hist">${img}<div class="meta"><b>${prettyDate(n.date)} · ${n.date}${n.source === "member" ? '<span class="tag">회원</span>' : ""}${n.meal ? '<span class="tag">' + esc(n.meal) + "</span>" : ""}</b><small>${esc(n.text) || "사진 기록"}</small></div><button class="btn danger" type="button" data-del-note="${key}:${n.id}">×</button></div>`);
+      }
+      return parts.join("");
+    }
+    function workoutHtml(m) {
+      const dates = Object.keys(m.sessions || {}).sort().reverse();
+      let html = "";
+      dates.forEach((d) => {
+        const s = m.sessions[d];
+        if (!(s.exercises || []).length && !(s.program || s.feedback || s.memo) && !s.booked) return;
+        html += `<button class="tile" type="button" data-open-log-date="${d}" style="margin-bottom:8px"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${esc((s.exercises || []).map((ex) => ex.name).join(" · ") || (s.booked ? koClock(s.start || "16:00") + " 예약" : "기록 없음"))}</small></span><span class="chev">›</span></button>`;
+      });
+      return html || '<div class="empty" style="padding:12px">아직 수업 일지가 없습니다.</div>';
+    }
+    function selfWorkoutHtml(list, canDel) {
+      const rows = [...(list || [])].reverse();
+      if (!rows.length) return '<div class="empty" style="padding:12px">회원이 혼자 한 운동이 여기에 표시됩니다.</div>';
+      return rows.map((w) => `<div class="hist"><div class="meta"><b>${prettyDate(w.date)} · ${w.date}</b><small>${esc(w.name)} · ${esc(w.weight || "-")}kg × ${esc(w.reps || "-")}회${w.note ? " · " + esc(w.note) : ""}</small></div>${canDel ? `<button class="btn danger" type="button" data-del-self="${w.id}">×</button>` : ""}</div>`).join("");
+    }
+    function attendHtml(m) {
+      const dates = Object.keys(m.sessions || {}).sort().reverse().filter((d) => hasClass(m, d));
+      $("attendCount").textContent = dates.length ? dates.length + "회" : "";
+      if (!dates.length) return '<div class="empty" style="padding:12px">수업 일지를 작성하면 출석이 쌓입니다.</div>';
+      return dates.map((d) => {
+        const n = ((m.sessions[d].exercises) || []).length;
+        return `<button class="tile" type="button" data-open-log-date="${d}" style="margin-bottom:8px"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${n ? n + "개 운동" : "예약됨"}</small></span><span class="chev">›</span></button>`;
+      }).join("");
+    }
+    async function bodyHistHtml(m) {
+      const body = [...(m.body || [])].sort((a, b) => b.date.localeCompare(a.date));
+      if (!body.length) return '<div class="empty" style="padding:12px">아직 체성분 기록이 없습니다.</div>';
+      const parts = [];
+      for (const r of body) {
+        let img = "";
+        if (r.photoId) {
+          const url = await fileUrl(r.photoId);
+          if (url) img = `<button class="thumb" type="button" data-view="${r.photoId}:image"><img src="${url}" alt="" /></button>`;
+        }
+        parts.push(`<div class="hist">${img}<div class="meta"><b>${prettyDate(r.date)} · ${r.date}</b><small>체중 ${esc(r.weight) || "-"}kg · 골격근 ${esc(r.muscle) || "-"}kg · 체지방 ${esc(r.fat) || "-"}%</small></div><button class="btn danger" type="button" data-del-body="${r.id}">×</button></div>`);
+      }
+      return parts.join("");
+    }
+    async function renderDetail() {
+      const m = currentMember();
+      if (!m) { setTab("members"); return; }
+      $("detailName").textContent = m.name;
+      $("profileCard").innerHTML = profileHtml(m.profile, m.name);
+      const pack = packOf(m);
+      $("packTotal").textContent = pack.total;
+      $("packUsed").textContent = pack.used;
+      $("packLeft").textContent = pack.left;
+      $("packLeft").style.color = pack.left ? "var(--ok)" : "var(--danger)";
+      if (document.activeElement !== $("injuryText")) $("injuryText").value = m.injuries || "";
+      $("attendList").innerHTML = attendHtml(m);
+      $("consultList").innerHTML = await notesHtml(m.consults, "consults");
+      $("dietList").innerHTML = await notesHtml(m.dietLogs, "dietLogs");
+      $("workoutList").innerHTML = workoutHtml(m);
+      $("selfWorkoutList").innerHTML = selfWorkoutHtml(m.selfWorkouts, true);
+      const body = [...(m.body || [])].sort((a, b) => b.date.localeCompare(a.date));
+      if (body.length >= 2) {
+        const a = body[0], b = body[1];
+        const dlt = (x, y) => { const n = Number(x) - Number(y); return Number.isFinite(n) && y !== "" && y != null ? ((n > 0 ? "+" : "") + n.toFixed(1)) : "-"; };
+        $("bodyTrend").textContent = `최근 변화  체중 ${dlt(a.weight, b.weight)}kg · 골격근 ${dlt(a.muscle, b.muscle)}kg · 체지방 ${dlt(a.fat, b.fat)}%`;
+      } else $("bodyTrend").textContent = "수치를 두 번 이상 저장하면 변화량과 그래프가 표시됩니다.";
+      $("bodyChart").innerHTML = bodyChartSvg(m.body || []);
+      $("bodyStats").innerHTML = bodyStatsHtml(m.body || []);
+      $("bodyList").innerHTML = await bodyHistHtml(m);
+      $("beforeBox").innerHTML = await photoCol("before");
+      $("afterBox").innerHTML = await photoCol("after");
+    }
+    function snapshot(m) {
+      const dates = Object.keys(m.sessions || {}).sort().reverse().slice(0, 40);
+      const sessions = {};
+      dates.forEach((d) => {
+        const s = m.sessions[d];
+        if (!s) return;
+        sessions[d] = packSession(s);
+      });
+      return {
+        name: m.name, share: m.share, id: m.id, profile: m.profile, body: m.body || [], sessions,
+        selfWorkouts: m.selfWorkouts || [],
+        dietLogs: (m.dietLogs || []).map((n) => ({ id: n.id, date: n.date, text: n.text, meal: n.meal, source: n.source }))
+      };
+    }
+    function todayLogPack(m) {
+      const d = logDate || today();
+      const s = (m.sessions && m.sessions[d]) || { exercises: [] };
+      return Object.assign({ kind: "log", name: m.name, share: m.share, date: d }, packSession(s), {
+        selfWorkouts: m.selfWorkouts || [],
+        dietLogs: (m.dietLogs || []).map((n) => ({ id: n.id, date: n.date, text: n.text, meal: n.meal, source: n.source }))
+      });
+    }
+    function packUrl(code, payload) {
+      const base = location.href.replace(/#.*$/, "") + "#share/" + code;
+      try {
+        const packed = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+        if (packed.length < 50000) return base + "/" + packed;
+      } catch (_) {}
+      return base;
+    }
+    function shareUrl(m) { return packUrl(m.share, snapshot(m)); }
+    function logShareUrl(m) { return packUrl(m.share, todayLogPack(m)); }
+    function clientViewId() {
+      return (new URLSearchParams(location.search).get("client-view") || "").trim();
+    }
+    function appBase() {
+      let path = location.pathname.replace(/index\.html$/i, "");
+      path = path.replace(/\/client-view\/?$/i, "/");
+      if (!path.endsWith("/")) path += "/";
+      return location.origin + path;
+    }
+    function clientViewUrl(m) {
+      let hash = "#share/" + m.share;
+      try {
+        const packed = btoa(unescape(encodeURIComponent(JSON.stringify(snapshot(m)))));
+        if (packed.length < 50000) hash += "/" + packed;
+      } catch (_) {}
+      return appBase() + "client-view/?id=" + encodeURIComponent(m.id) + hash;
+    }
+    async function copyLink(url, msg) {
+      if (navigator.share) {
+        try { await navigator.share({ title: "PT 운동 일지", text: "운동 기록을 확인해 주세요.", url }); return true; }
+        catch (err) { if (err && err.name === "AbortError") return false; }
+      }
+      try { await navigator.clipboard.writeText(url); alert(msg); }
+      catch { prompt("이 링크를 복사하세요", url); }
+      return true;
+    }
+    async function copyClientLink(m) {
+      if (!m) return;
+      const url = clientViewUrl(m);
+      try { await navigator.clipboard.writeText(url); alert("회원용 링크를 복사했습니다.\n카톡으로 보내면 회원이 전용 화면으로 접속할 수 있습니다."); }
+      catch { prompt("이 링크를 복사하세요", url); }
+    }
+    let shareCtx = { code: "", meal: "점심" };
+    const portalKey = (code) => "pt-logger-portal-" + code;
+    function loadPortal(code) {
+      try { return JSON.parse(localStorage.getItem(portalKey(code)) || "null") || { selfWorkouts: [], dietLogs: [] }; }
+      catch { return { selfWorkouts: [], dietLogs: [] }; }
+    }
+    function savePortal(code, data) { localStorage.setItem(portalKey(code), JSON.stringify(data)); }
+    function memberByShare(code) { return state.members.find((m) => m.share === code); }
+    function portalData(code) {
+      const m = memberByShare(code);
+      if (m) return { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] };
+      return loadPortal(code);
+    }
+    function writeSelfWorkout(code, row) {
+      const m = memberByShare(code);
+      if (m) { m.selfWorkouts = m.selfWorkouts || []; m.selfWorkouts.push(row); saveData(); }
+      else { const g = loadPortal(code); g.selfWorkouts = g.selfWorkouts || []; g.selfWorkouts.push(row); savePortal(code, g); }
+    }
+    function removeSelfWorkout(code, id) {
+      const m = memberByShare(code);
+      if (m) { m.selfWorkouts = (m.selfWorkouts || []).filter((x) => x.id !== id); saveData(); }
+      else { const g = loadPortal(code); g.selfWorkouts = (g.selfWorkouts || []).filter((x) => x.id !== id); savePortal(code, g); }
+    }
+    function writeMemberDiet(code, row) {
+      const m = memberByShare(code);
+      if (m) { m.dietLogs = m.dietLogs || []; m.dietLogs.push(row); saveData(); }
+      else { const g = loadPortal(code); g.dietLogs = g.dietLogs || []; g.dietLogs.push(row); savePortal(code, g); }
+    }
+    function trainerDayHtml(data) {
+      let date = data.date || today();
+      let exercises = data.exercises || [];
+      let program = data.program || "";
+      let feedback = data.feedback || "";
+      let memo = data.memo || "";
+      if ((!exercises.length) && data.sessions) {
+        const s = data.sessions[date] || {};
+        if ((s.exercises || []).length || s.program || s.feedback || s.memo) {
+          exercises = s.exercises || [];
+          program = s.program || "";
+          feedback = s.feedback || "";
+          memo = s.memo || "";
+        } else {
+          const last = Object.keys(data.sessions).sort().reverse()[0];
+          if (last) {
+            date = last;
+            exercises = (data.sessions[last].exercises || []);
+            program = data.sessions[last].program || "";
+            feedback = data.sessions[last].feedback || "";
+            memo = data.sessions[last].memo || "";
+          }
+        }
+      }
+      if (!exercises.length && !program && !feedback && !memo) return "";
+      const head = program ? `<p class="kv"><span>오늘 프로그램</span>${esc(program)}</p>` : "";
+      const blocks = exercises.map((ex) => {
+        const sets = (ex.sets || []).map((st, i) => `<div class="set-line"><span>${i + 1}세트</span><b>${esc(st.weight)}kg × ${esc(st.reps)}회</b></div>`).join("");
+        const fb = ex.feedback || "";
+        return `<div class="log-ex"><h3>${esc(ex.name)}</h3>${sets || '<p class="hint">세트 없음</p>'}
+          ${fb ? `<p class="kv"><span>피드백</span>${esc(fb)}</p>` : ""}</div>`;
+      }).join("");
+      const foot = [
+        feedback ? `<p class="kv"><span>피드백</span>${esc(feedback)}</p>` : "",
+        memo ? `<p class="kv"><span>메모</span>${esc(memo)}</p>` : ""
+      ].join("");
+      return `<div class="card"><p class="label" style="margin-top:0">${prettyDate(date)} · ${date}</p>${head}${blocks}${foot}</div>`;
+    }
+    function trainerLogsHtml(data, full) {
+      if (!full && data.kind === "log") {
+        return trainerDayHtml(data) || '<div class="card"><p class="hint" style="margin:0">이 날 트레이너 수업 기록이 없습니다.</p></div>';
+      }
+      const sessions = data.sessions || {};
+      const dates = Object.keys(sessions).sort().reverse();
+      const html = dates.map((date) => trainerDayHtml(Object.assign({ date }, sessions[date] || {}))).join("");
+      return html || '<div class="card"><p class="hint" style="margin:0">아직 트레이너 수업 일지가 없습니다.</p></div>';
+    }
+    async function dietCardsHtml(list) {
+      const rows = [...(list || [])].reverse();
+      if (!rows.length) return '<div class="empty" style="padding:12px">아직 식단 기록이 없습니다.</div>';
+      const parts = [];
+      for (const n of rows) {
+        let img = "";
+        if (n.photoId) {
+          const url = await fileUrl(n.photoId);
+          if (url) img = `<button class="thumb" type="button" data-view="${n.photoId}:image"><img src="${url}" alt="" /></button>`;
+        } else if (n.photoData) {
+          img = `<button class="thumb" type="button" data-src-view="1"><img src="${n.photoData}" alt="" /></button>`;
+        }
+        parts.push(`<div class="hist">${img}<div class="meta"><b>${prettyDate(n.date)} · ${n.date}${n.meal ? '<span class="tag">' + esc(n.meal) + "</span>" : ""}</b><small>${esc(n.text) || "사진 기록"}</small></div></div>`);
+      }
+      return parts.join("");
+    }
+    async function photoListHtml(m, kind) {
+      const list = (m.photos || []).filter((p) => p.kind === kind);
+      if (!list.length) return '<div class="empty" style="padding:12px">없음</div>';
+      const parts = [];
+      for (const p of list) {
+        const url = await fileUrl(p.id);
+        if (url) parts.push(`<button class="thumb lg" type="button" data-view="${p.id}:image" style="margin-bottom:6px"><img src="${url}" alt="" /></button>`);
+      }
+      return parts.join("") || '<div class="empty" style="padding:12px">없음</div>';
+    }
+    async function renderShareLive() {
+      const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
+      if (local) await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos, kind: shareCtx.kind });
+      else if (shareCtx.data) await renderShare(shareCtx.data);
+    }
+    async function renderShare(data) {
+      shareCtx.code = data.share || "";
+      shareCtx.kind = data.kind || "";
+      shareCtx.data = data;
+      if (shareCtx.prevCode !== shareCtx.code) shareCtx.meal = "점심";
+      shareCtx.prevCode = shareCtx.code;
+      const full = !!clientViewId() || data.kind !== "log";
+      const portal = portalData(shareCtx.code);
+      const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
+      const view = local || data;
+      const profile = view.profile || data.profile || {};
+      const body = view.body || data.body || [];
+      const photos = local || { photos: view.photos || [] };
+      $("shareTitle").textContent = (view.name || data.name || "회원") + " 님";
+      $("shareSub").textContent = full ? "프로필 · 체성분 · 수업 일지" : "오늘 수업 일지 · 개인 기록";
+      const goal = profile.goal ? `<div class="share-goal"><span>목표</span><b>${esc(profile.goal)}</b></div>` : "";
+      const chart = body.length
+        ? `<div class="legend">
+            <span><i style="background:#1E3A5F"></i>체중</span>
+            <span><i style="background:#1B5E46"></i>골격근량</span>
+            <span><i style="background:#C45C26"></i>체지방률</span>
+          </div>
+          <div class="chart-wrap">${bodyChartSvg(body)}</div>
+          <div class="chart-stats">${bodyStatsHtml(body)}</div>`
+        : '<p class="hint">아직 체성분 기록이 없습니다.</p>';
+      const head = full ? `
+        <div class="share-hero">
+          <h2>${esc(view.name || data.name || "회원")} 님의 기록</h2>
+          <p>트레이너 관리 기능은 보이지 않습니다. 본인 기록만 확인하고 입력할 수 있습니다.</p>
+        </div>
+        ${goal}
+        <div class="label">회원 프로필</div>
+        ${profileHtml(profile, view.name || data.name)}
+        <div class="label">체성분 변화 추이</div>
+        <div class="card">${chart}</div>
+        <div class="label">비포 / 애프터</div>
+        <div class="ba">
+          <div><p class="cap" style="margin-top:0">Before</p>${await photoListHtml(photos, "before")}</div>
+          <div><p class="cap" style="margin-top:0">After</p>${await photoListHtml(photos, "after")}</div>
+        </div>
+        <div class="label">트레이너 운동 일지</div>` : `<div class="label">오늘 수업 일지</div>`;
+      $("shareBody").innerHTML = `
+        ${head}
+        ${trainerLogsHtml(local ? snapshot(local) : data, full)}
+        <p class="hint">프로그램 · 피드백 · 메모 · 종목 세트·피드백은 트레이너가 작성한 내용입니다.</p>
+        <div class="label">개인 운동 기록</div>
+        <div class="card">
+          <input class="field" id="selfName" placeholder="종목 (예: 런지)" />
+          <div class="add" style="margin-top:8px">
+            <input class="field" id="selfWeight" inputmode="decimal" placeholder="무게 kg" />
+            <input class="field" id="selfReps" inputmode="numeric" placeholder="횟수" />
+          </div>
+          <input class="field" id="selfNote" placeholder="간단 메모" style="margin-top:8px" />
+          <button class="btn wide" type="button" data-add-self="1" style="margin-top:8px">개인 운동 저장</button>
+        </div>
+        <div id="shareSelfList">${selfWorkoutHtml(portal.selfWorkouts, true)}</div>
+        <div class="label">식단 사진 및 메모</div>
+        <div class="card">
+          <div class="meal-pills">
+            <button type="button" data-meal="아침"${shareCtx.meal === "아침" ? ' class="on"' : ""}>아침</button>
+            <button type="button" data-meal="점심"${shareCtx.meal === "점심" ? ' class="on"' : ""}>점심</button>
+            <button type="button" data-meal="저녁"${shareCtx.meal === "저녁" ? ' class="on"' : ""}>저녁</button>
+            <button type="button" data-meal="간식"${shareCtx.meal === "간식" ? ' class="on"' : ""}>간식</button>
+          </div>
+          <textarea class="field" id="shareDietText" placeholder="무엇을 먹었나요?"></textarea>
+          <label class="btn soft file wide" style="margin-top:8px">식단 사진 올리기<input type="file" accept="image/*" id="shareDietFile" /></label>
+          <button class="btn wide" type="button" data-add-diet="1" style="margin-top:8px">식단 저장</button>
+        </div>
+        <div id="shareDietList">${await dietCardsHtml(portal.dietLogs)}</div>
+        ${local ? '<p class="hint">저장하면 트레이너 회원 상세 화면에 바로 반영됩니다.</p>' : '<p class="hint">다른 휴대폰에서 열었다면, 아래 링크를 트레이너에게 보내 기록을 합칠 수 있습니다.</p><button class="btn soft wide" type="button" data-copy-sync="1">동기화 링크 복사</button>'}`;
+    }
+    function openModal(id) {
+      editingId = id || null;
+      const m = id ? memberBy(id) : { name: "", profile: emptyProfile() };
+      $("modalTitle").textContent = id ? "프로필 수정" : "새 회원 등록";
+      $("pName").value = m.name || "";
+      $("pGender").value = (m.profile && m.profile.gender) || "";
+      $("pAge").value = (m.profile && m.profile.age) || "";
+      $("pGoal").value = (m.profile && m.profile.goal) || "";
+      $("pHistory").value = (m.profile && m.profile.history) || "";
+      $("pExp").value = (m.profile && m.profile.experience) || "";
+      $("pNotes").value = (m.profile && m.profile.notes) || "";
+      $("modalBg").classList.remove("hidden");
+    }
+    function closeModal() { $("modalBg").classList.add("hidden"); editingId = null; }
+
+    const TL_FROM = 6, TL_TO = 24;
+    const BLOCK_COLORS = ["#1E3A5F", "#1B6B4F", "#8A4B12", "#3D5A80", "#6B2D5B", "#2F6F6A"];
+    const KR_HOLIDAYS = {
+      "2026-01-01": "새해",
+      "2026-02-16": "설날",
+      "2026-02-17": "설날",
+      "2026-02-18": "설날",
+      "2026-03-01": "삼일절",
+      "2026-03-02": "대체휴일",
+      "2026-05-05": "어린이날",
+      "2026-05-24": "석가탄신일",
+      "2026-05-25": "대체휴일",
+      "2026-06-03": "지방선거",
+      "2026-06-06": "현충일",
+      "2026-08-15": "광복절",
+      "2026-08-17": "대체휴일",
+      "2026-09-24": "추석",
+      "2026-09-25": "추석",
+      "2026-09-26": "추석",
+      "2026-10-03": "개천절",
+      "2026-10-05": "대체휴일",
+      "2026-10-09": "한글날",
+      "2026-12-25": "성탄절"
+    };
+    function holidayName(iso) { return KR_HOLIDAYS[iso] || ""; }
+    function isSunday(iso) { return dateFromIso(iso).getDay() === 0; }
+    function minsOf(t) {
+      const p = String(t || "16:00").split(":");
+      return Number(p[0]) * 60 + Number(p[1] || 0);
+    }
+    function fmtHM(mins) {
+      const h = Math.floor(mins / 60);
+      const m = Math.round(mins % 60);
+      return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    }
+    function snapMin(mins, dur) {
+      dur = dur || 60;
+      const lo = TL_FROM * 60;
+      const hi = TL_TO * 60 - dur;
+      mins = Math.round(mins / 15) * 15;
+      return Math.max(lo, Math.min(hi, mins));
+    }
+    function koClock(t) {
+      const [h, m] = String(t || "16:00").split(":").map(Number);
+      if (h === 24 || (h === 0 && !m)) return "자정";
+      const ap = h < 12 ? "오전" : "오후";
+      let h12 = h % 12; if (!h12) h12 = 12;
+      return ap + " " + h12 + "시" + (m ? " " + m + "분" : "");
+    }
+    function colorOf(id) {
+      let n = 0; String(id || "").split("").forEach((c) => n += c.charCodeAt(0));
+      return BLOCK_COLORS[Math.abs(n) % BLOCK_COLORS.length];
+    }
+    function layoutLanes(events) {
+      const sorted = events.slice().sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+      const ends = [];
+      sorted.forEach((ev) => {
+        let lane = ends.findIndex((end) => ev.startMin >= end);
+        if (lane < 0) { lane = ends.length; ends.push(ev.endMin); }
+        else ends[lane] = ev.endMin;
+        ev.lane = lane;
+      });
+      const count = Math.max(1, ends.length);
+      sorted.forEach((ev) => { ev.lanes = count; });
+      return sorted;
+    }
+    function classEvents(date) {
+      return layoutLanes(classesOn(date).map((m) => {
+        const s = m.sessions[date] || {};
+        const start = s.start || "16:00";
+        const dur = Number(s.minutes) > 0 ? Number(s.minutes) : 60;
+        const startMin = minsOf(start);
+        return { m, date, start, dur, startMin, endMin: startMin + dur };
+      }));
+    }
+    function timeGutterHtml() {
+      let html = '<div class="tl-time">';
+      for (let h = TL_FROM; h < TL_TO; h++) {
+        const ap = h === 6 ? "<em>오전</em>" : (h === 12 ? "<em>오후</em>" : (h === 22 ? "<em>밤</em>" : ""));
+        html += "<i>" + ap + String(h).padStart(2, "0") + ":00</i>";
+      }
+      html += '<i class="tl-end">24:00</i>';
+      return html + "</div>";
+    }
+    function nowLineHtml(date) {
+      if (date !== today()) return "";
+      const n = new Date();
+      const mins = n.getHours() * 60 + n.getMinutes();
+      if (mins < TL_FROM * 60 || mins > TL_TO * 60) return "";
+      return '<div class="now-line" style="top:calc((' + (mins - TL_FROM * 60) + ' / 60) * var(--hour))"></div>';
+    }
+    function blockHtml(ev) {
+      const top = "calc((" + (ev.startMin - TL_FROM * 60) + " / 60) * var(--hour))";
+      const height = "calc((" + ev.dur + " / 60) * var(--hour) - 4px)";
+      const left = "calc(3px + " + ev.lane + " * (100% - 6px) / " + ev.lanes + ")";
+      const width = "calc((100% - 6px) / " + ev.lanes + " - 2px)";
+      return '<button class="tl-block" type="button" data-class-id="' + ev.m.id + '" data-class-date="' + ev.date + '" data-start-min="' + ev.startMin + '" data-dur="' + ev.dur + '" style="top:' + top + ";height:" + height + ";left:" + left + ";width:" + width + ";background:" + colorOf(ev.m.id) + '"><small>' + esc(koClock(ev.start)) + "</small><b>" + esc(ev.m.name) + "님 PT</b></button>";
+    }
+    function dayHeadClass(date) {
+      const cls = [];
+      if (date === today()) cls.push("today");
+      if (isSunday(date) || holidayName(date)) cls.push(isSunday(date) ? "sun" : "holiday");
+      if (holidayName(date)) cls.push("holiday");
+      return cls.join(" ");
+    }
+    function dayColHtml(date) {
+      const hours = TL_TO - TL_FROM;
+      const events = classEvents(date);
+      return '<div class="tl-col" data-date="' + date + '" style="height:calc(' + hours + " * var(--hour))\">" + events.map(blockHtml).join("") + nowLineHtml(date) + "</div>";
+    }
+    function timelineHtml(dates, kind) {
+      const hours = TL_TO - TL_FROM;
+      const head = '<div class="tl-head"><span></span>' + dates.map((d) => {
+        const hol = holidayName(d);
+        return '<span class="' + dayHeadClass(d) + '"><b>' + Number(d.slice(8)) + "</b>" + weekdayName(d) + (hol ? '<span class="hol">' + hol + "</span>" : "") + "</span>";
+      }).join("") + "</div>";
+      const cols = timeGutterHtml() + dates.map(dayColHtml).join("");
+      return '<div class="tl ' + kind + '">' + head + '<div class="tl-grid" style="min-height:calc(' + hours + " * var(--hour))\">" + cols + "</div></div>";
+    }
+    function renderCal() {
+      if (calDragging) return;
+      const y = $("calBody").scrollTop;
+      calIso = calIso || today();
+      document.querySelectorAll("[data-cal-mode]").forEach((b) => b.classList.toggle("on", b.dataset.calMode === calMode));
+      if (calMode === "day") {
+        const hol = holidayName(calIso);
+        $("calLabel").textContent = prettyDate(calIso) + " (" + weekdayName(calIso) + ")" + (hol ? " · " + hol : "") + " · " + calIso;
+        $("calBody").innerHTML = timelineHtml([calIso], "day");
+      } else if (calMode === "week") {
+        const start = weekStart(calIso);
+        const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+        $("calLabel").textContent = days[0].slice(5).replace("-", "/") + " – " + days[6].slice(5).replace("-", "/");
+        $("calBody").innerHTML = timelineHtml(days, "week");
+      } else {
+        const dt = dateFromIso(calIso);
+        const yyyy = dt.getFullYear(), mo = dt.getMonth();
+        $("calLabel").textContent = yyyy + "년 " + (mo + 1) + "월";
+        const first = new Date(yyyy, mo, 1);
+        const pad = (first.getDay() + 6) % 7;
+        const last = new Date(yyyy, mo + 1, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < pad; i++) cells.push(null);
+        for (let d = 1; d <= last; d++) cells.push(isoFromDate(new Date(yyyy, mo, d)));
+        while (cells.length % 7) cells.push(null);
+        const head = '<div class="cal-weekdays">' + ["월","화","수","목","금","토","일"].map((w, i) => '<span' + (i === 6 ? ' class="sun"' : "") + ">" + w + "</span>").join("") + "</div>";
+        const grid = cells.map((iso) => {
+          if (!iso) return "<div></div>";
+          const n = classesOn(iso).length;
+          const hol = holidayName(iso);
+          const cls = "cal-cell" + (iso === calIso ? " on" : "") + (isSunday(iso) ? " sun" : "") + (hol ? " holiday" : "");
+          return '<button class="' + cls + '" type="button" data-cal-day="' + iso + '"><b>' + Number(iso.slice(8)) + "</b>" + (hol ? '<span class="hol">' + hol + "</span>" : "") + (n ? "<small>" + n + "수업</small>" : "<small></small>") + "</button>";
+        }).join("");
+        $("calBody").innerHTML = head + '<div class="cal-grid">' + grid + "</div>";
+      }
+      $("calBody").scrollTop = y;
+    }
+    function hourPx(el) {
+      const tl = el.closest(".tl") || document.querySelector("#calBody .tl");
+      return parseFloat(getComputedStyle(tl).getPropertyValue("--hour")) || 56;
+    }
+    function dateAtClientX(x) {
+      const cols = Array.from(document.querySelectorAll("#calBody .tl-col"));
+      for (const col of cols) {
+        const r = col.getBoundingClientRect();
+        if (x >= r.left && x < r.right) return col.dataset.date;
+      }
+      return "";
+    }
+    function closeClassPopup() { $("classBg").classList.add("hidden"); }
+    function openClassPopup(opts) {
+      opts = opts || {};
+      if (!state.members.length) { alert("먼저 회원 관리에서 회원을 등록하세요."); return; }
+      const editing = !!opts.id;
+      $("classTitle").textContent = editing ? "수업 수정" : "수업 추가";
+      $("classFromId").value = opts.id || "";
+      $("classFromDate").value = opts.date || "";
+      $("classMember").innerHTML = state.members.map((m) => '<option value="' + m.id + '">' + esc(m.name) + "</option>").join("");
+      $("classMember").value = opts.id || state.members[0].id;
+      $("classDate").value = opts.date || calIso || today();
+      $("classStart").value = opts.start || "16:00";
+      $("classMins").value = String(opts.minutes || 60);
+      $("classDelete").classList.toggle("hidden", !editing);
+      $("classOpenLog").classList.toggle("hidden", !editing);
+      $("classBg").classList.remove("hidden");
+    }
+    function sessionHasLog(s) {
+      if (!s) return false;
+      if ((s.exercises || []).length) return true;
+      return !!(s.program || s.feedback || s.memo || s.booked);
+    }
+    function upsertClass(memberId, date, start, minutes, from) {
+      const m = memberBy(memberId);
+      if (!m) return false;
+      if (from && from.id && from.date && (from.id !== memberId || from.date !== date)) {
+        const om = memberBy(from.id);
+        const os = om && om.sessions[from.date];
+        if (om && os) {
+          if (from.id === memberId) {
+            if (m.sessions[date] && sessionHasLog(m.sessions[date]) && from.date !== date) {
+              alert("옮기려는 날짜에 이미 일지가 있어 이동할 수 없습니다.");
+              return false;
+            }
+            m.sessions[date] = os;
+            delete m.sessions[from.date];
+          } else {
+            os.booked = false;
+            if (!sessionHasLog(os)) delete om.sessions[from.date];
+          }
+        }
+      }
+      const s = sessionOf(m, date);
+      s.start = start;
+      s.minutes = minutes;
+      s.booked = true;
+      saveData();
+      return true;
+    }
+    function deleteClass(id, date) {
+      const m = memberBy(id);
+      if (!m || !m.sessions[date]) return;
+      const s = m.sessions[date];
+      if (sessionHasLog(s) && !confirm("이 날 운동 일지도 함께 삭제할까요?")) return;
+      delete m.sessions[date];
+      saveData();
+    }
+    let calTimer = null;
+    function openCal() {
+      calIso = today();
+      calMode = "week";
+      $("calBg").classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+      renderCal();
+      if (calTimer) clearInterval(calTimer);
+      calTimer = setInterval(() => { if (!$("calBg").classList.contains("hidden")) renderCal(); }, 60000);
+    }
+    function closeCal() {
+      closeClassPopup();
+      $("calBg").classList.add("hidden");
+      document.body.style.overflow = "";
+      if (calTimer) { clearInterval(calTimer); calTimer = null; }
+    }
+
+    function openLog(id, date) {
+      if (tab !== "log") fromTab = tab;
+      currentId = id;
+      logDate = date || null;
+      setTab("log", true);
+    }
+    function openArchive(id) {
+      fromCal = false;
+      openLog(id, null);
+    }
+    function openDetail(id) {
+      if (tab !== "detail") fromTab = tab;
+      currentId = id;
+      setTab("detail", true);
+    }
+    function goToMemberProfile() {
+      if (!currentId) return;
+      fromTab = "log";
+      openDetail(currentId);
+    }
+    function goBack() {
+      if (tab === "detail") {
+        const dest = fromTab === "share" ? "home" : (fromTab || "members");
+        if (dest === "log") setTab("log", true);
+        else setTab(dest);
+        return;
+      }
+      if (tab === "log" && currentId) {
+        if (logDate) { logDate = null; renderLog(); return; }
+        if (fromCal) {
+          const keep = currentId;
+          currentId = null;
+          fromCal = false;
+          setTab("home");
+          openCal();
+          currentId = keep;
+          return;
+        }
+        if (fromTab === "home" || fromTab === "detail" || fromTab === "members") {
+          if (fromTab === "detail") setTab("detail", true);
+          else if (fromTab === "members") setTab("members");
+          else setTab("home");
+          return;
+        }
+        currentId = null;
+        renderLog();
+        return;
+      }
+      if (tab === "share") {
+        if (clientViewId()) return;
+        const keepId = currentId;
+        if ((location.hash || "").startsWith("#share/")) history.replaceState(null, "", location.pathname + location.search);
+        if (keepId) setTab("detail", true);
+        else setTab("home");
+      }
+    }
+    function parseShareHash() {
+      const h = (location.hash || "").replace(/^#/, "");
+      if (h.startsWith("sync/")) return { sync: true, hash: h };
+      if (!h.startsWith("share/")) return null;
+      const parts = h.split("/");
+      const code = parts[1];
+      const packed = parts.slice(2).join("/");
+      const local = memberByShare(code);
+      if (local) {
+        const data = snapshot(local);
+        if (packed) {
+          try {
+            const extra = JSON.parse(decodeURIComponent(escape(atob(packed))));
+            if (extra.kind === "log") {
+              data.kind = "log";
+              data.date = extra.date;
+              data.memo = extra.memo || "";
+              data.exercises = extra.exercises || [];
+            }
+          } catch (_) {}
+        }
+        return data;
+      }
+      if (!packed) return { missing: true, share: code };
+      try {
+        const data = Object.assign({ share: code }, JSON.parse(decodeURIComponent(escape(atob(packed)))));
+        const portal = loadPortal(code);
+        if ((portal.selfWorkouts || []).length) data.selfWorkouts = portal.selfWorkouts;
+        if ((portal.dietLogs || []).length) data.dietLogs = portal.dietLogs;
+        return data;
+      } catch { return { missing: true, share: code }; }
+    }
+    async function applySyncHash(h) {
+      const parts = h.split("/");
+      const code = parts[1];
+      const packed = parts.slice(2).join("/");
+      const m = memberByShare(code);
+      if (!m || !packed) return false;
+      let data;
+      try { data = JSON.parse(decodeURIComponent(escape(atob(packed)))); } catch { return false; }
+      m.selfWorkouts = m.selfWorkouts || [];
+      (data.selfWorkouts || []).forEach((w) => { if (!m.selfWorkouts.some((x) => x.id === w.id)) m.selfWorkouts.push(w); });
+      m.dietLogs = m.dietLogs || [];
+      for (const n of data.dietLogs || []) {
+        if (m.dietLogs.some((x) => x.id === n.id)) continue;
+        const row = { id: n.id || uid(), date: n.date || today(), text: n.text || "", meal: n.meal, source: "member" };
+        if (n.photoData) {
+          try {
+            const blob = await (await fetch(n.photoData)).blob();
+            row.photoId = uid();
+            await putFile(row.photoId, blob);
+          } catch (_) {}
+        }
+        m.dietLogs.push(row);
+      }
+      saveData();
+      return true;
+    }
+    async function showViewer(id, kind) {
+      const url = await fileUrl(id); if (!url) return;
+      $("viewerBody").innerHTML = kind === "video" ? `<video src="${url}" controls autoplay playsinline></video>` : `<img src="${url}" alt="" />`;
+      $("viewer").classList.remove("hidden");
+    }
+
+    document.querySelector(".tabbar").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-tab]");
+      if (!b || clientViewId()) return;
+      location.hash = ""; fromTab = b.dataset.tab; setTab(b.dataset.tab);
+    });
+    $("statMembersBtn").onclick = () => { fromTab = "home"; setTab("members"); };
+    $("statTodayBtn").onclick = () => openCal();
+    $("homeToday").addEventListener("click", (e) => { const b = e.target.closest("[data-goto-log]"); if (b) openLog(b.dataset.gotoLog, b.dataset.logDate); });
+    $("homeRecent").addEventListener("click", (e) => { const b = e.target.closest("[data-goto-log]"); if (b) openLog(b.dataset.gotoLog, b.dataset.logDate); });
+    $("homeNewMembers").addEventListener("click", (e) => {
+      const arch = e.target.closest("[data-open-archive]");
+      if (arch) { openArchive(arch.dataset.openArchive); return; }
+      const b = e.target.closest("[data-goto-detail]");
+      if (b) openDetail(b.dataset.gotoDetail);
+    });
+    $("logPicker").addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) { fromTab = "log"; currentId = b.dataset.open; logDate = null; renderLog(); } });
+    $("logDateList").addEventListener("click", (e) => { const b = e.target.closest("[data-open-date]"); if (b) { logDate = b.dataset.openDate; renderLog(); } });
+    $("addLogDate").onclick = () => {
+      const d = $("newLogDate").value || today();
+      if (!currentMember()) return;
+      sessionOf(currentMember(), d);
+      saveData();
+      logDate = d;
+      renderLog();
+    };
+    
+    $("logStart").addEventListener("change", () => {
+      const s = sessionOf(); if (!s) return;
+      s.start = $("logStart").value || "16:00";
+      s.booked = true;
+      saveData();
+    });
+    $("logMins").addEventListener("change", () => {
+      const s = sessionOf(); if (!s) return;
+      s.minutes = Number($("logMins").value) || 60;
+      s.booked = true;
+      saveData();
+    });
+    $("logArchiveBack").onclick = goBack;
+    $("closeCal").onclick = closeCal;
+    $("calBg").addEventListener("click", (e) => { if (e.target.id === "calBg") closeCal(); });
+    $("calPrev").onclick = () => {
+      if (calMode === "day") calIso = addDays(calIso, -1);
+      else if (calMode === "week") calIso = addDays(calIso, -7);
+      else { const d = dateFromIso(calIso); d.setMonth(d.getMonth() - 1); calIso = isoFromDate(d); }
+      renderCal();
+    };
+    $("calNext").onclick = () => {
+      if (calMode === "day") calIso = addDays(calIso, 1);
+      else if (calMode === "week") calIso = addDays(calIso, 7);
+      else { const d = dateFromIso(calIso); d.setMonth(d.getMonth() + 1); calIso = isoFromDate(d); }
+      renderCal();
+    };
+    document.querySelector("#calBg .seg").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cal-mode]"); if (!b) return;
+      calMode = b.dataset.calMode; renderCal();
+    });
+    function finishCalDrag(e) {
+      if (!calDrag) return;
+      const d = calDrag;
+      calDrag = null;
+      calDragging = false;
+      $("calBody").classList.remove("locking");
+      try { if (d.captured) d.el.releasePointerCapture(d.pointerId); } catch (_) {}
+      d.el.classList.remove("dragging");
+      if (!calDidDrag) return;
+      const col = d.el.closest(".tl-col");
+      const hourH = hourPx(d.el);
+      const clientX = e && e.clientX != null ? e.clientX : d.x0;
+      const clientY = e && e.clientY != null ? e.clientY : d.y0;
+      const toDate = dateAtClientX(clientX) || d.date;
+      const rect = (document.querySelector('#calBody .tl-col[data-date="' + toDate + '"]') || col).getBoundingClientRect();
+      const startMin = snapMin(d.startMin + ((clientY - d.y0) / hourH) * 60, d.dur);
+      upsertClass(d.id, toDate, fmtHM(startMin), d.dur, { id: d.id, date: d.date });
+      renderCal();
+      if (tab === "home") renderHome();
+    }
+    $("calBody").addEventListener("pointerdown", (e) => {
+      const block = e.target.closest(".tl-block");
+      if (!block) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      calDidDrag = false;
+      calDragging = false;
+      calDrag = {
+        el: block,
+        id: block.dataset.classId,
+        date: block.dataset.classDate,
+        startMin: Number(block.dataset.startMin),
+        dur: Number(block.dataset.dur) || 60,
+        y0: e.clientY,
+        x0: e.clientX,
+        pointerId: e.pointerId,
+        captured: false
+      };
+    });
+    $("calBody").addEventListener("pointermove", (e) => {
+      if (!calDrag || e.pointerId !== calDrag.pointerId) return;
+      const dy = e.clientY - calDrag.y0;
+      const dx = e.clientX - calDrag.x0;
+      if (!calDidDrag) {
+        if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+        if (Math.abs(dx) > Math.abs(dy) * 1.15) {
+          calDrag = null;
+          return;
+        }
+        calDidDrag = true;
+        calDragging = true;
+        calDrag.el.classList.add("dragging");
+        $("calBody").classList.add("locking");
+        calDrag.lastX = e.clientX;
+        calDrag.lastY = e.clientY;
+        try { calDrag.el.setPointerCapture(e.pointerId); calDrag.captured = true; } catch (_) {}
+      }
+      e.preventDefault();
+      calDrag.lastX = e.clientX;
+      calDrag.lastY = e.clientY;
+      const hourH = hourPx(calDrag.el);
+      const startMin = snapMin(calDrag.startMin + (dy / hourH) * 60, calDrag.dur);
+      calDrag.el.style.top = "calc((" + (startMin - TL_FROM * 60) + " / 60) * var(--hour))";
+      const small = calDrag.el.querySelector("small");
+      if (small) small.textContent = koClock(fmtHM(startMin));
+    }, { passive: false });
+    $("calBody").addEventListener("touchmove", (e) => {
+      if (calDragging) e.preventDefault();
+    }, { passive: false });
+    $("calBody").addEventListener("pointerup", finishCalDrag);
+    $("calBody").addEventListener("pointercancel", () => {
+      if (!calDrag) return;
+      if (!calDidDrag) {
+        calDrag.el.classList.remove("dragging");
+        $("calBody").classList.remove("locking");
+        calDrag = null;
+        calDragging = false;
+        return;
+      }
+      finishCalDrag({ clientX: calDrag.lastX, clientY: calDrag.lastY, pointerId: calDrag.pointerId });
+    });
+    $("calBody").addEventListener("click", (e) => {
+      if (calDidDrag) { e.preventDefault(); e.stopPropagation(); calDidDrag = false; return; }
+      const day = e.target.closest("[data-cal-day]");
+      if (day) { calIso = day.dataset.calDay; calMode = "day"; renderCal(); return; }
+      const block = e.target.closest("[data-class-id]");
+      if (block) {
+        fromCal = true;
+        closeCal();
+        openLog(block.dataset.classId, block.dataset.classDate);
+        return;
+      }
+      const col = e.target.closest(".tl-col");
+      if (col) {
+        const hourH = hourPx(col);
+        const y = e.clientY - col.getBoundingClientRect().top;
+        const startMin = snapMin(TL_FROM * 60 + (y / hourH) * 60, 60);
+        openClassPopup({ date: col.dataset.date, start: fmtHM(startMin), minutes: 60 });
+      }
+    });
+    $("classCancel").onclick = closeClassPopup;
+    $("classBg").addEventListener("click", (e) => { if (e.target.id === "classBg") closeClassPopup(); });
+    $("classForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fromId = $("classFromId").value;
+      const fromDate = $("classFromDate").value;
+      const ok = upsertClass(
+        $("classMember").value,
+        $("classDate").value,
+        $("classStart").value || "16:00",
+        Number($("classMins").value) || 60,
+        fromId ? { id: fromId, date: fromDate } : null
+      );
+      if (!ok) return;
+      closeClassPopup();
+      renderCal();
+      if (tab === "home") renderHome();
+    });
+    $("classDelete").onclick = () => {
+      const id = $("classFromId").value;
+      const date = $("classFromDate").value;
+      if (!id || !date) return;
+      deleteClass(id, date);
+      closeClassPopup();
+      renderCal();
+      if (tab === "home") renderHome();
+    };
+    $("classOpenLog").onclick = () => {
+      const id = $("classFromId").value || $("classMember").value;
+      const date = $("classFromDate").value || $("classDate").value;
+      closeClassPopup();
+      closeCal();
+      fromCal = true;
+      openLog(id, date);
+    };
+
+    $("logBack").onclick = goBack;
+    $("logToProfile").onclick = goToMemberProfile;
+    $("logWorkProfile").onclick = goToMemberProfile;
+    async function shareTodayLog() {
+      const m = currentMember(); if (!m) return;
+      const s = sessionOf(m, logDate || today());
+      if (!(s.exercises || []).length && !(s.program || s.feedback || s.memo)) { alert("이 날 기록된 내용이 없습니다."); return; }
+      await copyLink(logShareUrl(m), "운동 일지 링크를 복사했습니다.\n카톡으로 보내면 회원이 읽기 전용으로 볼 수 있습니다.");
+    }
+    $("logShare").onclick = shareTodayLog;
+    $("logShareWide").onclick = shareTodayLog;
+    $("logClientLink").onclick = () => copyClientLink(currentMember());
+    $("logClientLinkWide").onclick = () => copyClientLink(currentMember());
+    $("detailBack").onclick = goBack;
+    $("shareBack").onclick = goBack;
+    $("openCreate").onclick = () => openModal(null);
+    $("editProfile").onclick = () => openModal(currentId);
+    $("closeModal").onclick = closeModal;
+    $("modalBg").addEventListener("click", (e) => { if (e.target.id === "modalBg") closeModal(); });
+    $("profileForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = $("pName").value.trim(); if (!name) return;
+      const profile = {
+        gender: $("pGender").value, age: $("pAge").value.trim(), goal: $("pGoal").value.trim(),
+        history: $("pHistory").value.trim(), experience: $("pExp").value.trim(), notes: $("pNotes").value.trim()
+      };
+      if (editingId) { const m = memberBy(editingId); m.name = name; m.profile = profile; }
+      else { const m = normalizeMember({ name, profile, createdAt: Date.now() }); state.members.push(m); currentId = m.id; }
+      saveData(); closeModal();
+      if (currentId) setTab("detail", true); else renderMembers();
+    });
+    $("addEx").onclick = async () => {
+      const name = $("exName").value.trim(); const s = sessionOf();
+      if (!name || !s) return;
+      s.exercises.push({ id: uid(), name, sets: [], media: [], feedback: "" });
+      $("exName").value = ""; saveData(); await renderExercises();
+    };
+    $("exName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addEx").click(); });
+    $("logWork").addEventListener("click", (e) => {
+      const toggle = e.target.closest("[data-log-toggle]");
+      if (!toggle) return;
+      const key = toggle.dataset.logToggle;
+      if (logSessionCollapsed.has(key)) logSessionCollapsed.delete(key); else logSessionCollapsed.add(key);
+      const box = toggle.closest("[data-log-acc]");
+      if (box) box.classList.toggle("open", !logSessionCollapsed.has(key));
+    });
+    function bindLogField(id, key) {
+      $(id).addEventListener("input", () => {
+        const s = sessionOf(); if (!s) return;
+        s[key] = $(id).value; saveData();
+      });
+    }
+    bindLogField("logProgram", "program");
+    bindLogField("logFeedback", "feedback");
+    bindLogField("logMemo", "memo");
+    $("exercises").addEventListener("click", async (e) => {
+      const toggle = e.target.closest("[data-ex-toggle]");
+      if (toggle) {
+        const id = toggle.dataset.exToggle;
+        if (logExCollapsed.has(id)) logExCollapsed.delete(id); else logExCollapsed.add(id);
+        const art = toggle.closest(".ex-acc");
+        if (art) art.classList.toggle("open", !logExCollapsed.has(id));
+        return;
+      }
+      const addSet = e.target.closest("[data-add-set]");
+      const delSet = e.target.closest("[data-del-set]");
+      const delEx = e.target.closest("[data-del-ex]");
+      const delMedia = e.target.closest("[data-del-media]");
+      const view = e.target.closest("[data-view]");
+      if (addSet) {
+        const ex = findEx(addSet.dataset.addSet);
+        const w = document.querySelector(`[data-new-w="${ex.id}"]`);
+        const r = document.querySelector(`[data-new-r="${ex.id}"]`);
+        if (!ex || !w.value || !r.value) return;
+        ex.sets.push({ id: uid(), weight: Number(w.value), reps: Number(r.value) });
+        w.value = ""; r.value = ""; saveData(); await renderExercises(); return;
+      }
+      if (delSet) {
+        const [exId, setId] = delSet.dataset.delSet.split(":");
+        findEx(exId).sets = findEx(exId).sets.filter((s) => s.id !== setId);
+        saveData(); await renderExercises(); return;
+      }
+      if (delEx) {
+        const ex = findEx(delEx.dataset.delEx);
+        if (!ex || !confirm(ex.name + " 종목을 삭제할까요?")) return;
+        for (const media of ex.media || []) if (media.kind !== "link") await delFile(media.id);
+        sessionOf().exercises = sessionOf().exercises.filter((x) => x.id !== ex.id);
+        saveData(); await renderExercises(); return;
+      }
+      if (delMedia) {
+        e.stopPropagation();
+        const [exId, mediaId] = delMedia.dataset.delMedia.split(":");
+        const ex = findEx(exId);
+        const media = (ex.media || []).find((x) => x.id === mediaId);
+        if (media && media.kind !== "link") await delFile(media.id);
+        ex.media = (ex.media || []).filter((x) => x.id !== mediaId);
+        saveData(); await renderExercises(); return;
+      }
+      if (view && !e.target.closest(".x")) {
+        const [id, kind] = view.dataset.view.split(":");
+        showViewer(id, kind);
+      }
+    });
+    $("exercises").addEventListener("change", async (e) => {
+      const input = e.target.closest("[data-files]");
+      if (!input || !input.files.length) return;
+      const ex = findEx(input.dataset.files); ex.media = ex.media || [];
+      for (const file of [...input.files]) {
+        const isVideo = file.type.startsWith("video");
+        if (isVideo && file.size > 40 * 1024 * 1024) { alert("영상은 40MB 이하만 저장됩니다."); continue; }
+        const id = uid();
+        await putFile(id, isVideo ? file : await compressImage(file));
+        ex.media.push({ id, kind: isVideo ? "video" : "image" });
+      }
+      input.value = ""; saveData(); await renderExercises();
+    });
+    $("exercises").addEventListener("input", (e) => {
+      const w = e.target.closest("[data-set-w]"); const r = e.target.closest("[data-set-r]");
+      const feedback = e.target.closest("[data-ex-feedback]");
+      if (w) { const [exId, setId] = w.dataset.setW.split(":"); const st = findEx(exId).sets.find((s) => s.id === setId); if (st) { st.weight = Number(w.value); saveData(); } }
+      if (r) { const [exId, setId] = r.dataset.setR.split(":"); const st = findEx(exId).sets.find((s) => s.id === setId); if (st) { st.reps = Number(r.value); saveData(); } }
+      if (feedback) { const ex = findEx(feedback.dataset.exFeedback); if (ex) { ex.feedback = feedback.value; saveData(); } }
+    });
+    $("memberList").addEventListener("click", (e) => {
+      const arch = e.target.closest("[data-open-archive]");
+      if (arch) { openArchive(arch.dataset.openArchive); return; }
+      const b = e.target.closest("[data-detail]");
+      if (b) openDetail(b.dataset.detail);
+    });
+    $("addBody").onclick = async () => {
+      const m = currentMember(); if (!m) return;
+      const weight = $("bw").value.trim(), muscle = $("bm").value.trim(), fat = $("bf").value.trim();
+      const file = $("bodyFile").files[0];
+      if (!weight && !muscle && !fat && !file) return;
+      const row = { id: uid(), date: today(), weight, muscle, fat };
+      if (file) { row.photoId = uid(); await putFile(row.photoId, await compressImage(file)); }
+      m.body.push(row);
+      $("bw").value = $("bm").value = $("bf").value = "";
+      $("bodyFile").value = "";
+      saveData(); renderDetail();
+    };
+    $("packUse").onclick = () => {
+      const m = currentMember(); if (!m) return;
+      const p = packOf(m);
+      if (p.left <= 0) { alert("잔여 횟수가 없습니다. 회차를 구매하거나 잔여를 조정하세요."); return; }
+      m.pack.used = p.used + 1; saveData(); renderDetail();
+    };
+    $("packAdjust").onclick = () => {
+      const m = currentMember(); if (!m) return;
+      const p = packOf(m);
+      const left = prompt("잔여 횟수를 입력하세요", String(p.left));
+      if (left == null) return;
+      const n = Math.max(0, parseInt(left, 10) || 0);
+      if (n > p.total) m.pack.total = n;
+      m.pack.used = Math.max(0, (Number(m.pack.total) || 0) - n);
+      saveData(); renderDetail();
+    };
+    $("packBuy").onclick = () => {
+      const m = currentMember(); if (!m) return;
+      const n = prompt("구매할 회차", "10");
+      if (n == null) return;
+      const add = Math.max(0, parseInt(n, 10) || 0);
+      m.pack = packOf(m);
+      m.pack.total += add;
+      saveData(); renderDetail();
+    };
+    $("packLog").onclick = () => { if (currentId) openArchive(currentId); };
+    $("packTodayLog").onclick = () => { if (currentId) openLog(currentId, today()); };
+    $("packCal").onclick = () => openCal();
+    $("injuryText").addEventListener("change", () => { const m = currentMember(); if (!m) return; m.injuries = $("injuryText").value; saveData(); });
+    function addNote(key, inputId) {
+      const m = currentMember(); if (!m) return;
+      const text = $(inputId).value.trim(); if (!text) return;
+      m[key] = m[key] || [];
+      m[key].push({ id: uid(), date: today(), text });
+      $(inputId).value = ""; saveData(); renderDetail();
+    }
+    $("addConsult").onclick = () => addNote("consults", "consultText");
+    $("dietFile").addEventListener("change", () => {
+      const f = $("dietFile").files[0];
+      $("dietFileHint").textContent = f ? "첨부: " + f.name : "";
+    });
+    $("addDiet").onclick = async () => {
+      const m = currentMember(); if (!m) return;
+      const text = $("dietText").value.trim();
+      const file = $("dietFile").files[0];
+      if (!text && !file) return;
+      const row = { id: uid(), date: today(), text };
+      if (file) { row.photoId = uid(); await putFile(row.photoId, await compressImage(file)); }
+      m.dietLogs = m.dietLogs || [];
+      m.dietLogs.push(row);
+      $("dietText").value = "";
+      $("dietFile").value = "";
+      $("dietFileHint").textContent = "";
+      saveData(); renderDetail();
+    };
+    $("pageDetail").addEventListener("click", async (e) => {
+      const logDay = e.target.closest("[data-open-log-date]");
+      if (logDay) { openLog(currentId, logDay.dataset.openLogDate); return; }
+      const head = e.target.closest(".acc-h");
+      if (head) { head.parentElement.classList.toggle("open"); return; }
+      const delB = e.target.closest("[data-del-body]");
+      const delP = e.target.closest("[data-del-photo]");
+      const delN = e.target.closest("[data-del-note]");
+      const delS = e.target.closest("[data-del-self]");
+      const view = e.target.closest("[data-view]");
+      if (delB) {
+        const m = currentMember();
+        const row = (m.body || []).find((x) => x.id === delB.dataset.delBody);
+        if (row && row.photoId) await delFile(row.photoId);
+        m.body = m.body.filter((x) => x.id !== delB.dataset.delBody);
+        saveData(); renderDetail(); return;
+      }
+      if (delN) {
+        const [key, id] = delN.dataset.delNote.split(":");
+        const m = currentMember();
+        const row = (m[key] || []).find((x) => x.id === id);
+        if (row && row.photoId) await delFile(row.photoId);
+        m[key] = (m[key] || []).filter((x) => x.id !== id);
+        saveData(); renderDetail(); return;
+      }
+      if (delP) { e.stopPropagation(); await delFile(delP.dataset.delPhoto); currentMember().photos = currentMember().photos.filter((x) => x.id !== delP.dataset.delPhoto); saveData(); renderDetail(); return; }
+      if (delS) {
+        const m = currentMember();
+        m.selfWorkouts = (m.selfWorkouts || []).filter((x) => x.id !== delS.dataset.delSelf);
+        saveData(); renderDetail(); return;
+      }
+      if (view && !e.target.closest(".x")) showViewer(view.dataset.view.split(":")[0], "image");
+    });
+    async function addPhoto(kind, file) {
+      const m = currentMember(); if (!m || !file) return;
+      const id = uid(); await putFile(id, await compressImage(file));
+      m.photos.push({ id, kind, date: today() }); saveData(); renderDetail();
+    }
+    $("beforeFile").addEventListener("change", (e) => { addPhoto("before", e.target.files[0]); e.target.value = ""; });
+    $("afterFile").addEventListener("change", (e) => { addPhoto("after", e.target.files[0]); e.target.value = ""; });
+    $("shareMember").onclick = () => copyClientLink(currentMember());
+    $("deleteMember").onclick = async () => {
+      const m = currentMember();
+      if (!m || !confirm(m.name + " 회원과 모든 기록을 삭제할까요?")) return;
+      for (const p of m.photos || []) await delFile(p.id);
+      for (const r of m.body || []) if (r.photoId) await delFile(r.photoId);
+      for (const n of m.dietLogs || []) if (n.photoId) await delFile(n.photoId);
+      for (const sess of Object.values(m.sessions || {})) {
+        for (const ex of sess.exercises || []) {
+          for (const media of ex.media || []) if (media.kind !== "link") await delFile(media.id);
+        }
+      }
+      state.members = state.members.filter((x) => x.id !== m.id);
+      currentId = null; saveData(); setTab("members");
+    };
+    $("pageShare").addEventListener("click", async (e) => {
+      const meal = e.target.closest("[data-meal]");
+      if (meal) {
+        shareCtx.meal = meal.dataset.meal;
+        $("pageShare").querySelectorAll("[data-meal]").forEach((b) => b.classList.toggle("on", b === meal));
+        return;
+      }
+      if (e.target.closest("[data-add-self]")) {
+        const name = $("selfName").value.trim();
+        if (!name) { alert("종목을 입력해 주세요."); return; }
+        writeSelfWorkout(shareCtx.code, {
+          id: uid(), date: today(), name,
+          weight: $("selfWeight").value.trim(),
+          reps: $("selfReps").value.trim(),
+          note: $("selfNote").value.trim()
+        });
+        $("selfName").value = $("selfWeight").value = $("selfReps").value = $("selfNote").value = "";
+        $("shareSelfList").innerHTML = selfWorkoutHtml(portalData(shareCtx.code).selfWorkouts, true);
+        return;
+      }
+      const delS = e.target.closest("[data-del-self]");
+      if (delS) {
+        removeSelfWorkout(shareCtx.code, delS.dataset.delSelf);
+        $("shareSelfList").innerHTML = selfWorkoutHtml(portalData(shareCtx.code).selfWorkouts, true);
+        return;
+      }
+      if (e.target.closest("[data-add-diet]")) {
+        const text = $("shareDietText").value.trim();
+        const file = $("shareDietFile").files[0];
+        if (!text && !file) { alert("메모나 사진을 남겨 주세요."); return; }
+        const row = { id: uid(), date: today(), text, meal: shareCtx.meal, source: "member" };
+        if (file) {
+          const blob = await compressImage(file);
+          if (memberByShare(shareCtx.code)) {
+            row.photoId = uid();
+            await putFile(row.photoId, blob);
+          } else {
+            row.photoData = await new Promise((res) => {
+              const r = new FileReader();
+              r.onload = () => res(r.result);
+              r.readAsDataURL(blob);
+            });
+          }
+        }
+        writeMemberDiet(shareCtx.code, row);
+        $("shareDietText").value = "";
+        $("shareDietFile").value = "";
+        $("shareDietList").innerHTML = await dietCardsHtml(portalData(shareCtx.code).dietLogs);
+        return;
+      }
+      if (e.target.closest("[data-copy-sync]")) {
+        const p = portalData(shareCtx.code);
+        const url = packUrl(shareCtx.code, { kind: "sync", selfWorkouts: p.selfWorkouts, dietLogs: p.dietLogs }).replace("#share/", "#sync/");
+        await copyLink(url, "동기화 링크를 복사했습니다.\n트레이너 폰에서 열면 개인 운동·식단이 합쳐집니다.");
+        return;
+      }
+      const view = e.target.closest("[data-view]");
+      if (view) { showViewer(view.dataset.view.split(":")[0], "image"); return; }
+      const src = e.target.closest("[data-src-view]");
+      if (src) {
+        const img = src.querySelector("img");
+        if (img) { $("viewerBody").innerHTML = `<img src="${img.src}" alt="" />`; $("viewer").classList.remove("hidden"); }
+      }
+    });
+    $("closeViewer").onclick = () => { $("viewer").classList.add("hidden"); $("viewerBody").innerHTML = ""; };
+    $("viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") $("closeViewer").click(); });
+    async function bootClientView() {
+      const id = clientViewId();
+      if (!id) return false;
+      const parsed = parseShareHash();
+      if (parsed && parsed.sync) {
+        await applySyncHash(parsed.hash);
+        history.replaceState(null, "", location.pathname + location.search + "#share/" + parsed.hash.split("/")[1]);
+      }
+      const local = memberBy(id) || memberByShare(id);
+      if (local) {
+        currentId = local.id;
+        setTab("share", true);
+        await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos });
+        return true;
+      }
+      setTab("share", true);
+      if (parsed && !parsed.sync && !parsed.missing) {
+        await renderShare(parsed);
+        return true;
+      }
+      $("shareBody").innerHTML = '<div class="empty">이 기기에는 데이터가 없습니다.<br>트레이너가 보낸 전체 링크(긴 주소)로 다시 열어 주세요.</div>';
+      return true;
+    }
+    async function openShare() {
+      if (clientViewId()) return bootClientView();
+      const parsed = parseShareHash();
+      if (!parsed) return false;
+      if (parsed.sync) {
+        const ok = await applySyncHash(parsed.hash);
+        const code = parsed.hash.split("/")[1];
+        alert(ok ? "회원 개인 기록을 불러왔습니다." : "이 기기에서 해당 회원을 찾을 수 없습니다. 트레이너 앱에서 열어 주세요.");
+        history.replaceState(null, "", location.pathname + location.search + "#share/" + code);
+        const m = memberByShare(code);
+        if (m) { currentId = m.id; setTab("detail", true); }
+        else {
+          setTab("share", true);
+          $("shareBody").innerHTML = '<div class="empty">이 기기에는 해당 회원이 없습니다.<br>트레이너 앱에서 동기화 링크를 열어 주세요.</div>';
+        }
+        return true;
+      }
+      setTab("share", true);
+      if (parsed.missing) {
+        $("shareBody").innerHTML = '<div class="empty">이 기기에는 데이터가 없습니다.<br>트레이너가 보낸 전체 링크(긴 주소)로 다시 열어 주세요.</div>';
+        return true;
+      }
+      await renderShare(parsed);
+      return true;
+    }
+    window.addEventListener("hashchange", () => {
+      if (clientViewId()) { bootClientView(); return; }
+      const h = location.hash || "";
+      if (h.startsWith("#share/") || h.startsWith("#sync/")) openShare();
+      else if (tab === "share") setTab("home");
+    });
+    saveData();
+    (async () => {
+      if (await bootClientView()) return;
+      const ok = await openShare();
+      if (!ok) setTab("home");
+    })();
+  </script>
+</body>
+</html>

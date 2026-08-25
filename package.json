@@ -1,0 +1,8 @@
+{
+  "name": "pt-logger",
+  "private": true,
+  "description": "PT workout logger — static web app",
+  "scripts": {
+    "build": "echo 'Static site — no build step'"
+  }
+}
