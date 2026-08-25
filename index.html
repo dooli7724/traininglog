@@ -32,7 +32,9 @@
       overflow-x: hidden;
     }
     body.share { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+    body.share.client { padding-bottom: calc(var(--nav) + 16px + env(safe-area-inset-bottom, 0px)); }
     body.share.client #shareBack { display: none; }
+    body.share.portal { padding-bottom: calc(var(--nav) + 16px + env(safe-area-inset-bottom, 0px)); }
     button, input, textarea, select { font: inherit; color: var(--text); }
     button { cursor: pointer; touch-action: manipulation; }
     .btn, .tile, .back, .seg button, .cal-cell, .acc-h, .tabbar button { touch-action: manipulation; }
@@ -45,6 +47,17 @@
       flex-shrink: 0;
     }
     .top > div { max-width: var(--page-max); margin: 0 auto; width: 100%; }
+    #barMembers .members-cta {
+      margin-top: 10px;
+    }
+    #barMembers .members-cta .btn {
+      width: 100%;
+      min-height: 48px;
+      font-size: .95rem;
+      letter-spacing: -.01em;
+    }
+    .members-list-wrap { flex: 1; min-height: 0; width: 100%; }
+    .members-list-wrap .label { margin-top: 4px; }
     .top h1 { margin: 0; font-size: clamp(1.05rem, 4.6vw, 1.28rem); letter-spacing: -.03em; font-weight: 800; }
     .top p { margin: 4px 0 0; color: var(--muted); font-size: .84rem; }
     .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -246,6 +259,46 @@
       background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
     }
     body.share .tabbar { display: none; }
+    .client-nav {
+      display: none;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+      grid-template-columns: 1fr 1fr 1fr;
+      height: calc(var(--nav) + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background: var(--card); border-top: 1px solid var(--line);
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+    }
+    body.share.client .client-nav,
+    body.share.portal .client-nav { display: grid; }
+    .client-nav button {
+      border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: .68rem;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      min-height: var(--nav); padding: 4px 2px 0; line-height: 1.2;
+    }
+    .client-nav button.on { color: var(--accent); }
+    .client-nav .ico { font-size: 1.1rem; line-height: 1; }
+    .day-combo { margin-bottom: 12px; }
+    .day-combo .section-label {
+      margin: 0 0 8px; font-size: .72rem; font-weight: 800; color: var(--accent);
+      letter-spacing: .04em; text-transform: none;
+    }
+    .day-combo .combo-block + .combo-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .client-cal { margin-bottom: 12px; }
+    .client-cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .client-cal-nav h3 { flex: 1; margin: 0; text-align: center; font-size: .95rem; font-weight: 800; }
+    .client-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .client-cal-grid .dow { text-align: center; font-size: .68rem; font-weight: 800; color: var(--muted); padding: 4px 0; }
+    .client-cal-day {
+      min-height: 44px; border: 0; border-radius: var(--radius); background: var(--card);
+      box-shadow: var(--shadow); padding: 6px 2px; text-align: center; color: var(--text);
+      font-weight: 700; font-size: .82rem;
+    }
+    .client-cal-day.muted { opacity: .35; }
+    .client-cal-day.has { color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent-glow), var(--shadow); }
+    .client-cal-day.on { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); }
+    .client-cal-day small { display: block; font-size: .55rem; font-weight: 800; margin-top: 2px; opacity: .9; }
+    .share-panel { display: none; }
+    .share-panel.on { display: block; }
     .tabbar button {
       border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: .7rem;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
@@ -394,11 +447,17 @@
         <button class="back" id="logBack" type="button" aria-label="뒤로">‹</button>
         <h1 id="logName"></h1>
         <button class="btn soft hdr-btn" id="logWorkProfile" type="button">프로필</button>
-        <button class="btn soft hdr-btn" id="logClientLink" type="button">회원용 링크</button>
-        <button class="btn soft hdr-btn" id="logShare" type="button">공유</button>
+        <button class="btn hdr-btn" id="logClientLink" type="button">공유</button>
+        <button class="btn soft hdr-btn" id="logShare" type="button">일지</button>
       </div>
     </div>
-    <div id="barMembers" class="hidden"><h1>회원 관리</h1><p>프로필 · 체성분 · 공유</p></div>
+    <div id="barMembers" class="hidden">
+      <h1>회원 관리</h1>
+      <p>프로필 · 체성분 · 공유</p>
+      <div class="members-cta">
+        <button class="btn" id="openCreate" type="button">새 회원 등록</button>
+      </div>
+    </div>
     <div id="barDetail" class="hidden">
       <div class="row">
         <button class="back" id="detailBack" type="button" aria-label="뒤로">‹</button>
@@ -481,16 +540,16 @@
           </div>
         </div>
         <div class="share-bar">
-          <button class="btn" id="logShareWide" type="button">이 날 일지 공유</button>
-          <button class="btn soft" id="logClientLinkWide" type="button">회원용 링크 복사</button>
+          <button class="btn" id="logClientLinkWide" type="button">공유</button>
+          <button class="btn soft" id="logShareWide" type="button">이 날 일지 공유</button>
         </div>
-        <p class="hint">회원용 링크는 프로필·체성분·전체 일지를 보여주는 전용 화면입니다. 이 날 일지 공유는 해당 날짜만 읽기 전용입니다.</p>
+        <p class="hint">공유는 회원 전용 페이지 링크입니다. 이 날 일지 공유는 해당 날짜만 읽기 전용으로 보낼 때 사용하세요.</p>
       </div>
     </section>
 
-    <section id="pageMembers" class="page page-center page-balanced hidden">
-      <button class="btn wide" id="openCreate" type="button" style="margin-bottom:12px">새 회원 등록</button>
-      <div id="memberList"></div>
+    <section id="pageMembers" class="page hidden">
+      <div class="label">회원 목록</div>
+      <div id="memberList" class="members-list-wrap"></div>
     </section>
 
     <section id="pageDetail" class="page hidden">
@@ -511,7 +570,6 @@
       </div>
       <div class="add">
         <button class="btn soft" id="editProfile" type="button" style="flex:1">프로필 수정</button>
-        <button class="btn soft" id="shareMember" type="button" style="flex:1">회원용 링크 복사</button>
       </div>
       <div class="acc" data-acc="profile">
         <button class="acc-h" type="button">기본 프로필 <span class="arr">▾</span></button>
@@ -574,7 +632,11 @@
 
       <div class="acc open" data-acc="workouts">
         <button class="acc-h" type="button">수업 운동 기록 <span class="arr">▾</span></button>
-        <div class="acc-b" id="workoutList"></div>
+        <div class="acc-b">
+          <button class="btn wide" id="shareMember" type="button" style="margin-bottom:10px">공유</button>
+          <p class="hint" style="margin-top:0">회원 전용 링크를 복사해 카톡 등으로 보내세요.</p>
+          <div id="workoutList"></div>
+        </div>
       </div>
       <div class="acc" data-acc="self">
         <button class="acc-h" type="button">개인 운동 기록 <em>회원 입력</em><span class="arr">▾</span></button>
@@ -593,8 +655,14 @@
       <button class="btn danger wide" id="deleteMember" type="button">회원 삭제</button>
     </section>
 
-    <section id="pageShare" class="page page-center page-balanced hidden"><div id="shareBody"></div></section>
+    <section id="pageShare" class="page hidden"><div id="shareBody"></div></section>
   </main>
+
+  <nav class="client-nav" id="clientNav" aria-label="회원 기록 메뉴">
+    <button type="button" data-client-tab="today" class="on"><span class="ico">◎</span>오늘 기록</button>
+    <button type="button" data-client-tab="history"><span class="ico">▣</span>이전 기록</button>
+    <button type="button" data-client-tab="write"><span class="ico">✎</span>기록 작성</button>
+  </nav>
 
   <nav class="tabbar">
     <button type="button" data-tab="home" class="on"><span class="ico">⌂</span>홈</button>
@@ -945,6 +1013,7 @@
       if (!keep) { currentId = null; logDate = null; fromCal = false; }
       document.body.classList.toggle("share", next === "share");
       document.body.classList.toggle("client", next === "share" && !!clientViewId());
+      if (next !== "share") document.body.classList.remove("portal");
       show("pageHome", next === "home"); show("barHome", next === "home");
       show("pageLog", next === "log"); show("barLog", next === "log");
       show("pageMembers", next === "members"); show("barMembers", next === "members");
@@ -1351,10 +1420,101 @@
     async function copyClientLink(m) {
       if (!m) return;
       const url = clientViewUrl(m);
-      try { await navigator.clipboard.writeText(url); alert("회원용 링크를 복사했습니다.\n카톡으로 보내면 회원이 전용 화면으로 접속할 수 있습니다."); }
+      try { await navigator.clipboard.writeText(url); alert("공유 링크를 복사했습니다.\n카톡으로 보내면 회원이 전용 화면으로 접속할 수 있습니다."); }
       catch { prompt("이 링크를 복사하세요", url); }
     }
-    let shareCtx = { code: "", meal: "점심" };
+    let shareCtx = { code: "", meal: "점심", view: "today", histMonth: "", histDate: "" };
+    function ymOf(d) { return (d || today()).slice(0, 7); }
+    function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+    function recordDatesSet(selfWorkouts, dietLogs, sessions) {
+      const set = new Set();
+      (selfWorkouts || []).forEach((w) => { if (w.date) set.add(w.date); });
+      (dietLogs || []).forEach((n) => { if (n.date) set.add(n.date); });
+      Object.keys(sessions || {}).forEach((d) => {
+        const s = sessions[d] || {};
+        if ((s.exercises || []).length || s.program || s.feedback || s.memo) set.add(d);
+      });
+      return set;
+    }
+    function selfForDate(list, date) {
+      return (list || []).filter((w) => w.date === date).slice().reverse();
+    }
+    function dietForDate(list, date) {
+      return (list || []).filter((n) => n.date === date).slice().reverse();
+    }
+    function selfDayHtml(rows, canDel) {
+      if (!(rows || []).length) return '<p class="hint" style="margin:0">개인 운동 기록이 없습니다.</p>';
+      return rows.map((w) => `<div class="hist"><div class="meta"><b>${esc(w.name)}</b><small><b>${esc(w.weight || "-")}kg × ${esc(w.reps || "-")}회</b>${w.note ? " · " + esc(w.note) : ""}</small></div>${canDel ? `<button class="btn danger" type="button" data-del-self="${w.id}">×</button>` : ""}</div>`).join("");
+    }
+    async function dietDayHtml(rows) {
+      if (!(rows || []).length) return '<p class="hint" style="margin:0">식단 기록이 없습니다.</p>';
+      const parts = [];
+      for (const n of rows) {
+        let img = "";
+        if (n.photoId) {
+          const url = await fileUrl(n.photoId);
+          if (url) img = `<button class="thumb" type="button" data-view="${n.photoId}:image"><img src="${url}" alt="" /></button>`;
+        } else if (n.photoData) {
+          img = `<button class="thumb" type="button" data-src-view="1"><img src="${n.photoData}" alt="" /></button>`;
+        }
+        parts.push(`<div class="hist">${img}<div class="meta"><b>${n.meal ? esc(n.meal) : "식단"}</b><small>${esc(n.text) || "사진 기록"}</small></div></div>`);
+      }
+      return parts.join("");
+    }
+    async function dailyComboHtml(date, portal, pack, canDel) {
+      const workouts = selfForDate(portal.selfWorkouts, date);
+      const diets = dietForDate(portal.dietLogs, date);
+      const sess = (pack.sessions && pack.sessions[date]) || (pack.date === date ? pack : null);
+      const trainer = sess ? trainerDayHtml(Object.assign({ date }, sess), true) : "";
+      const dietBlock = await dietDayHtml(diets);
+      const empty = !workouts.length && !diets.length && !trainer;
+      return `<div class="card day-combo">
+        <p class="label" style="margin-top:0">${prettyDate(date)} · ${date}</p>
+        ${empty ? '<p class="hint" style="margin:0">이 날의 기록이 아직 없습니다.</p>' : ""}
+        <div class="combo-block"><p class="section-label">개인 운동</p>${selfDayHtml(workouts, canDel)}</div>
+        <div class="combo-block"><p class="section-label">식단</p>${dietBlock}</div>
+        ${trainer ? `<div class="combo-block"><p class="section-label">트레이너 수업</p>${trainer}</div>` : ""}
+      </div>`;
+    }
+    function clientCalHtml(monthKey, marked, selected) {
+      const [ys, ms] = monthKey.split("-").map(Number);
+      const first = new Date(ys, ms - 1, 1);
+      const startPad = first.getDay();
+      const dim = daysInMonth(ys, ms);
+      const prevDim = new Date(ys, ms - 1, 0).getDate();
+      const dow = ["일", "월", "화", "수", "목", "금", "토"].map((d) => `<span class="dow">${d}</span>`).join("");
+      const cells = [];
+      for (let i = 0; i < startPad; i++) {
+        const day = prevDim - startPad + i + 1;
+        cells.push(`<button class="client-cal-day muted" type="button" disabled>${day}</button>`);
+      }
+      for (let d = 1; d <= dim; d++) {
+        const date = monthKey + "-" + String(d).padStart(2, "0");
+        const has = marked.has(date);
+        const on = date === selected;
+        cells.push(`<button class="client-cal-day${has ? " has" : ""}${on ? " on" : ""}" type="button" data-hist-day="${date}">${d}${has ? "<small>●</small>" : ""}</button>`);
+      }
+      while (cells.length % 7) cells.push(`<button class="client-cal-day muted" type="button" disabled></button>`);
+      const label = ys + "년 " + ms + "월";
+      return `<div class="card client-cal">
+        <div class="client-cal-nav">
+          <button class="btn soft" type="button" data-hist-nav="-1">‹</button>
+          <h3>${label}</h3>
+          <button class="btn soft" type="button" data-hist-nav="1">›</button>
+        </div>
+        <div class="client-cal-grid">${dow}${cells.join("")}</div>
+      </div>`;
+    }
+    function shiftMonth(monthKey, delta) {
+      const [y, m] = monthKey.split("-").map(Number);
+      const dt = new Date(y, m - 1 + delta, 1);
+      return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0");
+    }
+    function syncClientNav() {
+      document.querySelectorAll(".client-nav button").forEach((b) => {
+        b.classList.toggle("on", b.dataset.clientTab === shareCtx.view);
+      });
+    }
     const portalKey = (code) => "pt-logger-portal-" + code;
     function loadPortal(code) {
       try { return JSON.parse(localStorage.getItem(portalKey(code)) || "null") || { selfWorkouts: [], dietLogs: [] }; }
@@ -1382,7 +1542,7 @@
       if (m) { m.dietLogs = m.dietLogs || []; m.dietLogs.push(row); saveData(); }
       else { const g = loadPortal(code); g.dietLogs = g.dietLogs || []; g.dietLogs.push(row); savePortal(code, g); }
     }
-    function trainerDayHtml(data) {
+    function trainerDayHtml(data, bare) {
       let date = data.date || today();
       let exercises = data.exercises || [];
       let program = data.program || "";
@@ -1418,7 +1578,9 @@
         feedback ? `<p class="kv"><span>피드백</span>${esc(feedback)}</p>` : "",
         memo ? `<p class="kv"><span>메모</span>${esc(memo)}</p>` : ""
       ].join("");
-      return `<div class="card"><p class="label" style="margin-top:0">${prettyDate(date)} · ${date}</p>${head}${blocks}${foot}</div>`;
+      const title = bare ? "" : `<p class="label" style="margin-top:0">${prettyDate(date)} · ${date}</p>`;
+      const inner = `${title}${head}${blocks}${foot}`;
+      return bare ? inner : `<div class="card">${inner}</div>`;
     }
     function trainerLogsHtml(data, full) {
       if (!full && data.kind === "log") {
@@ -1464,17 +1626,41 @@
       shareCtx.code = data.share || "";
       shareCtx.kind = data.kind || "";
       shareCtx.data = data;
-      if (shareCtx.prevCode !== shareCtx.code) shareCtx.meal = "점심";
+      if (shareCtx.prevCode !== shareCtx.code) {
+        shareCtx.meal = "점심";
+        shareCtx.view = "today";
+        shareCtx.histDate = today();
+        shareCtx.histMonth = ymOf(today());
+      }
       shareCtx.prevCode = shareCtx.code;
+      if (!shareCtx.histDate) shareCtx.histDate = today();
+      if (!shareCtx.histMonth) shareCtx.histMonth = ymOf(shareCtx.histDate);
+      if (!shareCtx.view) shareCtx.view = "today";
       const full = !!clientViewId() || data.kind !== "log";
+      document.body.classList.toggle("portal", full);
       const portal = portalData(shareCtx.code);
       const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
+      const pack = local ? snapshot(local) : data;
       const view = local || data;
       const profile = view.profile || data.profile || {};
       const body = view.body || data.body || [];
       const photos = local || { photos: view.photos || [] };
       $("shareTitle").textContent = (view.name || data.name || "회원") + " 님";
-      $("shareSub").textContent = full ? "프로필 · 체성분 · 수업 일지" : "오늘 수업 일지 · 개인 기록";
+      syncClientNav();
+
+      if (!full) {
+        $("shareSub").textContent = "오늘 수업 일지 · 개인 기록";
+        $("shareBody").innerHTML = `
+          <div class="label">오늘 수업 일지</div>
+          ${trainerLogsHtml(pack, false)}
+          <p class="hint">프로그램 · 피드백 · 메모 · 종목 세트·피드백은 트레이너가 작성한 내용입니다.</p>
+          <div class="label">개인 운동 · 식단</div>
+          ${await dailyComboHtml(data.date || today(), portal, pack, false)}`;
+        return;
+      }
+
+      $("shareSub").textContent = shareCtx.view === "history" ? "이전 기록 보기"
+        : shareCtx.view === "write" ? "기록 작성하기" : "오늘 종합 기록";
       const goal = profile.goal ? `<div class="share-goal"><span>목표</span><b>${esc(profile.goal)}</b></div>` : "";
       const chart = body.length
         ? `<div class="legend">
@@ -1485,51 +1671,75 @@
           <div class="chart-wrap">${bodyChartSvg(body)}</div>
           <div class="chart-stats">${bodyStatsHtml(body)}</div>`
         : '<p class="hint">아직 체성분 기록이 없습니다.</p>';
-      const head = full ? `
+      const marked = recordDatesSet(portal.selfWorkouts, portal.dietLogs, pack.sessions);
+      const todayCombo = await dailyComboHtml(today(), portal, pack, true);
+      const histCombo = await dailyComboHtml(shareCtx.histDate, portal, pack, true);
+      const cal = clientCalHtml(shareCtx.histMonth, marked, shareCtx.histDate);
+      const syncHint = local
+        ? '<p class="hint">저장하면 트레이너 회원 상세 화면에 바로 반영됩니다.</p>'
+        : '<p class="hint">다른 휴대폰에서 열었다면, 아래 링크를 트레이너에게 보내 기록을 합칠 수 있습니다.</p><button class="btn soft wide" type="button" data-copy-sync="1">동기화 링크 복사</button>';
+
+      $("shareBody").innerHTML = `
         <div class="share-hero">
           <h2>${esc(view.name || data.name || "회원")} 님의 기록</h2>
-          <p>트레이너 관리 기능은 보이지 않습니다. 본인 기록만 확인하고 입력할 수 있습니다.</p>
+          <p>하루 운동·식단을 한눈에 보고, 아래에서 이전 기록·작성을 전환하세요.</p>
         </div>
         ${goal}
-        <div class="label">회원 프로필</div>
-        ${profileHtml(profile, view.name || data.name)}
-        <div class="label">체성분 변화 추이</div>
-        <div class="card">${chart}</div>
-        <div class="label">비포 / 애프터</div>
-        <div class="ba">
-          <div><p class="cap" style="margin-top:0">Before</p>${await photoListHtml(photos, "before")}</div>
-          <div><p class="cap" style="margin-top:0">After</p>${await photoListHtml(photos, "after")}</div>
-        </div>
-        <div class="label">트레이너 운동 일지</div>` : `<div class="label">오늘 수업 일지</div>`;
-      $("shareBody").innerHTML = `
-        ${head}
-        ${trainerLogsHtml(local ? snapshot(local) : data, full)}
-        <p class="hint">프로그램 · 피드백 · 메모 · 종목 세트·피드백은 트레이너가 작성한 내용입니다.</p>
-        <div class="label">개인 운동 기록</div>
-        <div class="card">
-          <input class="field" id="selfName" placeholder="종목 (예: 런지)" />
-          <div class="add" style="margin-top:8px">
-            <input class="field" id="selfWeight" inputmode="decimal" placeholder="무게 kg" />
-            <input class="field" id="selfReps" inputmode="numeric" placeholder="횟수" />
+
+        <div class="share-panel${shareCtx.view === "today" ? " on" : ""}" data-panel="today">
+          <div class="label">오늘 종합 기록</div>
+          ${todayCombo}
+          <div class="acc">
+            <button class="acc-h" type="button" data-share-acc="profile">프로필 · 체성분 <span class="arr">▾</span></button>
+            <div class="acc-b">
+              ${profileHtml(profile, view.name || data.name)}
+              <div class="label">체성분 변화 추이</div>
+              <div class="card" style="box-shadow:none;border:1px solid var(--line)">${chart}</div>
+              <div class="label">비포 / 애프터</div>
+              <div class="ba">
+                <div><p class="cap" style="margin-top:0">Before</p>${await photoListHtml(photos, "before")}</div>
+                <div><p class="cap" style="margin-top:0">After</p>${await photoListHtml(photos, "after")}</div>
+              </div>
+            </div>
           </div>
-          <input class="field" id="selfNote" placeholder="간단 메모" style="margin-top:8px" />
-          <button class="btn wide" type="button" data-add-self="1" style="margin-top:8px">개인 운동 저장</button>
         </div>
-        <div id="shareSelfList">${selfWorkoutHtml(portal.selfWorkouts, true)}</div>
-        <div class="label">식단 사진 및 메모</div>
-        <div class="card">
-          <div class="meal-pills">
-            <button type="button" data-meal="아침"${shareCtx.meal === "아침" ? ' class="on"' : ""}>아침</button>
-            <button type="button" data-meal="점심"${shareCtx.meal === "점심" ? ' class="on"' : ""}>점심</button>
-            <button type="button" data-meal="저녁"${shareCtx.meal === "저녁" ? ' class="on"' : ""}>저녁</button>
-            <button type="button" data-meal="간식"${shareCtx.meal === "간식" ? ' class="on"' : ""}>간식</button>
+
+        <div class="share-panel${shareCtx.view === "history" ? " on" : ""}" data-panel="history">
+          <div class="label">이전 기록 보기</div>
+          <p class="hint">날짜를 고르면 그날의 개인 운동·식단·수업 기록을 모아 봅니다.</p>
+          ${cal}
+          <div id="shareHistDay">${histCombo}</div>
+        </div>
+
+        <div class="share-panel${shareCtx.view === "write" ? " on" : ""}" data-panel="write">
+          <div class="label">기록 작성하기</div>
+          <p class="hint">오늘 날짜로 개인 운동과 식단을 저장합니다.</p>
+          <div class="card">
+            <label class="cap" style="margin-top:0">개인 운동</label>
+            <input class="field" id="selfName" placeholder="종목 (예: 런지)" />
+            <div class="add" style="margin-top:8px">
+              <input class="field" id="selfWeight" inputmode="decimal" placeholder="무게 kg" />
+              <input class="field" id="selfReps" inputmode="numeric" placeholder="횟수" />
+            </div>
+            <input class="field" id="selfNote" placeholder="간단 메모" style="margin-top:8px" />
+            <button class="btn wide" type="button" data-add-self="1" style="margin-top:8px">개인 운동 저장</button>
           </div>
-          <textarea class="field" id="shareDietText" placeholder="무엇을 먹었나요?"></textarea>
-          <label class="btn soft file wide" style="margin-top:8px">식단 사진 올리기<input type="file" accept="image/*" id="shareDietFile" /></label>
-          <button class="btn wide" type="button" data-add-diet="1" style="margin-top:8px">식단 저장</button>
-        </div>
-        <div id="shareDietList">${await dietCardsHtml(portal.dietLogs)}</div>
-        ${local ? '<p class="hint">저장하면 트레이너 회원 상세 화면에 바로 반영됩니다.</p>' : '<p class="hint">다른 휴대폰에서 열었다면, 아래 링크를 트레이너에게 보내 기록을 합칠 수 있습니다.</p><button class="btn soft wide" type="button" data-copy-sync="1">동기화 링크 복사</button>'}`;
+          <div class="card">
+            <label class="cap" style="margin-top:0">식단</label>
+            <div class="meal-pills">
+              <button type="button" data-meal="아침"${shareCtx.meal === "아침" ? ' class="on"' : ""}>아침</button>
+              <button type="button" data-meal="점심"${shareCtx.meal === "점심" ? ' class="on"' : ""}>점심</button>
+              <button type="button" data-meal="저녁"${shareCtx.meal === "저녁" ? ' class="on"' : ""}>저녁</button>
+              <button type="button" data-meal="간식"${shareCtx.meal === "간식" ? ' class="on"' : ""}>간식</button>
+            </div>
+            <textarea class="field" id="shareDietText" placeholder="무엇을 먹었나요?"></textarea>
+            <label class="btn soft file wide" style="margin-top:8px">식단 사진 올리기<input type="file" accept="image/*" id="shareDietFile" /></label>
+            <button class="btn wide" type="button" data-add-diet="1" style="margin-top:8px">식단 저장</button>
+          </div>
+          <div class="label">오늘 작성분</div>
+          <div id="shareWritePreview">${await dailyComboHtml(today(), portal, pack, true)}</div>
+          ${syncHint}
+        </div>`;
     }
     function openModal(id) {
       editingId = id || null;
@@ -2337,6 +2547,15 @@
     $("beforeFile").addEventListener("change", (e) => { addPhoto("before", e.target.files[0]); e.target.value = ""; });
     $("afterFile").addEventListener("change", (e) => { addPhoto("after", e.target.files[0]); e.target.value = ""; });
     $("shareMember").onclick = () => copyClientLink(currentMember());
+    $("clientNav").addEventListener("click", async (e) => {
+      const tabBtn = e.target.closest("[data-client-tab]");
+      if (!tabBtn) return;
+      shareCtx.view = tabBtn.dataset.clientTab;
+      syncClientNav();
+      if (shareCtx.data) await renderShare(shareCtx.data);
+      else await renderShareLive();
+      window.scrollTo(0, 0);
+    });
     $("deleteMember").onclick = async () => {
       const m = currentMember();
       if (!m || !confirm(m.name + " 회원과 모든 기록을 삭제할까요?")) return;
@@ -2352,6 +2571,27 @@
       currentId = null; saveData(); setTab("members");
     };
     $("pageShare").addEventListener("click", async (e) => {
+      const acc = e.target.closest("[data-share-acc]");
+      if (acc) {
+        const box = acc.closest(".acc");
+        if (box) box.classList.toggle("open");
+        return;
+      }
+      const histNav = e.target.closest("[data-hist-nav]");
+      if (histNav) {
+        shareCtx.histMonth = shiftMonth(shareCtx.histMonth || ymOf(today()), Number(histNav.dataset.histNav));
+        if (shareCtx.data) await renderShare(shareCtx.data);
+        else await renderShareLive();
+        return;
+      }
+      const histDay = e.target.closest("[data-hist-day]");
+      if (histDay) {
+        shareCtx.histDate = histDay.dataset.histDay;
+        shareCtx.histMonth = ymOf(shareCtx.histDate);
+        if (shareCtx.data) await renderShare(shareCtx.data);
+        else await renderShareLive();
+        return;
+      }
       const meal = e.target.closest("[data-meal]");
       if (meal) {
         shareCtx.meal = meal.dataset.meal;
@@ -2368,13 +2608,13 @@
           note: $("selfNote").value.trim()
         });
         $("selfName").value = $("selfWeight").value = $("selfReps").value = $("selfNote").value = "";
-        $("shareSelfList").innerHTML = selfWorkoutHtml(portalData(shareCtx.code).selfWorkouts, true);
+        await renderShareLive();
         return;
       }
       const delS = e.target.closest("[data-del-self]");
       if (delS) {
         removeSelfWorkout(shareCtx.code, delS.dataset.delSelf);
-        $("shareSelfList").innerHTML = selfWorkoutHtml(portalData(shareCtx.code).selfWorkouts, true);
+        await renderShareLive();
         return;
       }
       if (e.target.closest("[data-add-diet]")) {
@@ -2398,7 +2638,7 @@
         writeMemberDiet(shareCtx.code, row);
         $("shareDietText").value = "";
         $("shareDietFile").value = "";
-        $("shareDietList").innerHTML = await dietCardsHtml(portalData(shareCtx.code).dietLogs);
+        await renderShareLive();
         return;
       }
       if (e.target.closest("[data-copy-sync]")) {
