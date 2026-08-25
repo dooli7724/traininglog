@@ -341,6 +341,35 @@
     }
     .vol-col > span { margin-top: 6px; font-size: .68rem; font-weight: 800; color: var(--muted); }
     .vol-col > small { font-size: .58rem; font-weight: 700; color: var(--accent); line-height: 1.2; }
+    .home-week { margin-bottom: 14px; }
+    .home-week-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+    .home-week-nav h3 { flex: 1; margin: 0; text-align: center; font-size: .92rem; font-weight: 800; min-width: 0; }
+    .home-week-nav .btn { min-height: 40px; min-width: 40px; padding: 0 10px; }
+    .home-week-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 12px; }
+    .home-day {
+      border: 0; border-radius: var(--radius); background: var(--bg); color: var(--text);
+      padding: 8px 2px 6px; text-align: center; min-height: 64px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .home-day .wd { font-size: .62rem; font-weight: 800; color: var(--muted); }
+    .home-day .dn { font-size: .95rem; font-weight: 800; line-height: 1.1; }
+    .home-day .cnt { font-size: .58rem; font-weight: 800; color: var(--accent); min-height: 12px; }
+    .home-day.sun .wd, .home-day.sun .dn, .home-day.holiday .wd, .home-day.holiday .dn { color: var(--danger); }
+    .home-day.today { box-shadow: inset 0 0 0 1.5px var(--accent-glow); }
+    .home-day.on { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); }
+    .home-day.on .wd, .home-day.on .dn, .home-day.on .cnt { color: #fff; }
+    .home-day.on.sun .wd, .home-day.on.sun .dn { color: #FFE8E8; }
+    .home-week-label { margin: 0 0 8px; font-size: .78rem; font-weight: 800; color: var(--muted); }
+    .home-week-list { display: flex; flex-direction: column; gap: 8px; }
+    .home-week-list .tile { margin-bottom: 0; }
+    .home-chip {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
+      font-size: .72rem; font-weight: 700; color: var(--accent);
+    }
+    .home-chip i {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    }
     .tabbar button {
       border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: .7rem;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
@@ -516,16 +545,15 @@
   </header>
 
   <main>
-    <section id="pageHome" class="page page-center page-balanced">
+    <section id="pageHome" class="page">
       <div class="stats">
         <button class="card stat" id="statMembersBtn" type="button"><b id="statMembers">0</b><span>회원(명)</span></button>
         <button class="card stat" id="statTodayBtn" type="button"><b id="statToday">0</b><span>오늘 수업(개)</span></button>
       </div>
-      <div id="homeVolume"></div>
+      <div class="label">주간 캘린더</div>
+      <div id="homeWeek" class="card home-week"></div>
       <div class="label">최근 등록한 회원</div>
       <div id="homeNewMembers"></div>
-      <div class="label">오늘 기록한 수업</div>
-      <div id="homeToday"></div>
       <div class="label">최근 기록</div>
       <div id="homeRecent"></div>
     </section>
@@ -1074,20 +1102,66 @@
       if (next === "members") renderMembers();
       if (next === "detail") renderDetail();
     }
+    let homeWeekAnchor = null;
+    let homeWeekDay = null;
+    function homeWeekHtml() {
+      const anchor = homeWeekAnchor || today();
+      const selected = homeWeekDay || today();
+      const start = weekStart(anchor);
+      const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+      const label = days[0].slice(5).replace("-", "/") + " – " + days[6].slice(5).replace("-", "/");
+      const dayBtns = days.map((d) => {
+        const n = classesOn(d).length;
+        const hol = holidayName(d);
+        const cls = ["home-day"];
+        if (d === selected) cls.push("on");
+        if (d === today()) cls.push("today");
+        if (isSunday(d)) cls.push("sun");
+        if (hol) cls.push("holiday");
+        return `<button class="${cls.join(" ")}" type="button" data-home-day="${d}">
+          <span class="wd">${weekdayName(d)}</span>
+          <span class="dn">${Number(d.slice(8))}</span>
+          <span class="cnt">${n ? n + "수업" : ""}</span>
+        </button>`;
+      }).join("");
+      const list = classesOn(selected);
+      const hol = holidayName(selected);
+      const dayTitle = prettyDate(selected) + " · " + weekdayName(selected) + (hol ? " · " + hol : "");
+      const items = list.length
+        ? list.map((m) => {
+            const s = m.sessions[selected] || {};
+            const st = dayStats(m, selected);
+            const startT = koClock(s.start || "16:00");
+            const mins = Number(s.minutes) > 0 ? Number(s.minutes) : 60;
+            const sub = st.sets
+              ? startT + " · " + mins + "분 · " + st.exercises + "종목 " + st.sets + "세트"
+              : startT + " · " + mins + "분 · 예약";
+            return `<button class="tile" type="button" data-goto-log="${m.id}" data-log-date="${selected}">
+              <span><b>${esc(m.name)} 님 PT</b><small><span class="home-chip"><i style="background:${colorOf(m.id)}"></i>${esc(sub)}</span></small></span>
+              <span class="chev">›</span>
+            </button>`;
+          }).join("")
+        : '<div class="empty" style="padding:16px 8px">이 날 예정된 수업이 없습니다.</div>';
+      return `
+        <div class="home-week-nav">
+          <button class="btn soft" type="button" data-home-week="-1" aria-label="이전 주">‹</button>
+          <h3>${label}</h3>
+          <button class="btn soft" type="button" data-home-week="1" aria-label="다음 주">›</button>
+        </div>
+        <div class="home-week-days">${dayBtns}</div>
+        <p class="home-week-label">${dayTitle} 일정</p>
+        <div class="home-week-list">${items}</div>
+        <button class="btn soft wide" type="button" id="homeOpenCal" style="margin-top:10px">전체 캘린더 열기</button>`;
+    }
     function renderHome() {
       const d = today();
+      if (!homeWeekAnchor) homeWeekAnchor = d;
+      if (!homeWeekDay) homeWeekDay = d;
       $("homeDate").textContent = prettyDate(d) + " · " + d;
       $("statMembers").textContent = state.members.length;
       const todayList = state.members.filter((m) => hasClass(m, d));
       $("statToday").textContent = todayList.length;
-      $("homeToday").innerHTML = todayList.length
-        ? todayList.map((m) => {
-            const st = dayStats(m, d);
-            const s = m.sessions[d] || {};
-            const sub = st.sets || st.memo ? st.exercises + "종목 · " + st.sets + "세트" : koClock(s.start || "16:00") + " 예약";
-            return `<button class="tile" type="button" data-goto-log="${m.id}" data-log-date="${d}"><span><b>${esc(m.name)}</b><small>${sub}</small></span><span class="chev">›</span></button>`;
-          }).join("")
-        : '<div class="empty">오늘 기록된 수업이 없습니다.</div>';
+      $("homeWeek").innerHTML = homeWeekHtml();
       const recent = [];
       state.members.forEach((m) => Object.keys(m.sessions || {}).forEach((date) => {
         const st = dayStats(m, date);
@@ -1113,7 +1187,6 @@
             </div>`;
           }).join("")
         : '<div class="empty">등록된 회원이 없습니다. 회원 관리에서 추가하세요.</div>';
-      $("homeVolume").innerHTML = volumeChartHtml(weekVolumeSeries(state.members), "전체 회원 · 최근 7일 볼륨");
     }
     function renderLog() {
       const m = currentMember();
@@ -2308,7 +2381,33 @@
     });
     $("statMembersBtn").onclick = () => { fromTab = "home"; setTab("members"); };
     $("statTodayBtn").onclick = () => openCal();
-    $("homeToday").addEventListener("click", (e) => { const b = e.target.closest("[data-goto-log]"); if (b) openLog(b.dataset.gotoLog, b.dataset.logDate); });
+    $("homeWeek").addEventListener("click", (e) => {
+      const weekNav = e.target.closest("[data-home-week]");
+      if (weekNav) {
+        const delta = Number(weekNav.dataset.homeWeek) * 7;
+        homeWeekAnchor = addDays(weekStart(homeWeekAnchor || today()), delta);
+        const start = weekStart(homeWeekAnchor);
+        const end = addDays(start, 6);
+        if (!homeWeekDay || homeWeekDay < start || homeWeekDay > end) homeWeekDay = start;
+        renderHome();
+        return;
+      }
+      const day = e.target.closest("[data-home-day]");
+      if (day) {
+        homeWeekDay = day.dataset.homeDay;
+        homeWeekAnchor = homeWeekDay;
+        renderHome();
+        return;
+      }
+      if (e.target.closest("#homeOpenCal")) {
+        calIso = homeWeekDay || today();
+        calMode = "week";
+        openCal();
+        return;
+      }
+      const log = e.target.closest("[data-goto-log]");
+      if (log) openLog(log.dataset.gotoLog, log.dataset.logDate);
+    });
     $("homeRecent").addEventListener("click", (e) => { const b = e.target.closest("[data-goto-log]"); if (b) openLog(b.dataset.gotoLog, b.dataset.logDate); });
     $("homeNewMembers").addEventListener("click", (e) => {
       const arch = e.target.closest("[data-open-archive]");
