@@ -299,6 +299,48 @@
     .client-cal-day small { display: block; font-size: .55rem; font-weight: 800; margin-top: 2px; opacity: .9; }
     .share-panel { display: none; }
     .share-panel.on { display: block; }
+    .diet-preview {
+      margin-top: 10px; border-radius: var(--radius); overflow: hidden;
+      background: var(--bg); border: 1px solid var(--line); text-align: center;
+    }
+    .diet-preview img { display: block; width: 100%; max-height: 220px; object-fit: cover; }
+    .diet-preview .hint { margin: 8px; }
+    .diet-thumb-wrap { margin-bottom: 10px; }
+    .diet-thumb-wrap .thumb.lg,
+    .thumb.diet {
+      width: 100%; height: 160px; border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .record-card { padding: 12px; margin-bottom: 10px; }
+    .record-card .meta b { display: block; font-size: .92rem; }
+    .record-card .meta small { color: var(--muted); display: block; margin-top: 4px; line-height: 1.4; }
+    .record-card .record-top { display: flex; gap: 8px; align-items: flex-start; }
+    .record-card .record-top .meta { flex: 1; min-width: 0; }
+    .coach-bubble {
+      margin-top: 10px; padding: 10px 12px; border-radius: var(--radius);
+      background: var(--accent-soft); border: 1px solid #C5D8FF;
+    }
+    .coach-bubble span {
+      display: block; font-size: .68rem; font-weight: 800; color: var(--accent); margin-bottom: 4px;
+    }
+    .coach-bubble p { margin: 0; font-size: .88rem; line-height: 1.45; font-weight: 600; }
+    .coach-box { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .volume-card { margin-bottom: 12px; }
+    .volume-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 12px; }
+    .volume-head b { font-size: .95rem; font-weight: 800; }
+    .volume-head span { color: var(--muted); font-size: .72rem; font-weight: 700; white-space: nowrap; }
+    .vol-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 0 2px; }
+    .vol-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; }
+    .vol-bar-wrap {
+      flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center;
+      background: linear-gradient(to top, var(--accent-soft), transparent); border-radius: 8px 8px 4px 4px;
+    }
+    .vol-bar {
+      width: 70%; min-height: 4px; border-radius: 8px 8px 4px 4px;
+      background: linear-gradient(180deg, #3377FF 0%, #0055FF 100%);
+      box-shadow: 0 4px 10px rgba(0, 85, 255, 0.25);
+    }
+    .vol-col > span { margin-top: 6px; font-size: .68rem; font-weight: 800; color: var(--muted); }
+    .vol-col > small { font-size: .58rem; font-weight: 700; color: var(--accent); line-height: 1.2; }
     .tabbar button {
       border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: .7rem;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
@@ -479,6 +521,7 @@
         <button class="card stat" id="statMembersBtn" type="button"><b id="statMembers">0</b><span>회원(명)</span></button>
         <button class="card stat" id="statTodayBtn" type="button"><b id="statToday">0</b><span>오늘 수업(개)</span></button>
       </div>
+      <div id="homeVolume"></div>
       <div class="label">최근 등록한 회원</div>
       <div id="homeNewMembers"></div>
       <div class="label">오늘 기록한 수업</div>
@@ -558,6 +601,7 @@
         <div class="card"><b id="packUsed">0</b><span>쓴 횟수</span></div>
         <div class="card"><b id="packLeft">0</b><span>잔여 횟수</span></div>
       </div>
+      <div id="detailVolume"></div>
       <div class="act4">
         <button class="btn" id="packUse" type="button">차감</button>
         <button class="btn soft" id="packAdjust" type="button">잔여 조정</button>
@@ -646,7 +690,8 @@
         <button class="acc-h" type="button">식단 기록 <em>트레이너 · 회원</em><span class="arr">▾</span></button>
         <div class="acc-b">
           <textarea class="field" id="dietText" placeholder="식사, 간식, 수분 섭취 등"></textarea>
-          <label class="btn soft file wide" style="margin-top:8px">식단 사진 첨부<input type="file" accept="image/*" id="dietFile" /></label>
+          <label class="btn soft file wide" style="margin-top:8px">카메라·갤러리에서 식단 사진<input type="file" accept="image/*" id="dietFile" /></label>
+          <div id="dietPreview" class="diet-preview hidden"></div>
           <p class="hint" id="dietFileHint" style="margin:6px 0 0"></p>
           <button class="btn wide" id="addDiet" type="button" style="margin:8px 0">식단 추가</button>
           <div id="dietList"></div>
@@ -716,6 +761,7 @@
         <h3 id="calLabel"></h3>
         <button class="btn soft" id="calNext" type="button">›</button>
       </div>
+      <div id="calVolume"></div>
       <div id="calBody" class="cal-scroll"></div>
     </div>
   </div>
@@ -1067,6 +1113,7 @@
             </div>`;
           }).join("")
         : '<div class="empty">등록된 회원이 없습니다. 회원 관리에서 추가하세요.</div>';
+      $("homeVolume").innerHTML = volumeChartHtml(weekVolumeSeries(state.members), "전체 회원 · 최근 7일 볼륨");
     }
     function renderLog() {
       const m = currentMember();
@@ -1278,18 +1325,105 @@
       }
       return cell("체중", "weight", "kg", "#0055FF") + cell("골격근량", "muscle", "kg", "#00C853") + cell("체지방률", "fat", "%", "#FF6B35");
     }
-    async function notesHtml(list, key) {
+    function lastNDays(n, end) {
+      const base = end || today();
+      return Array.from({ length: n }, (_, i) => addDays(base, i - n + 1));
+    }
+    function dayVolume(m, date) {
+      let vol = 0, sets = 0;
+      const sess = (m.sessions || {})[date];
+      if (sess) {
+        for (const ex of sess.exercises || []) {
+          for (const st of ex.sets || []) {
+            const w = Number(st.weight), r = Number(st.reps);
+            if (Number.isFinite(w) && Number.isFinite(r) && r > 0) { vol += w * r; sets += 1; }
+          }
+        }
+      }
+      for (const row of m.selfWorkouts || []) {
+        if (row.date !== date) continue;
+        const w = Number(row.weight), r = Number(row.reps);
+        if (Number.isFinite(w) && Number.isFinite(r) && r > 0) { vol += w * r; sets += 1; }
+      }
+      return { vol, sets };
+    }
+    function aggregateDayVolume(members, date) {
+      return (members || []).reduce((acc, m) => {
+        const d = dayVolume(m, date);
+        return { vol: acc.vol + d.vol, sets: acc.sets + d.sets };
+      }, { vol: 0, sets: 0 });
+    }
+    function weekVolumeSeries(members) {
+      return lastNDays(7).map((date) => ({ date, ...aggregateDayVolume(members, date) }));
+    }
+    function weekVolumeSeriesMember(m) {
+      return lastNDays(7).map((date) => ({ date, ...dayVolume(m || { sessions: {}, selfWorkouts: [] }, date) }));
+    }
+    function volumeChartHtml(series, title) {
+      const rows = series || [];
+      const max = Math.max(1, ...rows.map((s) => s.vol));
+      const totalVol = rows.reduce((a, s) => a + s.vol, 0);
+      const totalSets = rows.reduce((a, s) => a + s.sets, 0);
+      const bars = rows.map((s) => {
+        const h = Math.max(s.vol ? 8 : 4, Math.round((s.vol / max) * 100));
+        return `<div class="vol-col"><div class="vol-bar-wrap"><div class="vol-bar" style="height:${h}%"></div></div><span>${s.date.slice(8)}</span><small>${s.vol ? Math.round(s.vol) : "0"}</small></div>`;
+      }).join("");
+      return `<div class="card volume-card">
+        <div class="volume-head"><b>${esc(title || "최근 7일 볼륨")}</b><span>총 ${Math.round(totalVol).toLocaleString()}kg · ${totalSets}세트</span></div>
+        <div class="vol-chart">${bars}</div>
+        <p class="hint" style="margin:8px 0 0">볼륨 = 무게(kg) × 횟수. 수업·개인 운동을 합산합니다.</p>
+      </div>`;
+    }
+    function coachBubbleHtml(text) {
+      if (!(text || "").trim()) return "";
+      return `<div class="coach-bubble"><span>트레이너 피드백</span><p>${esc(text)}</p></div>`;
+    }
+    function coachEditorHtml(kind, id, text) {
+      return `<div class="coach-box">
+        <label class="cap">트레이너 코멘트</label>
+        <textarea class="field" data-coach-kind="${kind}" data-coach-id="${id}" placeholder="회원에게 남길 피드백·코멘트">${esc(text || "")}</textarea>
+        <button class="btn wide" type="button" data-coach-save="${kind}:${id}" style="margin-top:8px">코멘트 저장</button>
+      </div>`;
+    }
+    async function dietThumbHtml(n) {
+      if (n.photoId) {
+        const url = await fileUrl(n.photoId);
+        if (url) return `<button class="thumb diet" type="button" data-view="${n.photoId}:image"><img src="${url}" alt="" /></button>`;
+      }
+      if (n.photoData) return `<button class="thumb diet" type="button" data-src-view="1"><img src="${n.photoData}" alt="" /></button>`;
+      return "";
+    }
+    function bindDietPreview(inputId, previewId, hintId) {
+      const input = $(inputId);
+      if (!input || input.dataset.boundPreview === "1") return;
+      input.dataset.boundPreview = "1";
+      input.addEventListener("change", () => {
+        const box = $(previewId);
+        const hint = hintId ? $(hintId) : null;
+        const f = input.files && input.files[0];
+        if (hint) hint.textContent = f ? "선택됨: " + f.name : "";
+        if (!box) return;
+        if (!f) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+        const url = URL.createObjectURL(f);
+        box.classList.remove("hidden");
+        box.innerHTML = `<img src="${url}" alt="식단 미리보기" /><p class="hint">${esc(f.name)}</p>`;
+      });
+    }
+    async function notesHtml(list, key, opts) {
+      opts = opts || {};
       if (!(list || []).length) return '<div class="empty" style="padding:12px">아직 기록이 없습니다.</div>';
       const parts = [];
       for (const n of [...list].reverse()) {
-        let img = "";
-        if (n.photoId) {
-          const url = await fileUrl(n.photoId);
-          if (url) img = `<button class="thumb" type="button" data-view="${n.photoId}:image"><img src="${url}" alt="" /></button>`;
-        } else if (n.photoData) {
-          img = `<button class="thumb" type="button" data-src-view="1"><img src="${n.photoData}" alt="" /></button>`;
-        }
-        parts.push(`<div class="hist">${img}<div class="meta"><b>${prettyDate(n.date)} · ${n.date}${n.source === "member" ? '<span class="tag">회원</span>' : ""}${n.meal ? '<span class="tag">' + esc(n.meal) + "</span>" : ""}</b><small>${esc(n.text) || "사진 기록"}</small></div><button class="btn danger" type="button" data-del-note="${key}:${n.id}">×</button></div>`);
+        const img = await dietThumbHtml(n);
+        parts.push(`<div class="card record-card">
+          <div class="record-top">
+            <div class="meta"><b>${prettyDate(n.date)} · ${n.date}${n.source === "member" ? '<span class="tag">회원</span>' : ""}${n.meal ? '<span class="tag">' + esc(n.meal) + "</span>" : ""}</b><small>${esc(n.text) || (img ? "사진 기록" : "기록")}</small></div>
+            ${opts.canDel !== false ? `<button class="btn danger" type="button" data-del-note="${key}:${n.id}">×</button>` : ""}
+          </div>
+          ${img ? `<div class="diet-thumb-wrap">${img}</div>` : ""}
+          ${coachBubbleHtml(n.coachComment)}
+          ${opts.coach ? coachEditorHtml(key, n.id, n.coachComment) : ""}
+        </div>`);
       }
       return parts.join("");
     }
@@ -1303,10 +1437,19 @@
       });
       return html || '<div class="empty" style="padding:12px">아직 수업 일지가 없습니다.</div>';
     }
-    function selfWorkoutHtml(list, canDel) {
+    function selfWorkoutHtml(list, opts) {
+      const canDel = opts === true || (opts && opts.canDel);
+      const coach = !!(opts && opts.coach);
       const rows = [...(list || [])].reverse();
       if (!rows.length) return '<div class="empty" style="padding:12px">회원이 혼자 한 운동이 여기에 표시됩니다.</div>';
-      return rows.map((w) => `<div class="hist"><div class="meta"><b>${prettyDate(w.date)} · ${w.date}</b><small>${esc(w.name)} · ${esc(w.weight || "-")}kg × ${esc(w.reps || "-")}회${w.note ? " · " + esc(w.note) : ""}</small></div>${canDel ? `<button class="btn danger" type="button" data-del-self="${w.id}">×</button>` : ""}</div>`).join("");
+      return rows.map((w) => `<div class="card record-card">
+        <div class="record-top">
+          <div class="meta"><b>${prettyDate(w.date)} · ${w.date}</b><small><b>${esc(w.name)}</b> · <b>${esc(w.weight || "-")}kg × ${esc(w.reps || "-")}회</b>${w.note ? " · " + esc(w.note) : ""}</small></div>
+          ${canDel ? `<button class="btn danger" type="button" data-del-self="${w.id}">×</button>` : ""}
+        </div>
+        ${coachBubbleHtml(w.coachComment)}
+        ${coach ? coachEditorHtml("selfWorkouts", w.id, w.coachComment) : ""}
+      </div>`).join("");
     }
     function attendHtml(m) {
       const dates = Object.keys(m.sessions || {}).sort().reverse().filter((d) => hasClass(m, d));
@@ -1344,9 +1487,10 @@
       if (document.activeElement !== $("injuryText")) $("injuryText").value = m.injuries || "";
       $("attendList").innerHTML = attendHtml(m);
       $("consultList").innerHTML = await notesHtml(m.consults, "consults");
-      $("dietList").innerHTML = await notesHtml(m.dietLogs, "dietLogs");
+      $("dietList").innerHTML = await notesHtml(m.dietLogs, "dietLogs", { coach: true, canDel: true });
       $("workoutList").innerHTML = workoutHtml(m);
-      $("selfWorkoutList").innerHTML = selfWorkoutHtml(m.selfWorkouts, true);
+      $("selfWorkoutList").innerHTML = selfWorkoutHtml(m.selfWorkouts, { coach: true, canDel: true });
+      $("detailVolume").innerHTML = volumeChartHtml(weekVolumeSeriesMember(m), m.name + " · 최근 7일 볼륨");
       const body = [...(m.body || [])].sort((a, b) => b.date.localeCompare(a.date));
       if (body.length >= 2) {
         const a = body[0], b = body[1];
@@ -1369,16 +1513,28 @@
       });
       return {
         name: m.name, share: m.share, id: m.id, profile: m.profile, body: m.body || [], sessions,
-        selfWorkouts: m.selfWorkouts || [],
-        dietLogs: (m.dietLogs || []).map((n) => ({ id: n.id, date: n.date, text: n.text, meal: n.meal, source: n.source }))
+        selfWorkouts: (m.selfWorkouts || []).map((w) => ({
+          id: w.id, date: w.date, name: w.name, weight: w.weight, reps: w.reps, note: w.note,
+          coachComment: w.coachComment || ""
+        })),
+        dietLogs: (m.dietLogs || []).map((n) => ({
+          id: n.id, date: n.date, text: n.text, meal: n.meal, source: n.source,
+          coachComment: n.coachComment || ""
+        }))
       };
     }
     function todayLogPack(m) {
       const d = logDate || today();
       const s = (m.sessions && m.sessions[d]) || { exercises: [] };
       return Object.assign({ kind: "log", name: m.name, share: m.share, date: d }, packSession(s), {
-        selfWorkouts: m.selfWorkouts || [],
-        dietLogs: (m.dietLogs || []).map((n) => ({ id: n.id, date: n.date, text: n.text, meal: n.meal, source: n.source }))
+        selfWorkouts: (m.selfWorkouts || []).map((w) => ({
+          id: w.id, date: w.date, name: w.name, weight: w.weight, reps: w.reps, note: w.note,
+          coachComment: w.coachComment || ""
+        })),
+        dietLogs: (m.dietLogs || []).map((n) => ({
+          id: n.id, date: n.date, text: n.text, meal: n.meal, source: n.source,
+          coachComment: n.coachComment || ""
+        }))
       });
     }
     function packUrl(code, payload) {
@@ -1444,20 +1600,21 @@
     }
     function selfDayHtml(rows, canDel) {
       if (!(rows || []).length) return '<p class="hint" style="margin:0">개인 운동 기록이 없습니다.</p>';
-      return rows.map((w) => `<div class="hist"><div class="meta"><b>${esc(w.name)}</b><small><b>${esc(w.weight || "-")}kg × ${esc(w.reps || "-")}회</b>${w.note ? " · " + esc(w.note) : ""}</small></div>${canDel ? `<button class="btn danger" type="button" data-del-self="${w.id}">×</button>` : ""}</div>`).join("");
+      return rows.map((w) => `<div class="hist" style="align-items:flex-start">
+        <div class="meta"><b>${esc(w.name)}</b><small><b>${esc(w.weight || "-")}kg × ${esc(w.reps || "-")}회</b>${w.note ? " · " + esc(w.note) : ""}</small>${coachBubbleHtml(w.coachComment)}</div>
+        ${canDel ? `<button class="btn danger" type="button" data-del-self="${w.id}">×</button>` : ""}
+      </div>`).join("");
     }
     async function dietDayHtml(rows) {
       if (!(rows || []).length) return '<p class="hint" style="margin:0">식단 기록이 없습니다.</p>';
       const parts = [];
       for (const n of rows) {
-        let img = "";
-        if (n.photoId) {
-          const url = await fileUrl(n.photoId);
-          if (url) img = `<button class="thumb" type="button" data-view="${n.photoId}:image"><img src="${url}" alt="" /></button>`;
-        } else if (n.photoData) {
-          img = `<button class="thumb" type="button" data-src-view="1"><img src="${n.photoData}" alt="" /></button>`;
-        }
-        parts.push(`<div class="hist">${img}<div class="meta"><b>${n.meal ? esc(n.meal) : "식단"}</b><small>${esc(n.text) || "사진 기록"}</small></div></div>`);
+        const img = await dietThumbHtml(n);
+        parts.push(`<div class="record-card" style="box-shadow:none;border:1px solid var(--line);margin-bottom:8px">
+          ${img ? `<div class="diet-thumb-wrap">${img}</div>` : ""}
+          <div class="meta"><b>${n.meal ? esc(n.meal) : "식단"}</b><small>${esc(n.text) || (img ? "사진 기록" : "기록")}</small></div>
+          ${coachBubbleHtml(n.coachComment)}
+        </div>`);
       }
       return parts.join("");
     }
@@ -1687,6 +1844,11 @@
         ${goal}
 
         <div class="share-panel${shareCtx.view === "today" ? " on" : ""}" data-panel="today">
+          <div class="label">나의 주간 볼륨</div>
+          ${volumeChartHtml(weekVolumeSeriesMember({
+            sessions: pack.sessions || {},
+            selfWorkouts: portal.selfWorkouts || []
+          }), "최근 7일 볼륨")}
           <div class="label">오늘 종합 기록</div>
           ${todayCombo}
           <div class="acc">
@@ -1733,13 +1895,15 @@
               <button type="button" data-meal="간식"${shareCtx.meal === "간식" ? ' class="on"' : ""}>간식</button>
             </div>
             <textarea class="field" id="shareDietText" placeholder="무엇을 먹었나요?"></textarea>
-            <label class="btn soft file wide" style="margin-top:8px">식단 사진 올리기<input type="file" accept="image/*" id="shareDietFile" /></label>
+            <label class="btn soft file wide" style="margin-top:8px">카메라·갤러리에서 식단 사진<input type="file" accept="image/*" id="shareDietFile" /></label>
+            <div id="shareDietPreview" class="diet-preview hidden"></div>
             <button class="btn wide" type="button" data-add-diet="1" style="margin-top:8px">식단 저장</button>
           </div>
           <div class="label">오늘 작성분</div>
           <div id="shareWritePreview">${await dailyComboHtml(today(), portal, pack, true)}</div>
           ${syncHint}
         </div>`;
+      bindDietPreview("shareDietFile", "shareDietPreview");
     }
     function openModal(id) {
       editingId = id || null;
@@ -1910,6 +2074,11 @@
         }).join("");
         $("calBody").innerHTML = head + '<div class="cal-grid">' + grid + "</div>";
       }
+      const volDays = calMode === "week"
+        ? Array.from({ length: 7 }, (_, i) => addDays(weekStart(calIso || today()), i))
+        : lastNDays(7, calIso || today());
+      const volSeries = volDays.map((date) => ({ date, ...aggregateDayVolume(state.members, date) }));
+      $("calVolume").innerHTML = volumeChartHtml(volSeries, calMode === "week" ? "이번 주 볼륨" : "최근 7일 볼륨");
       $("calBody").scrollTop = y;
     }
     function hourPx(el) {
@@ -2095,11 +2264,25 @@
       let data;
       try { data = JSON.parse(decodeURIComponent(escape(atob(packed)))); } catch { return false; }
       m.selfWorkouts = m.selfWorkouts || [];
-      (data.selfWorkouts || []).forEach((w) => { if (!m.selfWorkouts.some((x) => x.id === w.id)) m.selfWorkouts.push(w); });
+      (data.selfWorkouts || []).forEach((w) => {
+        const ex = m.selfWorkouts.find((x) => x.id === w.id);
+        if (ex) {
+          if (w.coachComment) ex.coachComment = w.coachComment;
+          return;
+        }
+        m.selfWorkouts.push(w);
+      });
       m.dietLogs = m.dietLogs || [];
       for (const n of data.dietLogs || []) {
-        if (m.dietLogs.some((x) => x.id === n.id)) continue;
-        const row = { id: n.id || uid(), date: n.date || today(), text: n.text || "", meal: n.meal, source: "member" };
+        const ex = m.dietLogs.find((x) => x.id === n.id);
+        if (ex) {
+          if (n.coachComment) ex.coachComment = n.coachComment;
+          continue;
+        }
+        const row = {
+          id: n.id || uid(), date: n.date || today(), text: n.text || "", meal: n.meal, source: "member",
+          coachComment: n.coachComment || ""
+        };
         if (n.photoData) {
           try {
             const blob = await (await fetch(n.photoData)).blob();
@@ -2488,25 +2671,37 @@
       $(inputId).value = ""; saveData(); renderDetail();
     }
     $("addConsult").onclick = () => addNote("consults", "consultText");
-    $("dietFile").addEventListener("change", () => {
-      const f = $("dietFile").files[0];
-      $("dietFileHint").textContent = f ? "첨부: " + f.name : "";
-    });
+    bindDietPreview("dietFile", "dietPreview", "dietFileHint");
     $("addDiet").onclick = async () => {
       const m = currentMember(); if (!m) return;
       const text = $("dietText").value.trim();
       const file = $("dietFile").files[0];
       if (!text && !file) return;
-      const row = { id: uid(), date: today(), text };
+      const row = { id: uid(), date: today(), text, coachComment: "" };
       if (file) { row.photoId = uid(); await putFile(row.photoId, await compressImage(file)); }
       m.dietLogs = m.dietLogs || [];
       m.dietLogs.push(row);
       $("dietText").value = "";
       $("dietFile").value = "";
       $("dietFileHint").textContent = "";
+      const prev = $("dietPreview");
+      if (prev) { prev.classList.add("hidden"); prev.innerHTML = ""; }
       saveData(); renderDetail();
     };
     $("pageDetail").addEventListener("click", async (e) => {
+      const coachSave = e.target.closest("[data-coach-save]");
+      if (coachSave) {
+        const [kind, id] = coachSave.dataset.coachSave.split(":");
+        const m = currentMember(); if (!m) return;
+        const ta = $("pageDetail").querySelector(`[data-coach-kind="${kind}"][data-coach-id="${id}"]`);
+        const row = (m[kind] || []).find((x) => x.id === id);
+        if (!row) return;
+        row.coachComment = ((ta && ta.value) || "").trim();
+        saveData();
+        alert("코멘트를 저장했습니다. 회원 공유 페이지에서 확인할 수 있습니다.");
+        renderDetail();
+        return;
+      }
       const logDay = e.target.closest("[data-open-log-date]");
       if (logDay) { openLog(currentId, logDay.dataset.openLogDate); return; }
       const head = e.target.closest(".acc-h");
@@ -2516,6 +2711,7 @@
       const delN = e.target.closest("[data-del-note]");
       const delS = e.target.closest("[data-del-self]");
       const view = e.target.closest("[data-view]");
+      const srcView = e.target.closest("[data-src-view]");
       if (delB) {
         const m = currentMember();
         const row = (m.body || []).find((x) => x.id === delB.dataset.delBody);
@@ -2537,7 +2733,11 @@
         m.selfWorkouts = (m.selfWorkouts || []).filter((x) => x.id !== delS.dataset.delSelf);
         saveData(); renderDetail(); return;
       }
-      if (view && !e.target.closest(".x")) showViewer(view.dataset.view.split(":")[0], "image");
+      if (view && !e.target.closest(".x")) { showViewer(view.dataset.view.split(":")[0], "image"); return; }
+      if (srcView) {
+        const img = srcView.querySelector("img");
+        if (img) { $("viewerBody").innerHTML = `<img src="${img.src}" alt="" />`; $("viewer").classList.remove("hidden"); }
+      }
     });
     async function addPhoto(kind, file) {
       const m = currentMember(); if (!m || !file) return;
@@ -2638,6 +2838,8 @@
         writeMemberDiet(shareCtx.code, row);
         $("shareDietText").value = "";
         $("shareDietFile").value = "";
+        const prev = $("shareDietPreview");
+        if (prev) { prev.classList.add("hidden"); prev.innerHTML = ""; }
         await renderShareLive();
         return;
       }
