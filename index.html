@@ -370,6 +370,21 @@
     .home-chip i {
       display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
     }
+    .member-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+    .member-seg button {
+      min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius);
+      background: var(--card); color: var(--text); font-weight: 700; font-size: .84rem; box-shadow: var(--shadow);
+    }
+    .member-seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); }
+    .member-seg button em { font-style: normal; opacity: .85; font-weight: 800; }
+    .status-badge {
+      display: inline-block; margin-left: 6px; border-radius: 999px; padding: 2px 8px;
+      font-size: .68rem; font-weight: 800; vertical-align: middle;
+    }
+    .status-badge.active { background: var(--accent-soft); color: var(--accent); }
+    .status-badge.expired { background: #FFF0F0; color: var(--danger); }
+    .tile.expired-tile { opacity: .92; }
+    .tile.expired-tile b { color: var(--muted); }
     .tabbar button {
       border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: .7rem;
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
@@ -619,7 +634,11 @@
     </section>
 
     <section id="pageMembers" class="page hidden">
-      <div class="label">회원 목록</div>
+      <div class="member-seg" id="memberSeg">
+        <button type="button" data-member-filter="active" class="on">진행 중 <em id="activeCount">0</em></button>
+        <button type="button" data-member-filter="expired">만료 <em id="expiredCount">0</em></button>
+      </div>
+      <p class="hint" id="memberFilterHint">잔여 횟수가 있거나 이용 기간 중인 회원입니다.</p>
       <div id="memberList" class="members-list-wrap"></div>
     </section>
 
@@ -628,6 +647,16 @@
         <div class="card"><b id="packTotal">0</b><span>총 회차</span></div>
         <div class="card"><b id="packUsed">0</b><span>쓴 횟수</span></div>
         <div class="card"><b id="packLeft">0</b><span>잔여 횟수</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <span class="cap" style="margin:0">회원 상태</span>
+          <span id="memberStatusBadge" class="status-badge active">진행 중</span>
+        </div>
+        <p class="hint" id="memberStatusHint" style="margin:0 0 10px">잔여 횟수와 이용 종료일로 자동 분류됩니다.</p>
+        <label class="cap" style="margin-top:0">이용 종료일 (선택)</label>
+        <input class="field" id="packEndDate" type="date" />
+        <p class="hint" style="margin:6px 0 0">종료일이 지나면 만료 목록으로 이동합니다. 회차 충전·종료일 연장 시 다시 진행 중으로 복구됩니다.</p>
       </div>
       <div id="detailVolume"></div>
       <div class="act4">
@@ -886,7 +915,11 @@
         createdAt: m.createdAt || 0,
         profile,
         body: m.body || [], photos: m.photos || [], sessions,
-        pack: { total: Number((m.pack && m.pack.total) || 0), used: Number((m.pack && m.pack.used) || 0) },
+        pack: {
+          total: Number((m.pack && m.pack.total) || 0),
+          used: Number((m.pack && m.pack.used) || 0),
+          endDate: (m.pack && m.pack.endDate) || ""
+        },
         pattern: m.pattern || "",
         injuries: m.injuries != null ? m.injuries : (profile.history || ""),
         consults: m.consults || [],
@@ -1298,18 +1331,62 @@
       box.innerHTML = cards.join("");
     }
     function findEx(id) { const s = sessionOf(); return s ? s.exercises.find((e) => e.id === id) : null; }
+    let memberFilter = "active";
+    function packOf(m) {
+      m.pack = m.pack || { total: 0, used: 0, endDate: "" };
+      const total = Math.max(0, Number(m.pack.total) || 0);
+      const used = Math.max(0, Number(m.pack.used) || 0);
+      const endDate = m.pack.endDate || "";
+      return { total, used, left: Math.max(0, total - used), endDate };
+    }
+    function isMemberExpired(m) {
+      const p = packOf(m);
+      if (p.endDate && today() > p.endDate) return true;
+      if (p.total > 0 && p.left <= 0) return true;
+      return false;
+    }
+    function memberExpireReason(m) {
+      const p = packOf(m);
+      const reasons = [];
+      if (p.total > 0 && p.left <= 0) reasons.push("잔여 0회");
+      if (p.endDate && today() > p.endDate) reasons.push("기간 만료 · " + p.endDate);
+      return reasons.join(" · ") || "만료";
+    }
+    function memberTileHtml(m) {
+      const p = m.profile || {};
+      const pack = packOf(m);
+      const expired = isMemberExpired(m);
+      const n = archivedDates(m).length;
+      const badge = expired
+        ? '<span class="status-badge expired">만료</span>'
+        : '<span class="status-badge active">진행 중</span>';
+      const subParts = expired
+        ? [memberExpireReason(m), pack.total ? `총 ${pack.total}회` : "", n ? n + "개 일지" : ""]
+        : [pack.left + "회 남음", p.goal || "", n ? n + "개 일지" : "일지 없음"];
+      const sub = subParts.filter(Boolean).join(" · ") || "프로필 미입력";
+      return `<div class="split-tile">
+        <button class="tile${expired ? " expired-tile" : ""}" type="button" data-detail="${m.id}">
+          <span><b>${esc(m.name)}${badge}</b><small>${esc(sub)}</small></span>
+          <span class="chev">›</span>
+        </button>
+        <button class="tile side" type="button" data-open-archive="${m.id}">일지</button>
+      </div>`;
+    }
     function renderMembers() {
-      $("memberList").innerHTML = state.members.length
-        ? state.members.map((m) => {
-            const p = m.profile || {};
-            const n = archivedDates(m).length;
-            const sub = [p.gender, p.age ? p.age + "세" : "", p.goal, n ? n + "개 일지" : "일지 없음"].filter(Boolean).join(" · ") || "프로필 미입력";
-            return `<div class="split-tile">
-              <button class="tile" type="button" data-detail="${m.id}"><span><b>${esc(m.name)}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>
-              <button class="tile side" type="button" data-open-archive="${m.id}">일지</button>
-            </div>`;
-          }).join("")
-        : '<div class="empty">등록된 회원이 없습니다.</div>';
+      const active = state.members.filter((m) => !isMemberExpired(m));
+      const expired = state.members.filter((m) => isMemberExpired(m));
+      $("activeCount").textContent = "(" + active.length + ")";
+      $("expiredCount").textContent = "(" + expired.length + ")";
+      document.querySelectorAll("#memberSeg [data-member-filter]").forEach((b) => {
+        b.classList.toggle("on", b.dataset.memberFilter === memberFilter);
+      });
+      $("memberFilterHint").textContent = memberFilter === "expired"
+        ? "잔여 0회이거나 이용 종료일이 지난 회원입니다. 회차 충전·종료일 연장 시 진행 중으로 복구됩니다."
+        : "잔여 횟수가 있거나 이용 기간 중인 회원입니다.";
+      const list = memberFilter === "expired" ? expired : active;
+      $("memberList").innerHTML = list.length
+        ? list.map(memberTileHtml).join("")
+        : `<div class="empty">${memberFilter === "expired" ? "만료된 회원이 없습니다." : "진행 중인 회원이 없습니다."}</div>`;
     }
     function profileHtml(p, name) {
       p = p || {};
@@ -1332,12 +1409,6 @@
         parts.push(`<button class="thumb lg" type="button" data-view="${p.id}:image" style="margin-bottom:6px"><img src="${url}" alt="" /><span class="x" data-del-photo="${p.id}">×</span></button><p class="hint">${prettyDate(p.date)}</p>`);
       }
       return parts.join("") || '<div class="empty" style="padding:12px">없음</div>';
-    }
-    function packOf(m) {
-      m.pack = m.pack || { total: 0, used: 0 };
-      const total = Math.max(0, Number(m.pack.total) || 0);
-      const used = Math.max(0, Number(m.pack.used) || 0);
-      return { total, used, left: Math.max(0, total - used) };
     }
     function bodyChartSvg(rows) {
       const asc = [...rows].sort((a, b) => a.date.localeCompare(b.date));
@@ -1557,6 +1628,14 @@
       $("packUsed").textContent = pack.used;
       $("packLeft").textContent = pack.left;
       $("packLeft").style.color = pack.left ? "var(--ok)" : "var(--danger)";
+      const expired = isMemberExpired(m);
+      const badge = $("memberStatusBadge");
+      badge.textContent = expired ? "만료" : "진행 중";
+      badge.className = "status-badge " + (expired ? "expired" : "active");
+      $("memberStatusHint").textContent = expired
+        ? memberExpireReason(m) + " — 회차 충전이나 종료일 연장 시 진행 중으로 복구됩니다."
+        : (pack.endDate ? "이용 종료일 " + pack.endDate + "까지 · 잔여 " + pack.left + "회" : "잔여 " + pack.left + "회 · 종료일 미설정");
+      if (document.activeElement !== $("packEndDate")) $("packEndDate").value = pack.endDate || "";
       if (document.activeElement !== $("injuryText")) $("injuryText").value = m.injuries || "";
       $("attendList").innerHTML = attendHtml(m);
       $("consultList").innerHTML = await notesHtml(m.consults, "consults");
@@ -2754,10 +2833,28 @@
       const n = prompt("구매할 회차", "10");
       if (n == null) return;
       const add = Math.max(0, parseInt(n, 10) || 0);
-      m.pack = packOf(m);
-      m.pack.total += add;
+      const p = packOf(m);
+      m.pack.total = p.total + add;
+      m.pack.used = p.used;
+      m.pack.endDate = p.endDate || "";
+      if (p.endDate && today() > p.endDate) {
+        const ext = prompt("이용 종료일이 지났습니다. 새 종료일(YYYY-MM-DD)을 입력하거나 비워 두세요.", today());
+        if (ext != null) m.pack.endDate = (ext || "").trim();
+      }
       saveData(); renderDetail();
     };
+    $("packEndDate").addEventListener("change", () => {
+      const m = currentMember(); if (!m) return;
+      m.pack = packOf(m);
+      m.pack.endDate = $("packEndDate").value || "";
+      saveData(); renderDetail();
+    });
+    $("memberSeg").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-member-filter]");
+      if (!b) return;
+      memberFilter = b.dataset.memberFilter;
+      renderMembers();
+    });
     $("packLog").onclick = () => { if (currentId) openArchive(currentId); };
     $("packTodayLog").onclick = () => { if (currentId) openLog(currentId, today()); };
     $("packCal").onclick = () => openCal();
