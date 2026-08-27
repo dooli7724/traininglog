@@ -31,11 +31,14 @@
   };
 
   Cloud.cfg = function () {
-    const ls = readLocalCfg();
     const baked = global.PT_CLOUD || {};
+    if (baked.supabaseUrl && baked.supabaseAnonKey) {
+      return { url: String(baked.supabaseUrl).replace(/\/$/, ""), anonKey: String(baked.supabaseAnonKey) };
+    }
+    const ls = readLocalCfg();
     return {
-      url: ls.url || baked.supabaseUrl || "",
-      anonKey: ls.anonKey || baked.supabaseAnonKey || ""
+      url: ls.url || "",
+      anonKey: ls.anonKey || ""
     };
   };
 
@@ -66,10 +69,7 @@
     let c = Cloud.cfg();
     if (!c.url || !c.anonKey) {
       const hosted = await fetchHostedCfg();
-      if (hosted) {
-        Cloud.saveConfig(hosted.url, hosted.anonKey);
-        c = hosted;
-      }
+      if (hosted) c = hosted;
     }
     if (!c.url || !c.anonKey) {
       Cloud.sb = null;

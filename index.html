@@ -588,7 +588,7 @@
       <div class="auth-mark">PT</div>
       <h2 id="authTitle">트레이너 로그인</h2>
       <p class="auth-lead" id="authLead">관리자만 회원·스케줄을 수정할 수 있습니다. 회원 공유 링크는 로그인 없이 사용할 수 있습니다.</p>
-      <div id="authSetupBox">
+      <div id="authSetupBox" class="hidden">
         <label class="cap">Supabase URL</label>
         <input class="field" id="cloudUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off" />
         <label class="cap">anon public key</label>
@@ -604,7 +604,7 @@
           </ol>
         </details>
       </div>
-      <form id="authForm" class="hidden">
+      <form id="authForm">
         <label class="cap">이메일</label>
         <input class="field" id="authEmail" type="email" required autocomplete="username" placeholder="trainer@email.com" />
         <label class="cap">비밀번호</label>
@@ -613,7 +613,7 @@
         <button class="btn wide" id="authSubmit" type="submit">로그인</button>
         <div class="auth-switch">
           <button type="button" id="authToggle">계정이 없나요? 회원가입</button>
-          <button type="button" id="authReconfig">클라우드 연결 변경</button>
+          <button type="button" id="authReconfig" class="hidden">클라우드 연결 변경</button>
         </div>
       </form>
     </div>
@@ -968,7 +968,7 @@
     <div id="viewerBody"></div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <script src="js/cloud.js"></script>
   <script>
@@ -3386,8 +3386,7 @@
       await Cloud.logout();
       setSyncDot("off");
       showAuthGate(true);
-      if (Cloud.hasConfig()) showAuthForm();
-      else showAuthSetup();
+      showAuthForm();
     };
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && window.Cloud && Cloud.canWrite) Cloud.flush();
@@ -3441,11 +3440,6 @@
         if (!Cloud.ready && Cloud.hasConfig()) await Cloud.initClient();
         const ok = await bootClientView();
         if (!ok) await openShare();
-        return;
-      }
-      if (!Cloud.hasConfig() && !Cloud.ready) {
-        showAuthSetup();
-        showAuthGate(true);
         return;
       }
       if (!Cloud.user) {
