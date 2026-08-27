@@ -59,10 +59,17 @@
     if (!Cloud.sb) return { user: null };
     const { data } = await Cloud.sb.auth.getSession();
     Cloud.user = (data && data.session && data.session.user) || null;
-    Cloud.canWrite = !!Cloud.user;
-    Cloud.sb.auth.onAuthStateChange((_ev, session) => {
+    Cloud.recovering = /type=recovery/i.test(location.hash || "") || /type=recovery/i.test(location.search || "");
+    Cloud.canWrite = !!Cloud.user && !Cloud.recovering;
+    Cloud.sb.auth.onAuthStateChange((ev, session) => {
       Cloud.user = (session && session.user) || null;
-      Cloud.canWrite = !!Cloud.user;
+      if (ev === "PASSWORD_RECOVERY") {
+        Cloud.recovering = true;
+        Cloud.canWrite = false;
+        if (typeof Cloud._hooks.onRecovery === "function") Cloud._hooks.onRecovery();
+        return;
+      }
+      Cloud.canWrite = !!Cloud.user && !Cloud.recovering;
       if (typeof Cloud._hooks.onAuth === "function") Cloud._hooks.onAuth(Cloud.user);
     });
     return { user: Cloud.user };
@@ -92,6 +99,24 @@
     Cloud.user = null;
     Cloud.canWrite = false;
     Cloud.gymId = null;
+    Cloud.recovering = false;
+  };
+
+  Cloud.resetPassword = async function (email) {
+    if (!Cloud.sb) throw new Error("클라우드가 연결되지 않았습니다.");
+    const redirectTo = location.origin + location.pathname.replace(/index\.html$/i, "");
+    const { error } = await Cloud.sb.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+  };
+
+  Cloud.updatePassword = async function (password) {
+    if (!Cloud.sb) throw new Error("클라우드가 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.auth.updateUser({ password });
+    if (error) throw error;
+    Cloud.recovering = false;
+    Cloud.user = (data && data.user) || Cloud.user;
+    Cloud.canWrite = !!Cloud.user;
+    return Cloud.user;
   };
 
   function stripLogs(state) {

@@ -557,6 +557,14 @@
       border: 0; background: transparent; color: var(--accent); font-weight: 700; font-size: .88rem; padding: 8px;
       display: block; width: 100%;
     }
+    .auth-forgot {
+      display: block; width: 100%; margin: 8px 0 0; padding: 6px 0;
+      border: 0; background: transparent; color: var(--muted);
+      font-weight: 700; font-size: .84rem; text-align: right;
+    }
+    .auth-forgot:hover { color: var(--accent); }
+    .auth-ok { display: none; margin: 10px 0 0; color: var(--ok); font-size: .84rem; font-weight: 700; line-height: 1.45; }
+    .auth-ok.on { display: block; }
     .auth-err { display: none; margin: 10px 0 0; color: var(--danger); font-size: .84rem; font-weight: 700; line-height: 1.4; }
     .auth-err.on { display: block; }
     .auth-setup {
@@ -594,9 +602,28 @@
         <input class="field" id="authPass" type="password" required autocomplete="current-password" minlength="6" placeholder="6자 이상" />
         <p class="auth-err" id="authErr"></p>
         <button class="btn wide" id="authSubmit" type="submit">로그인</button>
+        <button class="auth-forgot" id="authForgot" type="button">비밀번호를 잊으셨나요?</button>
         <div class="auth-switch">
           <button type="button" id="authToggle">계정이 없나요? 회원가입</button>
         </div>
+      </form>
+      <form id="authResetBox" class="hidden">
+        <label class="cap">가입한 이메일</label>
+        <input class="field" id="resetEmail" type="email" required autocomplete="email" placeholder="trainer@email.com" />
+        <p class="auth-ok" id="resetOk"></p>
+        <p class="auth-err" id="resetErr"></p>
+        <button class="btn wide" id="resetSend" type="submit">재설정 링크 보내기</button>
+        <div class="auth-switch">
+          <button type="button" id="resetBack">로그인으로 돌아가기</button>
+        </div>
+      </form>
+      <form id="authNewPassBox" class="hidden">
+        <label class="cap">새 비밀번호</label>
+        <input class="field" id="newPass" type="password" required autocomplete="new-password" minlength="6" placeholder="6자 이상" />
+        <label class="cap">새 비밀번호 확인</label>
+        <input class="field" id="newPass2" type="password" required autocomplete="new-password" minlength="6" placeholder="한 번 더 입력" />
+        <p class="auth-err" id="newPassErr"></p>
+        <button class="btn wide" id="newPassSave" type="submit">비밀번호 변경</button>
       </form>
     </div>
   </div>
@@ -3294,6 +3321,32 @@
     }
     function showAuthForm() {
       $("authLead").textContent = "이메일로 가입하면 내 회원·스케줄·일지만 따로 저장됩니다. 다른 트레이너 데이터는 보이지 않습니다.";
+      $("authForm").classList.remove("hidden");
+      $("authResetBox").classList.add("hidden");
+      $("authNewPassBox").classList.add("hidden");
+      $("authForgot").classList.toggle("hidden", authMode === "signup");
+    }
+    function showResetForm() {
+      $("authTitle").textContent = "비밀번호 찾기";
+      $("authLead").textContent = "가입한 이메일을 입력하면 비밀번호 재설정 링크를 보내드립니다.";
+      $("authForm").classList.add("hidden");
+      $("authResetBox").classList.remove("hidden");
+      $("authNewPassBox").classList.add("hidden");
+      $("resetOk").classList.remove("on");
+      $("resetOk").textContent = "";
+      $("resetErr").classList.remove("on");
+      $("resetErr").textContent = "";
+      const fromLogin = $("authEmail").value.trim();
+      if (fromLogin && !$("resetEmail").value) $("resetEmail").value = fromLogin;
+      $("resetEmail").focus();
+    }
+    function showNewPassForm() {
+      $("authTitle").textContent = "새 비밀번호";
+      $("authLead").textContent = "메일 링크가 확인되었습니다. 사용할 새 비밀번호를 입력하세요.";
+      $("authForm").classList.add("hidden");
+      $("authResetBox").classList.add("hidden");
+      $("authNewPassBox").classList.remove("hidden");
+      showAuthGate(true);
     }
     function setAuthErr(msg) {
       const el = $("authErr");
@@ -3307,8 +3360,59 @@
       $("authSubmit").textContent = authMode === "login" ? "로그인" : "계정 만들기";
       $("authToggle").textContent = authMode === "login" ? "계정이 없나요? 회원가입" : "이미 계정이 있나요? 로그인";
       $("authPass").autocomplete = authMode === "login" ? "current-password" : "new-password";
+      $("authForgot").classList.toggle("hidden", authMode === "signup");
       setAuthErr("");
     };
+    $("authForgot").onclick = () => showResetForm();
+    $("resetBack").onclick = () => {
+      authMode = "login";
+      $("authTitle").textContent = "트레이너 로그인";
+      $("authSubmit").textContent = "로그인";
+      $("authToggle").textContent = "계정이 없나요? 회원가입";
+      showAuthForm();
+    };
+    $("authResetBox").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $("resetEmail").value.trim();
+      const ok = $("resetOk");
+      const err = $("resetErr");
+      ok.classList.remove("on"); ok.textContent = "";
+      err.classList.remove("on"); err.textContent = "";
+      if (!email) { err.textContent = "이메일을 입력해 주세요."; err.classList.add("on"); return; }
+      $("resetSend").disabled = true;
+      try {
+        await Cloud.resetPassword(email);
+        ok.textContent = "비밀번호 재설정 링크가 이메일로 발송되었습니다. 메일함을 확인해주세요.";
+        ok.classList.add("on");
+      } catch (ex) {
+        err.textContent = (ex && ex.message) || "메일 발송에 실패했습니다.";
+        err.classList.add("on");
+      } finally {
+        $("resetSend").disabled = false;
+      }
+    });
+    $("authNewPassBox").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const a = $("newPass").value;
+      const b = $("newPass2").value;
+      const err = $("newPassErr");
+      err.classList.remove("on"); err.textContent = "";
+      if (a.length < 6) { err.textContent = "비밀번호는 6자 이상이어야 합니다."; err.classList.add("on"); return; }
+      if (a !== b) { err.textContent = "비밀번호가 서로 다릅니다."; err.classList.add("on"); return; }
+      $("newPassSave").disabled = true;
+      try {
+        await Cloud.updatePassword(a);
+        if (location.hash && /type=recovery/i.test(location.hash)) {
+          history.replaceState(null, "", location.pathname + location.search);
+        }
+        await enterTrainerApp();
+      } catch (ex) {
+        err.textContent = (ex && ex.message) || "비밀번호 변경에 실패했습니다.";
+        err.classList.add("on");
+      } finally {
+        $("newPassSave").disabled = false;
+      }
+    });
     $("authForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       setAuthErr("");
@@ -3378,7 +3482,8 @@
         else if (mode === "saved") { setSyncDot("on"); }
         else if (mode === "error") { setSyncDot("error"); toastCloud("저장 실패 — 네트워크를 확인해 주세요", true); console.warn(err); }
       },
-      shares: () => (state.members || []).map((m) => m.share)
+      shares: () => (state.members || []).map((m) => m.share),
+      onRecovery: () => showNewPassForm()
     });
     window.addEventListener("hashchange", () => {
       if (clientViewId()) { bootClientView(); return; }
@@ -3397,6 +3502,10 @@
         if (!Cloud.ready && Cloud.hasConfig()) await Cloud.initClient();
         const ok = await bootClientView();
         if (!ok) await openShare();
+        return;
+      }
+      if (Cloud.recovering) {
+        showNewPassForm();
         return;
       }
       if (!Cloud.user) {
