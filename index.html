@@ -7,6 +7,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>PT 일지</title>
+  <script>
+    (function () {
+      var q = location.search + location.hash + location.pathname;
+      if (/client-view=|#share\/|#sync\//.test(q) || /\/client-view/.test(location.pathname)) {
+        document.documentElement.dataset.client = "1";
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <style>
     :root {
@@ -517,11 +525,110 @@
       .split-tile .side { width: 58px; font-size: .68rem; }
       .hdr-btn { padding: 0 8px !important; }
     }
+    body.auth-open { padding-bottom: 0; }
+    html:not([data-client="1"]) body.auth-open .top,
+    html:not([data-client="1"]) body.auth-open main,
+    html:not([data-client="1"]) body.auth-open .tabbar,
+    html:not([data-client="1"]) body.auth-open .client-nav { display: none !important; }
+    #authGate {
+      display: none; position: fixed; inset: 0; z-index: 80; background: var(--bg);
+      align-items: center; justify-content: center;
+      padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px));
+      overflow: auto;
+    }
+    body.auth-open #authGate { display: flex; }
+    html[data-client="1"] #authGate,
+    html[data-client="1"] body.auth-open #authGate { display: none !important; }
+    .auth-card {
+      width: 100%; max-width: 400px; background: var(--card); border-radius: 16px;
+      box-shadow: var(--shadow-lg); padding: 28px 22px 22px;
+    }
+    .auth-mark {
+      width: 48px; height: 48px; border-radius: 14px; background: var(--accent);
+      color: #fff; font-weight: 800; font-size: 1.15rem;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); margin-bottom: 14px;
+    }
+    .auth-card h2 { margin: 0 0 6px; font-size: 1.28rem; font-weight: 800; letter-spacing: -.03em; }
+    .auth-card .auth-lead { margin: 0 0 18px; color: var(--muted); font-size: .9rem; line-height: 1.45; }
+    .auth-card .btn.wide { margin-top: 10px; }
+    .auth-card .auth-switch { margin: 14px 0 0; text-align: center; }
+    .auth-card .auth-switch button {
+      border: 0; background: transparent; color: var(--accent); font-weight: 700; font-size: .88rem; padding: 8px;
+      display: block; width: 100%;
+    }
+    .auth-card .auth-switch button#authReconfig { color: var(--muted); font-weight: 600; font-size: .8rem; }
+    .auth-err { display: none; margin: 10px 0 0; color: var(--danger); font-size: .84rem; font-weight: 700; line-height: 1.4; }
+    .auth-err.on { display: block; }
+    .auth-setup {
+      margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
+    }
+    .auth-setup summary {
+      cursor: pointer; font-weight: 800; font-size: .82rem; color: var(--muted); list-style: none;
+    }
+    .auth-setup summary::-webkit-details-marker { display: none; }
+    .auth-setup ol { margin: 10px 0 12px; padding-left: 18px; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+    .auth-setup a { color: var(--accent); font-weight: 700; }
+    #cloudToast {
+      position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
+      z-index: 70; display: none; background: #1A1D21; color: #fff; font-size: .78rem; font-weight: 700;
+      padding: 8px 14px; border-radius: 999px; box-shadow: var(--shadow-lg); white-space: nowrap;
+    }
+    #cloudToast.on { display: block; }
+    #cloudToast.err { background: var(--danger); }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex-shrink: 0; }
+    .sync-dot.off { background: var(--muted); }
+    .sync-dot.err { background: var(--danger); }
   </style>
 </head>
-<body>
+<body class="auth-open">
+  <div id="cloudToast" role="status"></div>
+  <div id="authGate" aria-modal="true" role="dialog" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-mark">PT</div>
+      <h2 id="authTitle">트레이너 로그인</h2>
+      <p class="auth-lead" id="authLead">관리자만 회원·스케줄을 수정할 수 있습니다. 회원 공유 링크는 로그인 없이 사용할 수 있습니다.</p>
+      <div id="authSetupBox">
+        <label class="cap">Supabase URL</label>
+        <input class="field" id="cloudUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+        <label class="cap">anon public key</label>
+        <textarea class="field" id="cloudKey" placeholder="eyJ..." style="min-height:72px"></textarea>
+        <button class="btn wide" id="cloudSaveCfg" type="button">클라우드 연결</button>
+        <details class="auth-setup" open>
+          <summary>처음이신가요? 1분 설정</summary>
+          <ol>
+            <li><a href="https://supabase.com/dashboard" target="_blank" rel="noopener">Supabase</a>에서 무료 프로젝트를 만듭니다.</li>
+            <li>Project Settings → API에서 Project URL과 anon key를 복사합니다.</li>
+            <li>SQL Editor에서 <button class="btn soft" id="copySql" type="button" style="min-height:32px;display:inline-flex;padding:0 10px;font-size:.75rem">schema.sql 복사</button> 후 실행합니다.</li>
+            <li>Authentication → Providers → Email에서 Confirm email을 끕니다.</li>
+          </ol>
+        </details>
+      </div>
+      <form id="authForm" class="hidden">
+        <label class="cap">이메일</label>
+        <input class="field" id="authEmail" type="email" required autocomplete="username" placeholder="trainer@email.com" />
+        <label class="cap">비밀번호</label>
+        <input class="field" id="authPass" type="password" required autocomplete="current-password" minlength="6" placeholder="6자 이상" />
+        <p class="auth-err" id="authErr"></p>
+        <button class="btn wide" id="authSubmit" type="submit">로그인</button>
+        <div class="auth-switch">
+          <button type="button" id="authToggle">계정이 없나요? 회원가입</button>
+          <button type="button" id="authReconfig">클라우드 연결 변경</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <header class="top">
-    <div id="barHome"><h1>홈</h1><p id="homeDate"></p></div>
+    <div id="barHome">
+      <div class="row">
+        <div style="flex:1;min-width:0">
+          <h1>홈</h1>
+          <p id="homeDate"></p>
+        </div>
+        <span class="sync-dot off" id="syncDot" title="클라우드 동기화"></span>
+        <button class="btn soft hdr-btn" id="logoutBtn" type="button">로그아웃</button>
+      </div>
+    </div>
     <div id="barLog" class="hidden">
       <div id="logPickHead"><h1>운동 일지</h1><p>기록할 회원을 선택하세요</p></div>
       <div id="logArchiveHead" class="row hidden">
@@ -861,6 +968,9 @@
     <div id="viewerBody"></div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/cloud.js"></script>
   <script>
     const DATA_KEY = "pt-logger-v3";
     const OLD_KEY = "pt-logger-v2";
@@ -873,7 +983,7 @@
       return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
     };
     const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    const shareCode = () => Math.random().toString(36).slice(2, 8);
+    const shareCode = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2, 8);
     const esc = (s) => String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const prettyDate = (iso) => {
       if (!iso) return "";
@@ -935,9 +1045,33 @@
       } catch { return { members: [] }; }
     }
     const liveCh = ("BroadcastChannel" in window) ? new BroadcastChannel("pt-logger-v3") : null;
-    function saveData() {
+    function cacheLocal() {
       localStorage.setItem(DATA_KEY, JSON.stringify(state));
       if (liveCh) liveCh.postMessage({ t: Date.now() });
+    }
+    function saveData() {
+      cacheLocal();
+      if (window.Cloud && Cloud.canWrite) Cloud.schedulePush();
+    }
+    function setCloudState(next) {
+      state = { members: ((next && next.members) || []).map(normalizeMember) };
+      cacheLocal();
+    }
+    function toastCloud(msg, err) {
+      const el = $("cloudToast");
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.toggle("err", !!err);
+      el.classList.add("on");
+      clearTimeout(toastCloud._t);
+      toastCloud._t = setTimeout(() => el.classList.remove("on"), err ? 4200 : 1600);
+    }
+    function setSyncDot(mode) {
+      const d = $("syncDot");
+      if (!d) return;
+      d.classList.remove("off", "err");
+      if (mode === "off") d.classList.add("off");
+      if (mode === "error") d.classList.add("err");
     }
     function refreshLiveViews() {
       if (tab === "detail") renderDetail();
@@ -966,13 +1100,28 @@
         req.onerror = () => reject(req.error);
       });
     }
-    async function putFile(id, blob) {
+    async function putFileLocal(id, blob) {
       const db = await openDb();
       await new Promise((resolve, reject) => {
         const tx = db.transaction(STORE, "readwrite");
         tx.objectStore(STORE).put(blob, id);
         tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
       });
+    }
+    async function listFileIds() {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE, "readonly").objectStore(STORE).getAllKeys();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function putFile(id, blob, share) {
+      await putFileLocal(id, blob);
+      if (window.Cloud && Cloud.ready) {
+        const url = await Cloud.upload(id, blob, share || (shareCtx && shareCtx.code) || "");
+        if (url) { urls.set(id, url); return; }
+      }
     }
     async function getFile(id) {
       const db = await openDb();
@@ -982,7 +1131,7 @@
         req.onerror = () => reject(req.error);
       });
     }
-    async function delFile(id) {
+    async function delFile(id, share) {
       const db = await openDb();
       await new Promise((resolve, reject) => {
         const tx = db.transaction(STORE, "readwrite");
@@ -990,12 +1139,24 @@
         tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
       });
       const u = urls.get(id); if (u) { URL.revokeObjectURL(u); urls.delete(id); }
+      if (window.Cloud && Cloud.ready) Cloud.removeFile(id, share || (shareCtx && shareCtx.code) || "");
     }
-    async function fileUrl(id) {
+    async function fileUrl(id, share) {
       if (urls.has(id)) return urls.get(id);
       const blob = await getFile(id);
-      if (!blob) return "";
-      const u = URL.createObjectURL(blob); urls.set(id, u); return u;
+      if (blob) {
+        const u = URL.createObjectURL(blob); urls.set(id, u); return u;
+      }
+      if (window.Cloud && Cloud.ready) {
+        const remote = await Cloud.download(id, share || (shareCtx && shareCtx.code) || "");
+        if (remote) {
+          await putFileLocal(id, remote);
+          const u = URL.createObjectURL(remote); urls.set(id, u); return u;
+        }
+        const pub = Cloud.publicUrl(id, share || (shareCtx && shareCtx.code) || "");
+        if (pub) { urls.set(id, pub); return pub; }
+      }
+      return "";
     }
     function compressImage(file) {
       return new Promise((resolve) => {
@@ -1697,8 +1858,15 @@
       } catch (_) {}
       return base;
     }
-    function shareUrl(m) { return packUrl(m.share, snapshot(m)); }
-    function logShareUrl(m) { return packUrl(m.share, todayLogPack(m)); }
+    function clientViewUrl(m) {
+      return appBase() + "client-view/?id=" + encodeURIComponent(m.id) + "#share/" + encodeURIComponent(m.share);
+    }
+    function logShareUrl(m) {
+      return clientViewUrl(m);
+    }
+    function shareUrl(m) {
+      return clientViewUrl(m);
+    }
     function clientViewId() {
       return (new URLSearchParams(location.search).get("client-view") || "").trim();
     }
@@ -1707,14 +1875,6 @@
       path = path.replace(/\/client-view\/?$/i, "/");
       if (!path.endsWith("/")) path += "/";
       return location.origin + path;
-    }
-    function clientViewUrl(m) {
-      let hash = "#share/" + m.share;
-      try {
-        const packed = btoa(unescape(encodeURIComponent(JSON.stringify(snapshot(m)))));
-        if (packed.length < 50000) hash += "/" + packed;
-      } catch (_) {}
-      return appBase() + "client-view/?id=" + encodeURIComponent(m.id) + hash;
     }
     async function copyLink(url, msg) {
       if (navigator.share) {
@@ -1840,16 +2000,19 @@
       const m = memberByShare(code);
       if (m) { m.selfWorkouts = m.selfWorkouts || []; m.selfWorkouts.push(row); saveData(); }
       else { const g = loadPortal(code); g.selfWorkouts = g.selfWorkouts || []; g.selfWorkouts.push(row); savePortal(code, g); }
+      if (window.Cloud && Cloud.ready) Cloud.upsertLog(code, "self_workout", row);
     }
     function removeSelfWorkout(code, id) {
       const m = memberByShare(code);
       if (m) { m.selfWorkouts = (m.selfWorkouts || []).filter((x) => x.id !== id); saveData(); }
       else { const g = loadPortal(code); g.selfWorkouts = (g.selfWorkouts || []).filter((x) => x.id !== id); savePortal(code, g); }
+      if (window.Cloud && Cloud.ready) Cloud.deleteLog(code, id);
     }
     function writeMemberDiet(code, row) {
       const m = memberByShare(code);
       if (m) { m.dietLogs = m.dietLogs || []; m.dietLogs.push(row); saveData(); }
       else { const g = loadPortal(code); g.dietLogs = g.dietLogs || []; g.dietLogs.push(row); savePortal(code, g); }
+      if (window.Cloud && Cloud.ready) Cloud.upsertLog(code, "diet", row);
     }
     function trainerDayHtml(data, bare) {
       let date = data.date || today();
@@ -1927,6 +2090,15 @@
       return parts.join("") || '<div class="empty" style="padding:12px">없음</div>';
     }
     async function renderShareLive() {
+      const remote = (window.Cloud && Cloud.ready)
+        ? await Cloud.fetchMember(shareCtx.code || (shareCtx.data && (shareCtx.data.id || shareCtx.data.share)))
+        : null;
+      if (remote) {
+        const m = normalizeMember(remote);
+        savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
+        await renderShare({ ...snapshot(m), name: m.name, share: m.share, photos: m.photos, kind: shareCtx.kind });
+        return;
+      }
       const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
       if (local) await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos, kind: shareCtx.kind });
       else if (shareCtx.data) await renderShare(shareCtx.data);
@@ -2894,6 +3066,9 @@
         if (!row) return;
         row.coachComment = ((ta && ta.value) || "").trim();
         saveData();
+        if (window.Cloud && Cloud.ready && (kind === "dietLogs" || kind === "selfWorkouts")) {
+          Cloud.upsertLog(m.share, kind === "dietLogs" ? "diet" : "self_workout", row);
+        }
         alert("코멘트를 저장했습니다. 회원 공유 페이지에서 확인할 수 있습니다.");
         renderDetail();
         return;
@@ -2921,12 +3096,14 @@
         const row = (m[key] || []).find((x) => x.id === id);
         if (row && row.photoId) await delFile(row.photoId);
         m[key] = (m[key] || []).filter((x) => x.id !== id);
+        if (key === "dietLogs" && window.Cloud && Cloud.ready) Cloud.deleteLog(m.share, id);
         saveData(); renderDetail(); return;
       }
       if (delP) { e.stopPropagation(); await delFile(delP.dataset.delPhoto); currentMember().photos = currentMember().photos.filter((x) => x.id !== delP.dataset.delPhoto); saveData(); renderDetail(); return; }
       if (delS) {
         const m = currentMember();
         m.selfWorkouts = (m.selfWorkouts || []).filter((x) => x.id !== delS.dataset.delSelf);
+        if (window.Cloud && Cloud.ready) Cloud.deleteLog(m.share, delS.dataset.delSelf);
         saveData(); renderDetail(); return;
       }
       if (view && !e.target.closest(".x")) { showViewer(view.dataset.view.split(":")[0], "image"); return; }
@@ -2964,6 +3141,10 @@
         }
       }
       state.members = state.members.filter((x) => x.id !== m.id);
+      if (window.Cloud && Cloud.ready) {
+        for (const w of m.selfWorkouts || []) Cloud.deleteLog(m.share, w.id);
+        for (const n of m.dietLogs || []) Cloud.deleteLog(m.share, n.id);
+      }
       currentId = null; saveData(); setTab("members");
     };
     $("pageShare").addEventListener("click", async (e) => {
@@ -3019,17 +3200,8 @@
         if (!text && !file) { alert("메모나 사진을 남겨 주세요."); return; }
         const row = { id: uid(), date: today(), text, meal: shareCtx.meal, source: "member" };
         if (file) {
-          const blob = await compressImage(file);
-          if (memberByShare(shareCtx.code)) {
-            row.photoId = uid();
-            await putFile(row.photoId, blob);
-          } else {
-            row.photoData = await new Promise((res) => {
-              const r = new FileReader();
-              r.onload = () => res(r.result);
-              r.readAsDataURL(blob);
-            });
-          }
+          row.photoId = uid();
+          await putFile(row.photoId, await compressImage(file), shareCtx.code);
         }
         writeMemberDiet(shareCtx.code, row);
         $("shareDietText").value = "";
@@ -3055,15 +3227,34 @@
     });
     $("closeViewer").onclick = () => { $("viewer").classList.add("hidden"); $("viewerBody").innerHTML = ""; };
     $("viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") $("closeViewer").click(); });
+    async function fetchCloudMember(ref) {
+      if (!(window.Cloud && Cloud.ready) || !ref) return null;
+      const remote = await Cloud.fetchMember(ref);
+      if (!remote) return null;
+      const m = normalizeMember(remote);
+      savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
+      return m;
+    }
+    function shareRefFromLocation() {
+      const h = (location.hash || "").replace(/^#/, "");
+      const m = h.match(/^(?:share|sync)\/([^/]+)/);
+      if (m) {
+        try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+      }
+      return clientViewId() || "";
+    }
     async function bootClientView() {
       const id = clientViewId();
       if (!id) return false;
-      const parsed = parseShareHash();
-      if (parsed && parsed.sync) {
-        await applySyncHash(parsed.hash);
-        history.replaceState(null, "", location.pathname + location.search + "#share/" + parsed.hash.split("/")[1]);
+      const remote = await fetchCloudMember(shareRefFromLocation() || id);
+      if (remote) {
+        currentId = remote.id;
+        setTab("share", true);
+        await renderShare({ ...snapshot(remote), name: remote.name, share: remote.share, photos: remote.photos });
+        return true;
       }
-      const local = memberBy(id) || memberByShare(id);
+      const parsed = parseShareHash();
+      const local = memberBy(id) || memberByShare(id) || memberByShare(shareRefFromLocation());
       if (local) {
         currentId = local.id;
         setTab("share", true);
@@ -3075,16 +3266,22 @@
         await renderShare(parsed);
         return true;
       }
-      $("shareBody").innerHTML = '<div class="empty">이 기기에는 데이터가 없습니다.<br>트레이너가 보낸 전체 링크(긴 주소)로 다시 열어 주세요.</div>';
+      $("shareBody").innerHTML = '<div class="empty">회원 기록을 불러오지 못했습니다.<br>트레이너가 보낸 링크로 다시 열어 주세요.</div>';
       return true;
     }
     async function openShare() {
       if (clientViewId()) return bootClientView();
       const parsed = parseShareHash();
       if (!parsed) return false;
+      const code = parsed.share || shareRefFromLocation();
+      const remote = await fetchCloudMember(code);
+      if (remote) {
+        setTab("share", true);
+        await renderShare({ ...snapshot(remote), name: remote.name, share: remote.share, photos: remote.photos, kind: parsed.kind });
+        return true;
+      }
       if (parsed.sync) {
         const ok = await applySyncHash(parsed.hash);
-        const code = parsed.hash.split("/")[1];
         alert(ok ? "회원 개인 기록을 불러왔습니다." : "이 기기에서 해당 회원을 찾을 수 없습니다. 트레이너 앱에서 열어 주세요.");
         history.replaceState(null, "", location.pathname + location.search + "#share/" + code);
         const m = memberByShare(code);
@@ -3097,23 +3294,166 @@
       }
       setTab("share", true);
       if (parsed.missing) {
-        $("shareBody").innerHTML = '<div class="empty">이 기기에는 데이터가 없습니다.<br>트레이너가 보낸 전체 링크(긴 주소)로 다시 열어 주세요.</div>';
+        $("shareBody").innerHTML = '<div class="empty">회원 기록을 불러오지 못했습니다.<br>트레이너가 보낸 링크로 다시 열어 주세요.</div>';
         return true;
       }
       await renderShare(parsed);
       return true;
     }
+    function isClientRoute() {
+      return !!(clientViewId() || document.documentElement.dataset.client === "1");
+    }
+    function showAuthGate(on) {
+      document.body.classList.toggle("auth-open", !!on);
+    }
+    function showAuthForm() {
+      $("authSetupBox").classList.add("hidden");
+      $("authForm").classList.remove("hidden");
+      const c = Cloud.cfg();
+      $("authLead").textContent = "관리자만 회원·스케줄을 수정할 수 있습니다. 회원 공유 링크는 로그인 없이 사용할 수 있습니다.";
+      if (c.url) $("authLead").textContent += "";
+    }
+    function showAuthSetup() {
+      $("authSetupBox").classList.remove("hidden");
+      $("authForm").classList.add("hidden");
+      const c = Cloud.cfg();
+      $("cloudUrl").value = c.url || "";
+      $("cloudKey").value = c.anonKey || "";
+    }
+    function setAuthErr(msg) {
+      const el = $("authErr");
+      el.textContent = msg || "";
+      el.classList.toggle("on", !!msg);
+    }
+    let authMode = "login";
+    $("authToggle").onclick = () => {
+      authMode = authMode === "login" ? "signup" : "login";
+      $("authTitle").textContent = authMode === "login" ? "트레이너 로그인" : "트레이너 회원가입";
+      $("authSubmit").textContent = authMode === "login" ? "로그인" : "계정 만들기";
+      $("authToggle").textContent = authMode === "login" ? "계정이 없나요? 회원가입" : "이미 계정이 있나요? 로그인";
+      $("authPass").autocomplete = authMode === "login" ? "current-password" : "new-password";
+      setAuthErr("");
+    };
+    $("authReconfig").onclick = () => showAuthSetup();
+    $("cloudSaveCfg").onclick = async () => {
+      const url = $("cloudUrl").value.trim();
+      const key = $("cloudKey").value.trim();
+      if (!url || !key) { alert("URL과 anon key를 모두 입력해 주세요."); return; }
+      Cloud.saveConfig(url, key);
+      const ok = await Cloud.initClient();
+      if (!ok) { alert("연결에 실패했습니다. URL과 키를 다시 확인해 주세요."); return; }
+      showAuthForm();
+    };
+    $("copySql").onclick = async () => {
+      try {
+        const res = await fetch("supabase/schema.sql");
+        const sql = await res.text();
+        await navigator.clipboard.writeText(sql);
+        $("copySql").textContent = "복사됨";
+        setTimeout(() => { $("copySql").textContent = "schema.sql 복사"; }, 1600);
+      } catch {
+        alert("schema.sql을 복사하지 못했습니다. 프로젝트의 supabase/schema.sql 파일을 직접 열어 주세요.");
+      }
+    };
+    $("authForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setAuthErr("");
+      const email = $("authEmail").value.trim();
+      const password = $("authPass").value;
+      $("authSubmit").disabled = true;
+      try {
+        if (authMode === "signup") {
+          const data = await Cloud.signup(email, password);
+          if (!data.session) {
+            setAuthErr("가입은 완료됐습니다. 이메일 확인이 켜져 있으면 메일 확인 후 로그인하세요. (권장: Authentication → Email에서 Confirm email 끄기)");
+            authMode = "login";
+            $("authTitle").textContent = "트레이너 로그인";
+            $("authSubmit").textContent = "로그인";
+            return;
+          }
+        } else {
+          await Cloud.login(email, password);
+        }
+        await enterTrainerApp();
+      } catch (err) {
+        setAuthErr((err && err.message) || "로그인에 실패했습니다.");
+      } finally {
+        $("authSubmit").disabled = false;
+      }
+    });
+    $("logoutBtn").onclick = async () => {
+      if (Cloud.canWrite) await Cloud.flush();
+      await Cloud.logout();
+      setSyncDot("off");
+      showAuthGate(true);
+      if (Cloud.hasConfig()) showAuthForm();
+      else showAuthSetup();
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && window.Cloud && Cloud.canWrite) Cloud.flush();
+    });
+    window.addEventListener("pagehide", () => {
+      if (window.Cloud && Cloud.canWrite) Cloud.flush();
+    });
+    async function enterTrainerApp() {
+      showAuthGate(false);
+      setSyncDot("off");
+      toastCloud("클라우드에서 불러오는 중…");
+      try {
+        const next = await Cloud.hydrate(state);
+        setCloudState(next);
+        Cloud.subscribe();
+        Cloud.migrateLocalFiles(listFileIds, getFile);
+        setSyncDot("on");
+        toastCloud("모든 기기와 동기화됨");
+      } catch (err) {
+        setSyncDot("error");
+        toastCloud("클라우드 불러오기 실패 — 이 기기 기록을 표시합니다", true);
+      }
+      const opened = await openShare();
+      if (!opened) setTab(tab && tab !== "share" ? tab : "home");
+    }
+    if (window.Cloud) Cloud.attach({
+      getState: () => state,
+      setState: setCloudState,
+      onRemote: () => refreshLiveViews(),
+      onStatus: (mode, err) => {
+        if (mode === "saving") { setSyncDot("on"); }
+        else if (mode === "saved") { setSyncDot("on"); }
+        else if (mode === "error") { setSyncDot("error"); toastCloud("저장 실패 — 네트워크를 확인해 주세요", true); console.warn(err); }
+      },
+      shares: () => (state.members || []).map((m) => m.share)
+    });
     window.addEventListener("hashchange", () => {
       if (clientViewId()) { bootClientView(); return; }
       const h = location.hash || "";
       if (h.startsWith("#share/") || h.startsWith("#sync/")) openShare();
       else if (tab === "share") setTab("home");
     });
-    saveData();
     (async () => {
-      if (await bootClientView()) return;
-      const ok = await openShare();
-      if (!ok) setTab("home");
+      if (!window.Cloud) {
+        showAuthGate(true);
+        return;
+      }
+      await Cloud.init();
+      if (isClientRoute()) {
+        showAuthGate(false);
+        if (!Cloud.ready && Cloud.hasConfig()) await Cloud.initClient();
+        const ok = await bootClientView();
+        if (!ok) await openShare();
+        return;
+      }
+      if (!Cloud.hasConfig() && !Cloud.ready) {
+        showAuthSetup();
+        showAuthGate(true);
+        return;
+      }
+      if (!Cloud.user) {
+        showAuthForm();
+        showAuthGate(true);
+        return;
+      }
+      await enterTrainerApp();
     })();
   </script>
 </body>
