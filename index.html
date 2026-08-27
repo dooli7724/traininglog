@@ -557,7 +557,6 @@
       border: 0; background: transparent; color: var(--accent); font-weight: 700; font-size: .88rem; padding: 8px;
       display: block; width: 100%;
     }
-    .auth-card .auth-switch button#authReconfig { color: var(--muted); font-weight: 600; font-size: .8rem; }
     .auth-err { display: none; margin: 10px 0 0; color: var(--danger); font-size: .84rem; font-weight: 700; line-height: 1.4; }
     .auth-err.on { display: block; }
     .auth-setup {
@@ -587,23 +586,7 @@
     <div class="auth-card">
       <div class="auth-mark">PT</div>
       <h2 id="authTitle">트레이너 로그인</h2>
-      <p class="auth-lead" id="authLead">관리자만 회원·스케줄을 수정할 수 있습니다. 회원 공유 링크는 로그인 없이 사용할 수 있습니다.</p>
-      <div id="authSetupBox" class="hidden">
-        <label class="cap">Supabase URL</label>
-        <input class="field" id="cloudUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off" />
-        <label class="cap">anon public key</label>
-        <textarea class="field" id="cloudKey" placeholder="eyJ..." style="min-height:72px"></textarea>
-        <button class="btn wide" id="cloudSaveCfg" type="button">클라우드 연결</button>
-        <details class="auth-setup" open>
-          <summary>처음이신가요? 1분 설정</summary>
-          <ol>
-            <li><a href="https://supabase.com/dashboard" target="_blank" rel="noopener">Supabase</a>에서 무료 프로젝트를 만듭니다.</li>
-            <li>Project Settings → API에서 Project URL과 anon key를 복사합니다.</li>
-            <li>SQL Editor에서 <button class="btn soft" id="copySql" type="button" style="min-height:32px;display:inline-flex;padding:0 10px;font-size:.75rem">schema.sql 복사</button> 후 실행합니다.</li>
-            <li>Authentication → Providers → Email에서 Confirm email을 끕니다.</li>
-          </ol>
-        </details>
-      </div>
+      <p class="auth-lead" id="authLead">이메일로 가입하면 내 회원·스케줄·일지만 따로 저장됩니다. 다른 트레이너 데이터는 보이지 않습니다.</p>
       <form id="authForm">
         <label class="cap">이메일</label>
         <input class="field" id="authEmail" type="email" required autocomplete="username" placeholder="trainer@email.com" />
@@ -613,7 +596,6 @@
         <button class="btn wide" id="authSubmit" type="submit">로그인</button>
         <div class="auth-switch">
           <button type="button" id="authToggle">계정이 없나요? 회원가입</button>
-          <button type="button" id="authReconfig" class="hidden">클라우드 연결 변경</button>
         </div>
       </form>
     </div>
@@ -973,7 +955,6 @@
   <script src="js/cloud.js"></script>
   <script>
     const DATA_KEY = "pt-logger-v3";
-    const OLD_KEY = "pt-logger-v2";
     const DB_NAME = "pt-logger-media";
     const STORE = "files";
     const $ = (id) => document.getElementById(id);
@@ -1038,15 +1019,19 @@
         selfWorkouts: m.selfWorkouts || []
       };
     }
+    function dataKey() {
+      const uid = window.Cloud && Cloud.user && Cloud.user.id;
+      return uid ? DATA_KEY + ":" + uid : DATA_KEY + ":guest";
+    }
     function loadData() {
       try {
-        const raw = JSON.parse(localStorage.getItem(DATA_KEY) || localStorage.getItem(OLD_KEY) || "null");
+        const raw = JSON.parse(localStorage.getItem(dataKey()) || "null");
         return { members: ((raw && raw.members) || []).map(normalizeMember) };
       } catch { return { members: [] }; }
     }
     const liveCh = ("BroadcastChannel" in window) ? new BroadcastChannel("pt-logger-v3") : null;
     function cacheLocal() {
-      localStorage.setItem(DATA_KEY, JSON.stringify(state));
+      localStorage.setItem(dataKey(), JSON.stringify(state));
       if (liveCh) liveCh.postMessage({ t: Date.now() });
     }
     function saveData() {
@@ -1083,7 +1068,8 @@
       if (tab === "home") renderHome();
     }
     window.addEventListener("storage", (e) => {
-      if (e.key !== DATA_KEY || !e.newValue) return;
+      if (!e.key || e.key.indexOf(DATA_KEY) !== 0 || !e.newValue) return;
+      if (e.key !== dataKey()) return;
       try { state = { members: (JSON.parse(e.newValue).members || []).map(normalizeMember) }; }
       catch { return; }
       refreshLiveViews();
@@ -1173,7 +1159,7 @@
       });
     }
 
-    let state = loadData();
+    let state = { members: [] };
     let tab = "home";
     let fromTab = "home";
     let fromCal = false;
@@ -3307,18 +3293,7 @@
       document.body.classList.toggle("auth-open", !!on);
     }
     function showAuthForm() {
-      $("authSetupBox").classList.add("hidden");
-      $("authForm").classList.remove("hidden");
-      const c = Cloud.cfg();
-      $("authLead").textContent = "관리자만 회원·스케줄을 수정할 수 있습니다. 회원 공유 링크는 로그인 없이 사용할 수 있습니다.";
-      if (c.url) $("authLead").textContent += "";
-    }
-    function showAuthSetup() {
-      $("authSetupBox").classList.remove("hidden");
-      $("authForm").classList.add("hidden");
-      const c = Cloud.cfg();
-      $("cloudUrl").value = c.url || "";
-      $("cloudKey").value = c.anonKey || "";
+      $("authLead").textContent = "이메일로 가입하면 내 회원·스케줄·일지만 따로 저장됩니다. 다른 트레이너 데이터는 보이지 않습니다.";
     }
     function setAuthErr(msg) {
       const el = $("authErr");
@@ -3333,27 +3308,6 @@
       $("authToggle").textContent = authMode === "login" ? "계정이 없나요? 회원가입" : "이미 계정이 있나요? 로그인";
       $("authPass").autocomplete = authMode === "login" ? "current-password" : "new-password";
       setAuthErr("");
-    };
-    $("authReconfig").onclick = () => showAuthSetup();
-    $("cloudSaveCfg").onclick = async () => {
-      const url = $("cloudUrl").value.trim();
-      const key = $("cloudKey").value.trim();
-      if (!url || !key) { alert("URL과 anon key를 모두 입력해 주세요."); return; }
-      Cloud.saveConfig(url, key);
-      const ok = await Cloud.initClient();
-      if (!ok) { alert("연결에 실패했습니다. URL과 키를 다시 확인해 주세요."); return; }
-      showAuthForm();
-    };
-    $("copySql").onclick = async () => {
-      try {
-        const res = await fetch("supabase/schema.sql");
-        const sql = await res.text();
-        await navigator.clipboard.writeText(sql);
-        $("copySql").textContent = "복사됨";
-        setTimeout(() => { $("copySql").textContent = "schema.sql 복사"; }, 1600);
-      } catch {
-        alert("schema.sql을 복사하지 못했습니다. 프로젝트의 supabase/schema.sql 파일을 직접 열어 주세요.");
-      }
     };
     $("authForm").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -3384,6 +3338,8 @@
     $("logoutBtn").onclick = async () => {
       if (Cloud.canWrite) await Cloud.flush();
       await Cloud.logout();
+      state = { members: [] };
+      currentId = null;
       setSyncDot("off");
       showAuthGate(true);
       showAuthForm();
@@ -3397,14 +3353,15 @@
     async function enterTrainerApp() {
       showAuthGate(false);
       setSyncDot("off");
+      state = { members: [] };
+      currentId = null;
       toastCloud("클라우드에서 불러오는 중…");
       try {
-        const next = await Cloud.hydrate(state);
+        const next = await Cloud.hydrate();
         setCloudState(next);
         Cloud.subscribe();
-        Cloud.migrateLocalFiles(listFileIds, getFile);
         setSyncDot("on");
-        toastCloud("모든 기기와 동기화됨");
+        toastCloud("내 계정 데이터와 동기화됨");
       } catch (err) {
         setSyncDot("error");
         toastCloud("클라우드 불러오기 실패 — 이 기기 기록을 표시합니다", true);
