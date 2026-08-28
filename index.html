@@ -463,9 +463,18 @@
     .table th { color: var(--muted); }
     .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .pack { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-    .pack .card { margin: 0; text-align: center; padding: 12px 6px; }
+    .pack .card, .pack .pack-cell {
+      margin: 0; text-align: center; padding: 12px 6px;
+      background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
     .pack b { display: block; font-size: 1.4rem; color: var(--accent); font-weight: 800; }
     .pack span { color: var(--muted); font-size: .72rem; font-weight: 700; }
+    .pack-in {
+      width: 100%; text-align: center; font-size: 1.28rem; font-weight: 800; color: var(--accent);
+      min-height: 44px; padding: 6px 4px; border: 1px solid var(--line); border-radius: 10px;
+      background: var(--bg);
+    }
     .act4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; justify-items: stretch; }
     .act4 .btn { min-height: 44px; font-size: .78rem; padding: 8px 6px; white-space: normal; line-height: 1.25; }
     .acc { background: var(--card); border: none; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 10px; overflow: hidden; }
@@ -547,7 +556,7 @@
       .cal-cell .hol { font-size: .52rem; }
       .grid3 { grid-template-columns: 1fr 1fr; }
       .pack { gap: 6px; }
-      .pack .card { padding: 10px 4px; }
+      .pack .card, .pack .pack-cell { padding: 10px 4px; }
       .pack b { font-size: 1.2rem; }
       .kv span { min-width: 64px; }
     }
@@ -790,9 +799,18 @@
 
     <section id="pageDetail" class="page hidden">
       <div class="pack">
-        <div class="card"><b id="packTotal">0</b><span>총 회차</span></div>
-        <div class="card"><b id="packUsed">0</b><span>쓴 횟수</span></div>
-        <div class="card"><b id="packLeft">0</b><span>잔여 횟수</span></div>
+        <label class="pack-cell">
+          <input class="field pack-in" id="packTotalIn" inputmode="numeric" placeholder="0" aria-label="총 회차" />
+          <span>총 회차</span>
+        </label>
+        <div class="card pack-cell">
+          <b id="packUsed">0</b>
+          <span>쓴 횟수</span>
+        </div>
+        <label class="pack-cell">
+          <input class="field pack-in" id="packLeftIn" inputmode="numeric" placeholder="0" aria-label="잔여 횟수" />
+          <span>잔여 횟수</span>
+        </label>
       </div>
       <div class="card" style="margin-bottom:12px">
         <div class="row" style="justify-content:space-between;margin-bottom:8px">
@@ -802,23 +820,21 @@
         <p class="hint" id="memberStatusHint" style="margin:0 0 10px">잔여 횟수와 이용 종료일로 자동 분류됩니다.</p>
         <label class="cap" style="margin-top:0">이용 종료일 (선택)</label>
         <input class="field" id="packEndDate" type="date" />
-        <p class="hint" style="margin:6px 0 0">종료일이 지나면 만료 목록으로 이동합니다. 회차 충전·종료일 연장 시 다시 진행 중으로 복구됩니다.</p>
+        <p class="hint" style="margin:6px 0 8px">총 회차·잔여 횟수는 위에서 바로 고칠 수 있습니다. 종료일이 지나면 만료 목록으로 이동합니다.</p>
+        <button class="btn wide" id="packSaveInfo" type="button">회차 정보 저장</button>
       </div>
       <div id="detailVolume"></div>
       <div class="act4">
-        <button class="btn" id="packUse" type="button">차감</button>
-        <button class="btn soft" id="packAdjust" type="button">잔여 조정</button>
+        <button class="btn" id="packUse" type="button">1회 차감</button>
         <button class="btn soft" id="packBuy" type="button">회차 구매</button>
         <button class="btn" id="packLog" type="button">날짜별 일지</button>
-      </div>
-      <div class="act4">
-        <button class="btn" id="packTodayLog" type="button">오늘 일지 작성</button>
         <button class="btn soft" id="packCal" type="button">캘린더</button>
       </div>
       <div class="add">
-        <button class="btn soft" id="editProfile" type="button" style="flex:1">프로필 수정</button>
+        <button class="btn" id="packTodayLog" type="button" style="flex:1">오늘 일지 작성</button>
+        <button class="btn" id="editProfile" type="button" style="flex:1">프로필 · 회차 수정</button>
       </div>
-      <div class="acc" data-acc="profile">
+      <div class="acc open" data-acc="profile">
         <button class="acc-h" type="button">기본 프로필 <span class="arr">▾</span></button>
         <div class="acc-b" id="profileCard"></div>
       </div>
@@ -923,6 +939,18 @@
       <h2 id="modalTitle">회원 프로필</h2>
       <label class="cap">이름</label>
       <input class="field" id="pName" required placeholder="이름" />
+      <div class="grid2">
+        <div>
+          <label class="cap">총 회차</label>
+          <input class="field" id="pPackTotal" inputmode="numeric" placeholder="0" />
+        </div>
+        <div>
+          <label class="cap">잔여 횟수</label>
+          <input class="field" id="pPackLeft" inputmode="numeric" placeholder="0" />
+        </div>
+      </div>
+      <label class="cap">이용 종료일 (선택)</label>
+      <input class="field" id="pPackEnd" type="date" />
       <div class="grid2">
         <div>
           <label class="cap">성별</label>
@@ -1116,7 +1144,12 @@
       if (mode === "error") d.classList.add("err");
     }
     function refreshLiveViews() {
-      if (tab === "detail") renderDetail();
+      if (tab === "detail") {
+        const el = document.activeElement;
+        const modalOpen = $("modalBg") && !$("modalBg").classList.contains("hidden");
+        const busy = modalOpen || (el && $("pageDetail").contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT"));
+        if (!busy) renderDetail();
+      }
       if (tab === "share" && shareCtx.code) {
         const el = document.activeElement;
         const busy = el && $("pageShare").contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
@@ -1608,6 +1641,13 @@
       const endDate = m.pack.endDate || "";
       return { total, used, left: Math.max(0, total - used), endDate };
     }
+    function writePack(m, totalVal, leftVal, endDate) {
+      let total = Math.max(0, parseInt(totalVal, 10) || 0);
+      const left = Math.max(0, parseInt(leftVal, 10) || 0);
+      if (left > total) total = left;
+      m.pack = { total, used: Math.max(0, total - left), endDate: endDate || "" };
+      return packOf(m);
+    }
     function isMemberExpired(m) {
       const p = packOf(m);
       if (p.endDate && today() > p.endDate) return true;
@@ -1666,7 +1706,9 @@
         <p class="kv"><span>목표</span>${esc(p.goal || "-")}</p>
         <p class="kv"><span>병력/통증</span>${esc(p.history || "-")}</p>
         <p class="kv"><span>운동 경력</span>${esc(p.experience || "-")}</p>
-        <p class="kv"><span>참고</span>${esc(p.notes || "-")}</p></div>`;
+        <p class="kv"><span>참고</span>${esc(p.notes || "-")}</p>
+        <button class="btn wide" type="button" data-edit-profile="1" style="margin-top:10px">프로필 · 회차 수정</button>
+      </div>`;
     }
     async function photoCol(kind) {
       const m = currentMember();
@@ -1887,16 +1929,20 @@
       }
       return parts.join("");
     }
+    let detailAttendWeek = null;
+    let detailAttendMember = null;
     async function renderDetail() {
       const m = currentMember();
       if (!m) { setTab("members"); return; }
       $("detailName").textContent = m.name;
       $("profileCard").innerHTML = profileHtml(m.profile, m.name);
       const pack = packOf(m);
-      $("packTotal").textContent = pack.total;
+      const totalIn = $("packTotalIn");
+      const leftIn = $("packLeftIn");
+      if (document.activeElement !== totalIn) totalIn.value = pack.total ? String(pack.total) : "";
+      if (document.activeElement !== leftIn) leftIn.value = String(pack.left);
       $("packUsed").textContent = pack.used;
-      $("packLeft").textContent = pack.left;
-      $("packLeft").style.color = pack.left ? "var(--ok)" : "var(--danger)";
+      $("packUsed").style.color = pack.left ? "var(--accent)" : "var(--danger)";
       const expired = isMemberExpired(m);
       const badge = $("memberStatusBadge");
       badge.textContent = expired ? "만료" : "진행 중";
@@ -1906,12 +1952,16 @@
         : (pack.endDate ? "이용 종료일 " + pack.endDate + "까지 · 잔여 " + pack.left + "회" : "잔여 " + pack.left + "회 · 종료일 미설정");
       if (document.activeElement !== $("packEndDate")) $("packEndDate").value = pack.endDate || "";
       if (document.activeElement !== $("injuryText")) $("injuryText").value = m.injuries || "";
+      if (detailAttendMember !== m.id) {
+        detailAttendWeek = weekStart(today());
+        detailAttendMember = m.id;
+      }
+      $("detailVolume").innerHTML = weekAttendHtml(m.sessions || {}, detailAttendWeek || today());
       $("attendList").innerHTML = attendHtml(m);
       $("consultList").innerHTML = await notesHtml(m.consults, "consults");
       $("dietList").innerHTML = await notesHtml(m.dietLogs, "dietLogs", { coach: true, canDel: true });
       $("workoutList").innerHTML = workoutHtml(m);
       $("selfWorkoutList").innerHTML = selfWorkoutHtml(m.selfWorkouts, { coach: true, canDel: true });
-      $("detailVolume").innerHTML = volumeChartHtml(weekVolumeSeriesMember(m), m.name + " · 최근 7일 볼륨");
       const body = [...(m.body || [])].sort((a, b) => b.date.localeCompare(a.date));
       if (body.length >= 2) {
         const a = body[0], b = body[1];
@@ -2359,9 +2409,13 @@
     }
     function openModal(id) {
       editingId = id || null;
-      const m = id ? memberBy(id) : { name: "", profile: emptyProfile() };
-      $("modalTitle").textContent = id ? "프로필 수정" : "새 회원 등록";
+      const m = id ? memberBy(id) : { name: "", profile: emptyProfile(), pack: { total: 0, used: 0, endDate: "" } };
+      const pack = packOf(m);
+      $("modalTitle").textContent = id ? "프로필 · 회차 수정" : "새 회원 등록";
       $("pName").value = m.name || "";
+      $("pPackTotal").value = pack.total ? String(pack.total) : "";
+      $("pPackLeft").value = id ? String(pack.left) : "";
+      $("pPackEnd").value = pack.endDate || "";
       $("pGender").value = (m.profile && m.profile.gender) || "";
       $("pAge").value = (m.profile && m.profile.age) || "";
       $("pGoal").value = (m.profile && m.profile.goal) || "";
@@ -2369,6 +2423,7 @@
       $("pExp").value = (m.profile && m.profile.experience) || "";
       $("pNotes").value = (m.profile && m.profile.notes) || "";
       $("modalBg").classList.remove("hidden");
+      $("pName").focus();
     }
     function closeModal() { $("modalBg").classList.add("hidden"); editingId = null; }
 
@@ -2997,8 +3052,20 @@
         gender: $("pGender").value, age: $("pAge").value.trim(), goal: $("pGoal").value.trim(),
         history: $("pHistory").value.trim(), experience: $("pExp").value.trim(), notes: $("pNotes").value.trim()
       };
-      if (editingId) { const m = memberBy(editingId); m.name = name; m.profile = profile; }
-      else { const m = normalizeMember({ name, profile, createdAt: Date.now() }); state.members.push(m); currentId = m.id; }
+      if (editingId) {
+        const m = memberBy(editingId);
+        if (!m) return;
+        m.name = name;
+        m.profile = profile;
+        m.injuries = profile.history;
+        writePack(m, $("pPackTotal").value, $("pPackLeft").value, $("pPackEnd").value);
+      } else {
+        const m = normalizeMember({ name, profile, createdAt: Date.now() });
+        m.injuries = profile.history;
+        writePack(m, $("pPackTotal").value, $("pPackLeft").value, $("pPackEnd").value);
+        state.members.push(m);
+        currentId = m.id;
+      }
       saveData(); closeModal();
       if (currentId) setTab("detail", true); else renderMembers();
     });
@@ -3112,22 +3179,21 @@
       $("bodyFile").value = "";
       saveData(); renderDetail();
     };
+    function savePackFields() {
+      const m = currentMember(); if (!m) return;
+      writePack(m, $("packTotalIn").value, $("packLeftIn").value, $("packEndDate").value);
+      saveData();
+      renderDetail();
+    }
     $("packUse").onclick = () => {
       const m = currentMember(); if (!m) return;
       const p = packOf(m);
-      if (p.left <= 0) { alert("잔여 횟수가 없습니다. 회차를 구매하거나 잔여를 조정하세요."); return; }
+      if (p.left <= 0) { alert("잔여 횟수가 없습니다. 회차를 구매하거나 잔여를 입력하세요."); return; }
       m.pack.used = p.used + 1; saveData(); renderDetail();
     };
-    $("packAdjust").onclick = () => {
-      const m = currentMember(); if (!m) return;
-      const p = packOf(m);
-      const left = prompt("잔여 횟수를 입력하세요", String(p.left));
-      if (left == null) return;
-      const n = Math.max(0, parseInt(left, 10) || 0);
-      if (n > p.total) m.pack.total = n;
-      m.pack.used = Math.max(0, (Number(m.pack.total) || 0) - n);
-      saveData(); renderDetail();
-    };
+    $("packSaveInfo").onclick = savePackFields;
+    $("packTotalIn").addEventListener("change", savePackFields);
+    $("packLeftIn").addEventListener("change", savePackFields);
     $("packBuy").onclick = () => {
       const m = currentMember(); if (!m) return;
       const n = prompt("구매할 회차", "10");
@@ -3143,12 +3209,7 @@
       }
       saveData(); renderDetail();
     };
-    $("packEndDate").addEventListener("change", () => {
-      const m = currentMember(); if (!m) return;
-      m.pack = packOf(m);
-      m.pack.endDate = $("packEndDate").value || "";
-      saveData(); renderDetail();
-    });
+    $("packEndDate").addEventListener("change", savePackFields);
     $("memberSeg").addEventListener("click", (e) => {
       const b = e.target.closest("[data-member-filter]");
       if (!b) return;
@@ -3185,6 +3246,15 @@
       saveData(); renderDetail();
     };
     $("pageDetail").addEventListener("click", async (e) => {
+      if (e.target.closest("[data-edit-profile]")) { openModal(currentId); return; }
+      const attendNav = e.target.closest("[data-attend-week]");
+      if (attendNav) {
+        detailAttendWeek = addDays(weekStart(detailAttendWeek || today()), Number(attendNav.dataset.attendWeek) * 7);
+        renderDetail();
+        return;
+      }
+      const attendDay = e.target.closest("[data-attend-day]");
+      if (attendDay) { openLog(currentId, attendDay.dataset.attendDay); return; }
       const coachSave = e.target.closest("[data-coach-save]");
       if (coachSave) {
         const [kind, id] = coachSave.dataset.coachSave.split(":");
