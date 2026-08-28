@@ -336,6 +336,36 @@
     .volume-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 12px; }
     .volume-head b { font-size: .95rem; font-weight: 800; }
     .volume-head span { color: var(--muted); font-size: .72rem; font-weight: 700; white-space: nowrap; }
+    .attend-card { margin-bottom: 12px; }
+    .attend-week-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+    .attend-week-nav h3 { flex: 1; margin: 0; text-align: center; font-size: .86rem; font-weight: 800; min-width: 0; }
+    .attend-week-nav .btn { min-height: 40px; min-width: 40px; padding: 0 10px; }
+    .attend-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .attend-day {
+      border: 0; border-radius: var(--radius); background: var(--bg); color: var(--text);
+      padding: 8px 2px 6px; text-align: center; min-height: 76px; width: 100%;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .attend-day .wd { font-size: .62rem; font-weight: 800; color: var(--muted); }
+    .attend-day .dn { font-size: .92rem; font-weight: 800; line-height: 1.1; }
+    .attend-day .mark {
+      width: 22px; height: 22px; border-radius: 50%; margin-top: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 800; background: #EEF1F4; color: #C5C9CE;
+    }
+    .attend-day .st { font-size: .54rem; font-weight: 800; color: var(--muted); min-height: 12px; line-height: 1.2; }
+    .attend-day.today { box-shadow: inset 0 0 0 1.5px var(--accent-glow); }
+    .attend-day.sun .wd, .attend-day.sun .dn { color: var(--danger); }
+    .attend-day.ok { box-shadow: inset 0 0 0 1.5px #B8E6C8; }
+    .attend-day.ok .mark { background: var(--ok); color: #fff; }
+    .attend-day.ok .st { color: var(--ok); }
+    .attend-day.miss { box-shadow: inset 0 0 0 1.5px #FFD0CC; }
+    .attend-day.miss .mark { background: var(--danger); color: #fff; }
+    .attend-day.miss .st { color: var(--danger); }
+    .attend-day.soon { box-shadow: inset 0 0 0 1.5px #C5D8FF; }
+    .attend-day.soon .mark { background: var(--accent-soft); color: var(--accent); }
+    .attend-day.soon .st { color: var(--accent); }
     .vol-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 0 2px; }
     .vol-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; }
     .vol-bar-wrap {
@@ -1264,8 +1294,73 @@
         program: s.program || "",
         feedback: s.feedback || "",
         memo: s.memo || "",
-        exercises: (s.exercises || []).map(packEx)
+        exercises: (s.exercises || []).map(packEx),
+        booked: !!(s && s.booked),
+        start: (s && s.start) || "",
+        minutes: (s && s.minutes) || 60
       };
+    }
+    function isScheduledSession(s) {
+      if (!s) return false;
+      return !!(s.booked || (s.exercises || []).length || s.program || s.feedback || s.memo);
+    }
+    function isAttendedSession(s) {
+      if (!s) return false;
+      const sets = (s.exercises || []).reduce((n, e) => n + ((e.sets || []).length), 0);
+      return !!(sets || (s.exercises || []).length || s.program || s.feedback);
+    }
+    function weekAttendHtml(sessions, weekIso) {
+      const start = weekStart(weekIso || today());
+      const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+      const label = days[0].slice(5).replace("-", "/") + " – " + days[6].slice(5).replace("-", "/");
+      const thisWeek = start === weekStart(today());
+      let planned = 0, attended = 0;
+      const cells = days.map((d) => {
+        const s = (sessions || {})[d];
+        const scheduled = isScheduledSession(s);
+        const did = isAttendedSession(s);
+        const cls = ["attend-day"];
+        let mark = "·";
+        let status = "";
+        if (d === today()) cls.push("today");
+        if (isSunday(d)) cls.push("sun");
+        if (scheduled) {
+          planned += 1;
+          if (did) {
+            attended += 1;
+            cls.push("ok");
+            mark = "✓";
+            status = "출석";
+          } else if (d < today()) {
+            cls.push("miss");
+            mark = "×";
+            status = "결석";
+          } else {
+            cls.push("soon");
+            mark = "○";
+            status = "예정";
+          }
+        }
+        const tag = scheduled ? "button" : "div";
+        const click = scheduled ? ` type="button" data-attend-day="${d}"` : "";
+        return `<${tag} class="${cls.join(" ")}"${click}>
+          <span class="wd">${weekdayName(d)}</span>
+          <span class="dn">${Number(d.slice(8))}</span>
+          <span class="mark">${mark}</span>
+          <span class="st">${esc(status)}</span>
+        </${tag}>`;
+      }).join("");
+      const summary = planned ? `수업 ${planned}회 · 출석 ${attended}회` : "예약된 수업 없음";
+      return `<div class="card attend-card">
+        <div class="volume-head"><b>${thisWeek ? "이번 주 출석" : "주간 출석"}</b><span>${esc(summary)}</span></div>
+        <div class="attend-week-nav">
+          <button class="btn soft" type="button" data-attend-week="-1" aria-label="이전 주">‹</button>
+          <h3>${label}</h3>
+          <button class="btn soft" type="button" data-attend-week="1" aria-label="다음 주">›</button>
+        </div>
+        <div class="attend-days">${cells}</div>
+        <p class="hint" style="margin:8px 0 0">이번 주 스케줄 기준으로 출석·예정·결석을 표시합니다.</p>
+      </div>`;
     }
     function prevSession(m, before) {
       const cut = before || logDate || today();
@@ -1904,7 +1999,7 @@
       try { await navigator.clipboard.writeText(url); alert("공유 링크를 복사했습니다.\n카톡으로 보내면 회원이 전용 화면으로 접속할 수 있습니다."); }
       catch { prompt("이 링크를 복사하세요", url); }
     }
-    let shareCtx = { code: "", meal: "점심", view: "today", histMonth: "", histDate: "" };
+    let shareCtx = { code: "", meal: "점심", view: "today", histMonth: "", histDate: "", writeDate: "", attendWeek: "" };
     function ymOf(d) { return (d || today()).slice(0, 7); }
     function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
     function recordDatesSet(selfWorkouts, dietLogs, sessions) {
@@ -1996,6 +2091,22 @@
       document.querySelectorAll(".client-nav button").forEach((b) => {
         b.classList.toggle("on", b.dataset.clientTab === shareCtx.view);
       });
+    }
+    function shareWriteDate() {
+      const el = $("shareWriteDate");
+      const v = ((el && el.value) || shareCtx.writeDate || today()).trim();
+      shareCtx.writeDate = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : today();
+      return shareCtx.writeDate;
+    }
+    async function refreshShareWritePreview() {
+      const date = shareWriteDate();
+      const portal = portalData(shareCtx.code);
+      const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
+      const pack = local ? snapshot(local) : (shareCtx.data || {});
+      const box = $("shareWritePreview");
+      if (box) box.innerHTML = await dailyComboHtml(date, portal, pack, true);
+      const lab = $("shareWritePreviewLabel");
+      if (lab) lab.textContent = date === today() ? "오늘 작성분" : prettyDate(date) + " 작성분";
     }
     const portalKey = (code) => "pt-logger-portal-" + code;
     function loadPortal(code) {
@@ -2125,11 +2236,15 @@
         shareCtx.view = "today";
         shareCtx.histDate = today();
         shareCtx.histMonth = ymOf(today());
+        shareCtx.writeDate = today();
+        shareCtx.attendWeek = weekStart(today());
       }
       shareCtx.prevCode = shareCtx.code;
       if (!shareCtx.histDate) shareCtx.histDate = today();
       if (!shareCtx.histMonth) shareCtx.histMonth = ymOf(shareCtx.histDate);
       if (!shareCtx.view) shareCtx.view = "today";
+      if (!shareCtx.writeDate) shareCtx.writeDate = today();
+      if (!shareCtx.attendWeek) shareCtx.attendWeek = weekStart(today());
       const full = !!clientViewId() || data.kind !== "log";
       document.body.classList.toggle("portal", full);
       const portal = portalData(shareCtx.code);
@@ -2181,11 +2296,7 @@
         ${goal}
 
         <div class="share-panel${shareCtx.view === "today" ? " on" : ""}" data-panel="today">
-          <div class="label">나의 주간 볼륨</div>
-          ${volumeChartHtml(weekVolumeSeriesMember({
-            sessions: pack.sessions || {},
-            selfWorkouts: portal.selfWorkouts || []
-          }), "최근 7일 볼륨")}
+          ${weekAttendHtml(pack.sessions || {}, shareCtx.attendWeek)}
           <div class="label">오늘 종합 기록</div>
           ${todayCombo}
           <div class="acc">
@@ -2212,7 +2323,11 @@
 
         <div class="share-panel${shareCtx.view === "write" ? " on" : ""}" data-panel="write">
           <div class="label">기록 작성하기</div>
-          <p class="hint">오늘 날짜로 개인 운동과 식단을 저장합니다.</p>
+          <p class="hint">날짜를 고른 뒤 개인 운동과 식단을 저장합니다. 지난 날짜도 기록할 수 있습니다.</p>
+          <div class="card">
+            <label class="cap" style="margin-top:0">기록 날짜</label>
+            <input class="field" id="shareWriteDate" type="date" value="${esc(shareCtx.writeDate)}" />
+          </div>
           <div class="card">
             <label class="cap" style="margin-top:0">개인 운동</label>
             <input class="field" id="selfName" placeholder="종목 (예: 런지)" />
@@ -2236,8 +2351,8 @@
             <div id="shareDietPreview" class="diet-preview hidden"></div>
             <button class="btn wide" type="button" data-add-diet="1" style="margin-top:8px">식단 저장</button>
           </div>
-          <div class="label">오늘 작성분</div>
-          <div id="shareWritePreview">${await dailyComboHtml(today(), portal, pack, true)}</div>
+          <div class="label" id="shareWritePreviewLabel">${shareCtx.writeDate === today() ? "오늘 작성분" : prettyDate(shareCtx.writeDate) + " 작성분"}</div>
+          <div id="shareWritePreview">${await dailyComboHtml(shareCtx.writeDate, portal, pack, true)}</div>
           ${syncHint}
         </div>`;
       bindDietPreview("shareDietFile", "shareDietPreview");
@@ -3160,6 +3275,12 @@
       }
       currentId = null; saveData(); setTab("members");
     };
+    $("pageShare").addEventListener("change", async (e) => {
+      if (e.target && e.target.id === "shareWriteDate") await refreshShareWritePreview();
+    });
+    $("pageShare").addEventListener("input", async (e) => {
+      if (e.target && e.target.id === "shareWriteDate") await refreshShareWritePreview();
+    });
     $("pageShare").addEventListener("click", async (e) => {
       const acc = e.target.closest("[data-share-acc]");
       if (acc) {
@@ -3182,6 +3303,22 @@
         else await renderShareLive();
         return;
       }
+      const attendNav = e.target.closest("[data-attend-week]");
+      if (attendNav) {
+        shareCtx.attendWeek = addDays(weekStart(shareCtx.attendWeek || today()), Number(attendNav.dataset.attendWeek) * 7);
+        if (shareCtx.data) await renderShare(shareCtx.data);
+        else await renderShareLive();
+        return;
+      }
+      const attendDay = e.target.closest("[data-attend-day]");
+      if (attendDay) {
+        shareCtx.view = "history";
+        shareCtx.histDate = attendDay.dataset.attendDay;
+        shareCtx.histMonth = ymOf(shareCtx.histDate);
+        if (shareCtx.data) await renderShare(shareCtx.data);
+        else await renderShareLive();
+        return;
+      }
       const meal = e.target.closest("[data-meal]");
       if (meal) {
         shareCtx.meal = meal.dataset.meal;
@@ -3192,7 +3329,7 @@
         const name = $("selfName").value.trim();
         if (!name) { alert("종목을 입력해 주세요."); return; }
         writeSelfWorkout(shareCtx.code, {
-          id: uid(), date: today(), name,
+          id: uid(), date: shareWriteDate(), name,
           weight: $("selfWeight").value.trim(),
           reps: $("selfReps").value.trim(),
           note: $("selfNote").value.trim()
@@ -3211,7 +3348,7 @@
         const text = $("shareDietText").value.trim();
         const file = $("shareDietFile").files[0];
         if (!text && !file) { alert("메모나 사진을 남겨 주세요."); return; }
-        const row = { id: uid(), date: today(), text, meal: shareCtx.meal, source: "member" };
+        const row = { id: uid(), date: shareWriteDate(), text, meal: shareCtx.meal, source: "member" };
         if (file) {
           row.photoId = uid();
           await putFile(row.photoId, await compressImage(file), shareCtx.code);
