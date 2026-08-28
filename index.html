@@ -363,9 +363,42 @@
     .attend-day.miss { box-shadow: inset 0 0 0 1.5px #FFD0CC; }
     .attend-day.miss .mark { background: var(--danger); color: #fff; }
     .attend-day.miss .st { color: var(--danger); }
-    .attend-day.soon { box-shadow: inset 0 0 0 1.5px #C5D8FF; }
-    .attend-day.soon .mark { background: var(--accent-soft); color: var(--accent); }
-    .attend-day.soon .st { color: var(--accent); }
+    .remind-banner {
+      background: linear-gradient(180deg, #EEF3FF 0%, #FFFFFF 100%);
+      border: 1.5px solid #C5D8FF; border-radius: var(--radius);
+      padding: 12px; margin-bottom: 14px;
+      box-shadow: 0 6px 18px rgba(0, 85, 255, 0.12);
+    }
+    .remind-kicker {
+      font-size: .72rem; font-weight: 800; color: var(--accent); letter-spacing: .02em; margin-bottom: 8px;
+    }
+    .remind-item {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      width: 100%; border: 0; background: var(--accent-soft); color: var(--text);
+      border-radius: 10px; padding: 12px; margin-top: 6px; text-align: left; min-height: 48px;
+    }
+    .remind-item b { font-size: .92rem; font-weight: 800; }
+    .remind-item small { color: var(--accent); font-weight: 800; white-space: nowrap; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 12px; }
+    .gallery-item {
+      background: var(--bg); border-radius: 10px; padding: 6px; text-align: center;
+      box-shadow: inset 0 0 0 1px var(--line); border: 0; width: 100%; color: inherit;
+    }
+    .gallery-item img, .gallery-item .thumb {
+      width: 100%; height: 92px; object-fit: cover; border-radius: 8px; display: block;
+    }
+    .gallery-ph {
+      height: 92px; display: flex; align-items: center; justify-content: center;
+      background: var(--accent-soft); color: var(--accent); font-weight: 800; font-size: .72rem; border-radius: 8px;
+    }
+    .gallery-item b { display: block; font-size: .72rem; margin-top: 6px; }
+    .gallery-item small { display: block; font-size: .58rem; color: var(--muted); font-weight: 700; }
+    .compare-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .compare-col { text-align: center; }
+    .compare-col img { width: 100%; height: 168px; object-fit: cover; border-radius: 10px; background: var(--bg); }
+    .compare-col .cap { margin-top: 0; }
+    .compare-delta { margin-top: 8px; font-size: .82rem; font-weight: 700; line-height: 1.45; }
+    .log-attend { margin: 0 0 12px; }
     .vol-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 0 2px; }
     .vol-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; }
     .vol-bar-wrap {
@@ -720,6 +753,7 @@
         <button class="card stat" id="statMembersBtn" type="button"><b id="statMembers">0</b><span>회원(명)</span></button>
         <button class="card stat" id="statTodayBtn" type="button"><b id="statToday">0</b><span>오늘 수업(개)</span></button>
       </div>
+      <div id="homeRemind"></div>
       <div class="label">주간 캘린더</div>
       <div id="homeWeek" class="card home-week"></div>
       <div class="label">최근 등록한 회원</div>
@@ -741,6 +775,7 @@
       <div id="logWork" class="hidden">
         <p class="label" id="logDay"></p>
         <p class="hint" id="logPrevHint"></p>
+        <button class="btn wide log-attend" id="logAttend" type="button">출석 처리 · 1회 차감</button>
         <div class="grid2" style="margin-bottom:10px">
           <div>
             <label class="cap">수업 시작</label>
@@ -875,8 +910,24 @@
             <input class="field" id="bm" inputmode="decimal" placeholder="골격근 kg" />
             <input class="field" id="bf" inputmode="decimal" placeholder="체지방 %" />
           </div>
-          <label class="btn soft file wide" style="margin-top:8px">사진 함께 첨부<input type="file" accept="image/*" id="bodyFile" /></label>
-          <button class="btn wide" id="addBody" type="button" style="margin-top:8px">오늘 수치 저장</button>
+          <label class="cap">기록 날짜</label>
+          <input class="field" id="bodyDate" type="date" />
+          <label class="btn soft file wide" style="margin-top:8px">눈바디 사진 첨부<input type="file" accept="image/*" id="bodyFile" /></label>
+          <button class="btn wide" id="addBody" type="button" style="margin-top:8px">눈바디 · 인바디 저장</button>
+          <div class="label">변화 비교</div>
+          <div class="grid2">
+            <div>
+              <label class="cap" style="margin-top:0">이전</label>
+              <select class="field" id="bodyCmpA"></select>
+            </div>
+            <div>
+              <label class="cap" style="margin-top:0">최근</label>
+              <select class="field" id="bodyCmpB"></select>
+            </div>
+          </div>
+          <div id="bodyCompare"></div>
+          <div class="label">타임라인</div>
+          <div id="bodyGallery"></div>
           <div id="bodyList"></div>
           <div class="ba" style="margin-top:12px">
             <div>
@@ -1026,6 +1077,7 @@
         <button class="btn danger hidden" id="classDelete" type="button">삭제</button>
         <button class="btn" type="submit">저장</button>
       </div>
+      <button class="btn wide hidden" id="classAttend" type="button" style="margin-top:8px">출석 처리 · 1회 차감</button>
       <button class="btn soft wide hidden" id="classOpenLog" type="button" style="margin-top:8px">운동 일지 열기</button>
     </form>
   </div>
@@ -1070,7 +1122,7 @@
       return Object.assign({}, e, { feedback: e.feedback || "" });
     }
     function normalizeSession(s) {
-      s = Object.assign({ program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60 }, s || {});
+      s = Object.assign({ program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60, attended: false, charged: false }, s || {});
       const rawEx = s.exercises || [];
       if (!s.program) {
         const bits = rawEx.map((e) => e.program || e.note || "").filter(Boolean);
@@ -1079,6 +1131,8 @@
       s.program = s.program || "";
       s.feedback = s.feedback || "";
       s.memo = s.memo || "";
+      s.attended = !!s.attended;
+      s.charged = !!s.charged;
       s.exercises = rawEx.map(normalizeExercise);
       return s;
     }
@@ -1270,12 +1324,14 @@
       if (!m) return null;
       const d = date || logDate || today();
       m.sessions = m.sessions || {};
-      if (!m.sessions[d]) m.sessions[d] = { program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60 };
+      if (!m.sessions[d]) m.sessions[d] = { program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60, attended: false, charged: false };
       if (m.sessions[d].program == null) m.sessions[d].program = "";
       if (m.sessions[d].feedback == null) m.sessions[d].feedback = "";
       if (m.sessions[d].memo == null) m.sessions[d].memo = "";
       if (!m.sessions[d].start) m.sessions[d].start = "16:00";
       if (!m.sessions[d].minutes) m.sessions[d].minutes = 60;
+      if (m.sessions[d].attended == null) m.sessions[d].attended = false;
+      if (m.sessions[d].charged == null) m.sessions[d].charged = false;
       return m.sessions[d];
     }
     function isoFromDate(d) {
@@ -1330,17 +1386,100 @@
         exercises: (s.exercises || []).map(packEx),
         booked: !!(s && s.booked),
         start: (s && s.start) || "",
-        minutes: (s && s.minutes) || 60
+        minutes: (s && s.minutes) || 60,
+        attended: !!(s && s.attended),
+        charged: !!(s && s.charged)
       };
     }
     function isScheduledSession(s) {
       if (!s) return false;
-      return !!(s.booked || (s.exercises || []).length || s.program || s.feedback || s.memo);
+      return !!(s.booked || s.attended || s.charged || (s.exercises || []).length || s.program || s.feedback || s.memo);
     }
     function isAttendedSession(s) {
       if (!s) return false;
+      if (s.attended || s.charged) return true;
       const sets = (s.exercises || []).reduce((n, e) => n + ((e.sets || []).length), 0);
       return !!(sets || (s.exercises || []).length || s.program || s.feedback);
+    }
+    function chargeSession(m, date) {
+      if (!m) return "none";
+      const s = sessionOf(m, date);
+      s.attended = true;
+      s.booked = true;
+      if (s.charged) return "already";
+      const p = packOf(m);
+      if (p.left <= 0) {
+        saveData();
+        return "empty";
+      }
+      m.pack.used = p.used + 1;
+      s.charged = true;
+      saveData();
+      return "ok";
+    }
+    function unchargeSession(m, date) {
+      const s = m && m.sessions && m.sessions[date];
+      if (!s) return false;
+      const wasCharged = !!s.charged;
+      s.attended = false;
+      s.charged = false;
+      if (wasCharged) {
+        const p = packOf(m);
+        m.pack.used = Math.max(0, p.used - 1);
+      }
+      saveData();
+      return wasCharged;
+    }
+    function markClassDone(m, date) {
+      const r = chargeSession(m, date);
+      if (r === "ok") toastCloud("잔여 1회 차감");
+      else if (r === "empty") toastCloud("잔여 회차가 없어 차감하지 않았습니다", true);
+      else if (r === "already") toastCloud("이미 출석·차감된 수업입니다");
+      return r;
+    }
+    function toggleClassAttend(m, date) {
+      const s = (m.sessions && m.sessions[date]) || sessionOf(m, date);
+      if (s.attended || s.charged) {
+        const refunded = unchargeSession(m, date);
+        toastCloud(refunded ? "출석을 취소하고 1회를 복구했습니다" : "출석을 취소했습니다");
+        return "undo";
+      }
+      return markClassDone(m, date);
+    }
+    function attendBtnLabel(s) {
+      return (s && (s.attended || s.charged)) ? "출석 취소 · 1회 복구" : "출석 처리 · 1회 차감";
+    }
+    function upcomingClasses(members) {
+      const t = today();
+      const tm = addDays(t, 1);
+      const items = [];
+      (members || []).forEach((m) => {
+        [t, tm].forEach((d) => {
+          const s = m.sessions && m.sessions[d];
+          if (!s || !s.booked) return;
+          if (s.attended || s.charged) return;
+          items.push({
+            id: m.id,
+            name: m.name,
+            date: d,
+            start: s.start || "16:00",
+            minutes: Number(s.minutes) > 0 ? Number(s.minutes) : 60
+          });
+        });
+      });
+      items.sort((a, b) => a.date.localeCompare(b.date) || String(a.start).localeCompare(String(b.start)));
+      return items;
+    }
+    function reminderBannerHtml(items, trainer) {
+      if (!items || !items.length) return "";
+      const rows = items.map((it) => {
+        const when = (it.date === today() ? "오늘" : "내일") + " " + koClock(it.start);
+        if (trainer) {
+          return `<button class="remind-item" type="button" data-goto-log="${esc(it.id)}" data-log-date="${esc(it.date)}"><span><b>${esc(it.name)} 님</b></span><small>${when}</small></button>`;
+        }
+        return `<div class="remind-item"><span><b>${when} 수업</b></span><small>${it.minutes}분</small></div>`;
+      }).join("");
+      return `<div class="remind-banner"><div class="remind-kicker">다가오는 수업</div>${rows}</div>`;
     }
     function weekAttendHtml(sessions, weekIso) {
       const start = weekStart(weekIso || today());
@@ -1468,13 +1607,19 @@
             const st = dayStats(m, selected);
             const startT = koClock(s.start || "16:00");
             const mins = Number(s.minutes) > 0 ? Number(s.minutes) : 60;
+            const done = !!(s.attended || s.charged);
             const sub = st.sets
               ? startT + " · " + mins + "분 · " + st.exercises + "종목 " + st.sets + "세트"
-              : startT + " · " + mins + "분 · 예약";
-            return `<button class="tile" type="button" data-goto-log="${m.id}" data-log-date="${selected}">
-              <span><b>${esc(m.name)} 님 PT</b><small><span class="home-chip"><i style="background:${colorOf(m.id)}"></i>${esc(sub)}</span></small></span>
-              <span class="chev">›</span>
-            </button>`;
+              : startT + " · " + mins + "분 · " + (done ? "출석" : "예약");
+            return `<div class="split-tile">
+              <button class="tile" type="button" data-goto-log="${m.id}" data-log-date="${selected}">
+                <span><b>${esc(m.name)} 님 PT</b><small><span class="home-chip"><i style="background:${colorOf(m.id)}"></i>${esc(sub)}</span></small></span>
+                <span class="chev">›</span>
+              </button>
+              ${done
+                ? `<button class="tile side" type="button" data-goto-log="${m.id}" data-log-date="${selected}">일지</button>`
+                : `<button class="tile side" type="button" data-home-attend="${m.id}" data-log-date="${selected}">출석</button>`}
+            </div>`;
           }).join("")
         : '<div class="empty" style="padding:16px 8px">이 날 예정된 수업이 없습니다.</div>';
       return `
@@ -1496,6 +1641,7 @@
       $("statMembers").textContent = state.members.length;
       const todayList = state.members.filter((m) => hasClass(m, d));
       $("statToday").textContent = todayList.length;
+      $("homeRemind").innerHTML = reminderBannerHtml(upcomingClasses(state.members), true);
       $("homeWeek").innerHTML = homeWeekHtml();
       const recent = [];
       state.members.forEach((m) => Object.keys(m.sessions || {}).forEach((date) => {
@@ -1569,6 +1715,11 @@
       $("logProgram").value = sess.program || "";
       $("logFeedback").value = sess.feedback || "";
       $("logMemo").value = sess.memo || "";
+      const attendBtn = $("logAttend");
+      if (attendBtn) {
+        attendBtn.textContent = attendBtnLabel(sess);
+        attendBtn.classList.toggle("soft", !!(sess.attended || sess.charged));
+      }
       ["program", "feedback", "memo"].forEach((key) => {
         const box = document.querySelector(`[data-log-acc="${key}"]`);
         if (box) box.classList.toggle("open", !logSessionCollapsed.has(key));
@@ -1697,8 +1848,9 @@
         ? list.map(memberTileHtml).join("")
         : `<div class="empty">${memberFilter === "expired" ? "만료된 회원이 없습니다." : "진행 중인 회원이 없습니다."}</div>`;
     }
-    function profileHtml(p, name) {
+    function profileHtml(p, name, opts) {
       p = p || {};
+      const edit = opts && opts.edit;
       return `<div class="card">
         <p class="kv"><span>이름</span>${esc(name)}</p>
         <p class="kv"><span>성별</span>${esc(p.gender || "-")}</p>
@@ -1707,7 +1859,7 @@
         <p class="kv"><span>병력/통증</span>${esc(p.history || "-")}</p>
         <p class="kv"><span>운동 경력</span>${esc(p.experience || "-")}</p>
         <p class="kv"><span>참고</span>${esc(p.notes || "-")}</p>
-        <button class="btn wide" type="button" data-edit-profile="1" style="margin-top:10px">프로필 · 회차 수정</button>
+        ${edit ? '<button class="btn wide" type="button" data-edit-profile="1" style="margin-top:10px">프로필 · 회차 수정</button>' : ""}
       </div>`;
     }
     async function photoCol(kind) {
@@ -1911,8 +2063,10 @@
       $("attendCount").textContent = dates.length ? dates.length + "회" : "";
       if (!dates.length) return '<div class="empty" style="padding:12px">수업 일지를 작성하면 출석이 쌓입니다.</div>';
       return dates.map((d) => {
-        const n = ((m.sessions[d].exercises) || []).length;
-        return `<button class="tile" type="button" data-open-log-date="${d}" style="margin-bottom:8px"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${n ? n + "개 운동" : "예약됨"}</small></span><span class="chev">›</span></button>`;
+        const s = m.sessions[d] || {};
+        const n = (s.exercises || []).length;
+        const sub = n ? n + "개 운동" : ((s.attended || s.charged) ? "출석" : "예약됨");
+        return `<button class="tile" type="button" data-open-log-date="${d}" style="margin-bottom:8px"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${sub}</small></span><span class="chev">›</span></button>`;
       }).join("");
     }
     async function bodyHistHtml(m) {
@@ -1929,13 +2083,93 @@
       }
       return parts.join("");
     }
+    function bodySorted(m) {
+      return [...((m && m.body) || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)));
+    }
+    function numDelta(from, to, unit) {
+      const a = Number(from), b = Number(to);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return "-";
+      const n = b - a;
+      return (n > 0 ? "+" : "") + n.toFixed(1) + unit;
+    }
+    async function bodyGalleryHtml(m) {
+      const rows = [...((m && m.body) || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      if (!rows.length) return '<div class="empty" style="padding:12px">아직 눈바디·인바디 기록이 없습니다.</div>';
+      const parts = [];
+      for (const r of rows) {
+        let img = '<div class="gallery-ph">수치만</div>';
+        if (r.photoId) {
+          const url = await fileUrl(r.photoId);
+          if (url) img = `<img src="${url}" alt="" />`;
+        }
+        const nums = [r.weight && (r.weight + "kg"), r.muscle && (r.muscle + "kg"), r.fat && (r.fat + "%")].filter(Boolean).join(" · ");
+        const open = r.photoId ? ` data-view="${esc(r.photoId)}:image"` : "";
+        parts.push(`<button class="gallery-item" type="button"${open}>${img}<b>${prettyDate(r.date)}</b><small>${esc(nums) || "기록"}</small></button>`);
+      }
+      return `<div class="gallery-grid">${parts.join("")}</div>`;
+    }
+    async function bodyCompareHtml(m, idA, idB) {
+      const rows = (m && m.body) || [];
+      const a = rows.find((r) => r.id === idA);
+      const b = rows.find((r) => r.id === idB);
+      if (!a || !b) return '<p class="hint">비교할 기록을 두 개 이상 저장하세요.</p>';
+      async function col(r, label) {
+        let img = '<div class="gallery-ph" style="height:168px">사진 없음</div>';
+        if (r.photoId) {
+          const url = await fileUrl(r.photoId);
+          if (url) img = `<button type="button" data-view="${esc(r.photoId)}:image" style="border:0;background:transparent;padding:0;width:100%"><img src="${url}" alt="" /></button>`;
+        }
+        return `<div class="compare-col"><p class="cap">${label} · ${prettyDate(r.date)}</p>${img}<p class="hint">체중 ${esc(r.weight) || "-"}kg · 골격근 ${esc(r.muscle) || "-"}kg · 체지방 ${esc(r.fat) || "-"}%</p></div>`;
+      }
+      const older = a.date <= b.date ? a : b;
+      const newer = a.date <= b.date ? b : a;
+      const delta = `<p class="compare-delta">변화량 · 체중 ${numDelta(older.weight, newer.weight, "kg")} · 골격근 ${numDelta(older.muscle, newer.muscle, "kg")} · 체지방 ${numDelta(older.fat, newer.fat, "%")}</p>`;
+      return `<div class="compare-pair">${await col(a, "이전")}${await col(b, "최근")}</div>${delta}`;
+    }
+    async function refreshBodyCompare(m) {
+      const a = $("bodyCmpA"), b = $("bodyCmpB");
+      const gallery = $("bodyGallery"), cmp = $("bodyCompare");
+      if (!a || !b || !gallery || !cmp) return;
+      const rows = bodySorted(m);
+      const keepA = a.value, keepB = b.value;
+      const opts = rows.map((r) => `<option value="${esc(r.id)}">${prettyDate(r.date)} · ${r.date}</option>`).join("");
+      a.innerHTML = opts;
+      b.innerHTML = opts;
+      gallery.innerHTML = await bodyGalleryHtml(m);
+      if (!rows.length) {
+        cmp.innerHTML = '<p class="hint">기록이 쌓이면 날짜를 골라 비교할 수 있습니다.</p>';
+        return;
+      }
+      const ids = rows.map((r) => r.id);
+      a.value = ids.includes(keepA) ? keepA : (rows.length >= 2 ? rows[0].id : rows[rows.length - 1].id);
+      b.value = ids.includes(keepB) ? keepB : rows[rows.length - 1].id;
+      if (rows.length >= 2 && a.value === b.value) a.value = rows[0].id;
+      cmp.innerHTML = await bodyCompareHtml(m, a.value, b.value);
+    }
+    async function shareBodyGalleryHtml(m) {
+      const rows = bodySorted(m);
+      const gallery = await bodyGalleryHtml(m);
+      if (!rows.length) return gallery;
+      const aId = rows.length >= 2 ? rows[0].id : rows[rows.length - 1].id;
+      const bId = rows[rows.length - 1].id;
+      const optsA = rows.map((r) => `<option value="${esc(r.id)}"${r.id === aId ? " selected" : ""}>${prettyDate(r.date)} · ${r.date}</option>`).join("");
+      const optsB = rows.map((r) => `<option value="${esc(r.id)}"${r.id === bId ? " selected" : ""}>${prettyDate(r.date)} · ${r.date}</option>`).join("");
+      const selects = rows.length >= 2
+        ? `<div class="grid2">
+            <div><label class="cap" style="margin-top:0">이전</label><select class="field" id="shareCmpA">${optsA}</select></div>
+            <div><label class="cap" style="margin-top:0">최근</label><select class="field" id="shareCmpB">${optsB}</select></div>
+          </div>`
+        : "";
+      const cmp = await bodyCompareHtml(m, aId, bId);
+      return `<div class="label">변화 비교</div>${selects}<div id="shareCompare">${cmp}</div><div class="label">타임라인</div>${gallery}`;
+    }
     let detailAttendWeek = null;
     let detailAttendMember = null;
     async function renderDetail() {
       const m = currentMember();
       if (!m) { setTab("members"); return; }
       $("detailName").textContent = m.name;
-      $("profileCard").innerHTML = profileHtml(m.profile, m.name);
+      $("profileCard").innerHTML = profileHtml(m.profile, m.name, { edit: true });
       const pack = packOf(m);
       const totalIn = $("packTotalIn");
       const leftIn = $("packLeftIn");
@@ -1970,6 +2204,9 @@
       } else $("bodyTrend").textContent = "수치를 두 번 이상 저장하면 변화량과 그래프가 표시됩니다.";
       $("bodyChart").innerHTML = bodyChartSvg(m.body || []);
       $("bodyStats").innerHTML = bodyStatsHtml(m.body || []);
+      const bd = $("bodyDate");
+      if (bd && document.activeElement !== bd && !bd.value) bd.value = today();
+      await refreshBodyCompare(m);
       $("bodyList").innerHTML = await bodyHistHtml(m);
       $("beforeBox").innerHTML = await photoCol("before");
       $("afterBox").innerHTML = await photoCol("after");
@@ -1983,7 +2220,7 @@
         sessions[d] = packSession(s);
       });
       return {
-        name: m.name, share: m.share, id: m.id, profile: m.profile, body: m.body || [], sessions,
+        name: m.name, share: m.share, id: m.id, profile: m.profile, body: m.body || [], photos: m.photos || [], sessions,
         selfWorkouts: (m.selfWorkouts || []).map((w) => ({
           id: w.id, date: w.date, name: w.name, weight: w.weight, reps: w.reps, note: w.note,
           coachComment: w.coachComment || ""
@@ -2346,6 +2583,7 @@
         ${goal}
 
         <div class="share-panel${shareCtx.view === "today" ? " on" : ""}" data-panel="today">
+          ${reminderBannerHtml(upcomingClasses([{ id: view.id, name: view.name || data.name, sessions: pack.sessions || {} }]), false)}
           ${weekAttendHtml(pack.sessions || {}, shareCtx.attendWeek)}
           <div class="label">오늘 종합 기록</div>
           ${todayCombo}
@@ -2355,6 +2593,7 @@
               ${profileHtml(profile, view.name || data.name)}
               <div class="label">체성분 변화 추이</div>
               <div class="card" style="box-shadow:none;border:1px solid var(--line)">${chart}</div>
+              ${await shareBodyGalleryHtml({ body, photos: photos.photos || [] })}
               <div class="label">비포 / 애프터</div>
               <div class="ba">
                 <div><p class="cap" style="margin-top:0">Before</p>${await photoListHtml(photos, "before")}</div>
@@ -2615,6 +2854,13 @@
       $("classMins").value = String(opts.minutes || 60);
       $("classDelete").classList.toggle("hidden", !editing);
       $("classOpenLog").classList.toggle("hidden", !editing);
+      $("classAttend").classList.toggle("hidden", !editing);
+      if (editing) {
+        const m = memberBy(opts.id);
+        const s = m && m.sessions && m.sessions[opts.date];
+        $("classAttend").textContent = attendBtnLabel(s);
+        $("classAttend").classList.toggle("soft", !!(s && (s.attended || s.charged)));
+      }
       $("classBg").classList.remove("hidden");
     }
     function sessionHasLog(s) {
@@ -2654,6 +2900,10 @@
       if (!m || !m.sessions[date]) return;
       const s = m.sessions[date];
       if (sessionHasLog(s) && !confirm("이 날 운동 일지도 함께 삭제할까요?")) return;
+      if (s.charged) {
+        const p = packOf(m);
+        m.pack.used = Math.max(0, p.used - 1);
+      }
       delete m.sessions[date];
       saveData();
     }
@@ -2816,6 +3066,13 @@
     $("statMembersBtn").onclick = () => { fromTab = "home"; setTab("members"); };
     $("statTodayBtn").onclick = () => openCal();
     $("homeWeek").addEventListener("click", (e) => {
+      const attend = e.target.closest("[data-home-attend]");
+      if (attend) {
+        const m = memberBy(attend.dataset.homeAttend);
+        if (m) markClassDone(m, attend.dataset.logDate);
+        renderHome();
+        return;
+      }
       const weekNav = e.target.closest("[data-home-week]");
       if (weekNav) {
         const delta = Number(weekNav.dataset.homeWeek) * 7;
@@ -2843,6 +3100,10 @@
       if (log) openLog(log.dataset.gotoLog, log.dataset.logDate);
     });
     $("homeRecent").addEventListener("click", (e) => { const b = e.target.closest("[data-goto-log]"); if (b) openLog(b.dataset.gotoLog, b.dataset.logDate); });
+    $("homeRemind").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-goto-log]");
+      if (b) openLog(b.dataset.gotoLog, b.dataset.logDate);
+    });
     $("homeNewMembers").addEventListener("click", (e) => {
       const arch = e.target.closest("[data-open-archive]");
       if (arch) { openArchive(arch.dataset.openArchive); return; }
@@ -3025,6 +3286,24 @@
       fromCal = true;
       openLog(id, date);
     };
+    $("classAttend").onclick = () => {
+      const id = $("classFromId").value || $("classMember").value;
+      const date = $("classFromDate").value || $("classDate").value;
+      const m = memberBy(id);
+      if (!m || !date) return;
+      toggleClassAttend(m, date);
+      const s = m.sessions[date];
+      $("classAttend").textContent = attendBtnLabel(s);
+      $("classAttend").classList.toggle("soft", !!(s && (s.attended || s.charged)));
+      renderCal();
+      if (tab === "home") renderHome();
+    };
+    $("logAttend").onclick = () => {
+      const m = currentMember();
+      if (!m || !logDate) return;
+      toggleClassAttend(m, logDate);
+      renderLog();
+    };
 
     $("logBack").onclick = goBack;
     $("logToProfile").onclick = goToMemberProfile;
@@ -3113,7 +3392,20 @@
         const r = document.querySelector(`[data-new-r="${ex.id}"]`);
         if (!ex || !w.value || !r.value) return;
         ex.sets.push({ id: uid(), weight: Number(w.value), reps: Number(r.value) });
-        w.value = ""; r.value = ""; saveData(); await renderExercises(); return;
+        w.value = ""; r.value = "";
+        const m = currentMember();
+        const sess = sessionOf(m);
+        if (m && sess && !sess.charged) {
+          const charged = chargeSession(m, logDate);
+          if (charged === "ok") toastCloud("잔여 1회 차감");
+          else if (charged === "empty") toastCloud("잔여 회차가 없어 차감하지 않았습니다", true);
+        } else saveData();
+        const attendBtn = $("logAttend");
+        if (attendBtn && sess) {
+          attendBtn.textContent = attendBtnLabel(sess);
+          attendBtn.classList.toggle("soft", !!(sess.attended || sess.charged));
+        }
+        await renderExercises(); return;
       }
       if (delSet) {
         const [exId, setId] = delSet.dataset.delSet.split(":");
@@ -3172,13 +3464,20 @@
       const weight = $("bw").value.trim(), muscle = $("bm").value.trim(), fat = $("bf").value.trim();
       const file = $("bodyFile").files[0];
       if (!weight && !muscle && !fat && !file) return;
-      const row = { id: uid(), date: today(), weight, muscle, fat };
-      if (file) { row.photoId = uid(); await putFile(row.photoId, await compressImage(file)); }
+      const date = ($("bodyDate") && $("bodyDate").value) || today();
+      const row = { id: uid(), date, weight, muscle, fat };
+      if (file) { row.photoId = uid(); await putFile(row.photoId, await compressImage(file), m.share); }
       m.body.push(row);
       $("bw").value = $("bm").value = $("bf").value = "";
       $("bodyFile").value = "";
       saveData(); renderDetail();
     };
+    ["bodyCmpA", "bodyCmpB"].forEach((id) => {
+      $(id).addEventListener("change", async () => {
+        const m = currentMember(); if (!m) return;
+        $("bodyCompare").innerHTML = await bodyCompareHtml(m, $("bodyCmpA").value, $("bodyCmpB").value);
+      });
+    });
     function savePackFields() {
       const m = currentMember(); if (!m) return;
       writePack(m, $("packTotalIn").value, $("packLeftIn").value, $("packEndDate").value);
@@ -3312,7 +3611,7 @@
     });
     async function addPhoto(kind, file) {
       const m = currentMember(); if (!m || !file) return;
-      const id = uid(); await putFile(id, await compressImage(file));
+      const id = uid(); await putFile(id, await compressImage(file), m.share);
       m.photos.push({ id, kind, date: today() }); saveData(); renderDetail();
     }
     $("beforeFile").addEventListener("change", (e) => { addPhoto("before", e.target.files[0]); e.target.value = ""; });
@@ -3347,6 +3646,11 @@
     };
     $("pageShare").addEventListener("change", async (e) => {
       if (e.target && e.target.id === "shareWriteDate") await refreshShareWritePreview();
+      if (e.target && (e.target.id === "shareCmpA" || e.target.id === "shareCmpB")) {
+        const body = (shareCtx.data && shareCtx.data.body) || [];
+        const box = $("shareCompare");
+        if (box) box.innerHTML = await bodyCompareHtml({ body }, $("shareCmpA").value, $("shareCmpB").value);
+      }
     });
     $("pageShare").addEventListener("input", async (e) => {
       if (e.target && e.target.id === "shareWriteDate") await refreshShareWritePreview();
