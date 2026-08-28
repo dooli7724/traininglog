@@ -3467,8 +3467,13 @@
         setSyncDot("on");
         toastCloud("내 계정 데이터와 동기화됨");
       } catch (err) {
+        console.error("hydrate", err);
         setSyncDot("error");
-        toastCloud("클라우드 불러오기 실패 — 이 기기 기록을 표시합니다", true);
+        const msg = String((err && (err.message || err.code)) || "");
+        const needSql = /schema cache|does not exist|permission denied|row-level|42501|PGRST|not authenticated/i.test(msg);
+        toastCloud(needSql
+          ? "클라우드 불러오기 실패 — Supabase SQL Editor에서 schema.sql을 다시 실행해 주세요"
+          : "클라우드 불러오기 실패 — 네트워크를 확인하고 다시 로그인해 주세요", true);
       }
       const opened = await openShare();
       if (!opened) setTab(tab && tab !== "share" ? tab : "home");

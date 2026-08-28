@@ -79,9 +79,9 @@
     if (!Cloud.sb) throw new Error("클라우드가 연결되지 않았습니다.");
     const { data, error } = await Cloud.sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    Cloud.user = data.user;
-    Cloud.canWrite = true;
-    return data.user;
+    Cloud.user = (data.session && data.session.user) || data.user;
+    Cloud.canWrite = !!Cloud.user;
+    return Cloud.user;
   };
 
   Cloud.signup = async function (email, password) {
@@ -146,36 +146,48 @@
     return members;
   }
 
-  Cloud.pull = async function () {
-    if (!Cloud.sb || !Cloud.user) return null;
-    const { data, error } = await Cloud.sb.rpc("ensure_gym");
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
+  function applyGymRow(row, logs) {
     if (!row) return { members: [] };
     Cloud.gymId = row.gym_id;
     Cloud.rev = Number(row.rev) || 1;
     const members = ((row.data && row.data.members) || []).slice();
-    let logs = [];
-    let logErr = null;
-    if (Cloud.user) {
-      const first = await Cloud.sb
+    attachLogs(members, logs || []);
+    return { members };
+  }
+
+  async function fetchOwnLogs() {
+    const uid = Cloud.user && Cloud.user.id;
+    if (uid) {
+      const byUser = await Cloud.sb
         .from("member_logs")
         .select("id, share, kind, payload, updated_at")
-        .eq("user_id", Cloud.user.id);
-      logs = first.data;
-      logErr = first.error;
+        .eq("user_id", uid);
+      if (!byUser.error) return byUser.data || [];
     }
-    if (logErr || !Cloud.user) {
-      const second = await Cloud.sb
+    if (Cloud.gymId) {
+      const byGym = await Cloud.sb
         .from("member_logs")
         .select("id, share, kind, payload, updated_at")
         .eq("gym_id", Cloud.gymId);
-      if (!second.error) { logs = second.data; logErr = null; }
-      else if (!logs) logErr = second.error;
+      if (!byGym.error) return byGym.data || [];
     }
-    if (logErr) throw logErr;
-    attachLogs(members, logs || []);
-    return { members };
+    return [];
+  }
+
+  Cloud.pull = async function () {
+    if (!Cloud.sb || !Cloud.user) return null;
+    const packed = await Cloud.sb.rpc("load_trainer_state");
+    if (!packed.error && packed.data) {
+      const row = typeof packed.data === "string" ? JSON.parse(packed.data) : packed.data;
+      if (row && row.gym_id) return applyGymRow(row, row.logs || []);
+    }
+    const { data, error } = await Cloud.sb.rpc("ensure_gym");
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return { members: [] };
+    applyGymRow(row, []);
+    const logs = await fetchOwnLogs();
+    return applyGymRow(row, logs);
   };
 
   Cloud.flush = async function () {
@@ -202,13 +214,17 @@
         });
       });
       if (Cloud.gymId && rows.length) {
-        let { error: upErr } = await Cloud.sb.from("member_logs").upsert(rows, { onConflict: "id" });
-        if (upErr) {
-          rows.forEach((r) => { delete r.user_id; });
-          const retry = await Cloud.sb.from("member_logs").upsert(rows, { onConflict: "id" });
-          upErr = retry.error;
+        const rpcRows = rows.map((r) => ({
+          id: r.id,
+          share: r.share,
+          kind: r.kind,
+          payload: r.payload
+        }));
+        const viaRpc = await Cloud.sb.rpc("upsert_member_logs", { p_rows: rpcRows });
+        if (viaRpc.error) {
+          const { error: upErr } = await Cloud.sb.from("member_logs").upsert(rows, { onConflict: "id" });
+          if (upErr) throw upErr;
         }
-        if (upErr) throw upErr;
       }
       Cloud._skipUntil = Date.now() + 1200;
       Cloud.status = "saved";
@@ -228,18 +244,24 @@
   };
 
   Cloud.hydrate = async function () {
+    if (Cloud.sb && !Cloud.user) {
+      const { data } = await Cloud.sb.auth.getSession();
+      Cloud.user = (data && data.session && data.session.user) || null;
+      Cloud.canWrite = !!Cloud.user && !Cloud.recovering;
+    }
     const remote = await Cloud.pull();
     return remote || { members: [] };
   };
 
   Cloud.subscribe = function () {
     if (!Cloud.sb || !Cloud.gymId || !Cloud.user || Cloud._channel) return;
+    const gymFilter = "gym_id=eq." + Cloud.gymId;
     Cloud._channel = Cloud.sb
       .channel("pt-gym-" + Cloud.gymId)
-      .on("postgres_changes", { event: "*", schema: "public", table: "gym_state", filter: "user_id=eq." + Cloud.user.id }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "gym_state", filter: gymFilter }, () => {
         Cloud._onRemote();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "member_logs", filter: "user_id=eq." + Cloud.user.id }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "member_logs", filter: gymFilter }, () => {
         Cloud._onRemote();
       })
       .subscribe();

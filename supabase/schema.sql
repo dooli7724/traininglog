@@ -1,4 +1,10 @@
--- PT Logger multi-tenant schema. Safe to re-run in the SQL Editor.
+-- PT Logger multi-tenant schema + RLS
+-- Supabase Dashboard → SQL Editor 에 이 파일 전체를 붙여넣고 Run 하세요.
+-- 여러 번 실행해도 안전합니다.
+--
+-- 회원·스케줄·수업 일지·체성분은 gym_state.data JSON 안에 들어 있고,
+-- 회원 전용 운동/식단은 member_logs 에 저장됩니다.
+-- 격리 기준은 로그인한 트레이너의 auth.uid() 입니다.
 
 create table if not exists public.gyms (
   id uuid primary key default gen_random_uuid(),
@@ -45,23 +51,82 @@ alter table public.gyms enable row level security;
 alter table public.gym_state enable row level security;
 alter table public.member_logs enable row level security;
 
-drop policy if exists gyms_owner on public.gyms;
-create policy gyms_owner on public.gyms
-  for all to authenticated
-  using (auth.uid() = owner_id)
-  with check (auth.uid() = owner_id);
+create or replace function public.owns_gym(p_gym_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.gyms g
+    where g.id = p_gym_id and g.owner_id = auth.uid()
+  );
+$$;
 
-drop policy if exists gym_state_owner on public.gym_state;
-create policy gym_state_owner on public.gym_state
-  for all to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+create or replace function public.own_user(p_user_id uuid)
+returns boolean
+language sql
+stable
+as $$
+  select p_user_id is not null and p_user_id = auth.uid();
+$$;
 
-drop policy if exists member_logs_owner on public.member_logs;
-create policy member_logs_owner on public.member_logs
-  for all to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+do $$
+declare pol record;
+begin
+  for pol in
+    select policyname, tablename
+    from pg_policies
+    where schemaname = 'public'
+      and tablename in ('gyms', 'gym_state', 'member_logs')
+  loop
+    execute format('drop policy if exists %I on public.%I', pol.policyname, pol.tablename);
+  end loop;
+end $$;
+
+create policy gyms_select on public.gyms
+  for select to authenticated
+  using (owner_id = auth.uid());
+create policy gyms_insert on public.gyms
+  for insert to authenticated
+  with check (owner_id = auth.uid());
+create policy gyms_update on public.gyms
+  for update to authenticated
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+create policy gyms_delete on public.gyms
+  for delete to authenticated
+  using (owner_id = auth.uid());
+
+-- user_id 가 아직 비어 있는 기존 행도 gym 소유자면 읽을 수 있게 둡니다.
+create policy gym_state_select on public.gym_state
+  for select to authenticated
+  using (public.own_user(user_id) or public.owns_gym(gym_id));
+create policy gym_state_insert on public.gym_state
+  for insert to authenticated
+  with check (public.own_user(user_id) and public.owns_gym(gym_id));
+create policy gym_state_update on public.gym_state
+  for update to authenticated
+  using (public.own_user(user_id) or public.owns_gym(gym_id))
+  with check (public.own_user(user_id) and public.owns_gym(gym_id));
+create policy gym_state_delete on public.gym_state
+  for delete to authenticated
+  using (public.own_user(user_id) or public.owns_gym(gym_id));
+
+create policy member_logs_select on public.member_logs
+  for select to authenticated
+  using (public.own_user(user_id) or public.owns_gym(gym_id));
+create policy member_logs_insert on public.member_logs
+  for insert to authenticated
+  with check (public.own_user(user_id) and public.owns_gym(gym_id));
+create policy member_logs_update on public.member_logs
+  for update to authenticated
+  using (public.own_user(user_id) or public.owns_gym(gym_id))
+  with check (public.own_user(user_id) and public.owns_gym(gym_id));
+create policy member_logs_delete on public.member_logs
+  for delete to authenticated
+  using (public.own_user(user_id) or public.owns_gym(gym_id));
 
 create or replace function public.ensure_gym()
 returns table (gym_id uuid, data jsonb, rev bigint)
@@ -80,17 +145,67 @@ begin
   select g.id into gid from public.gyms g where g.owner_id = uid;
   if gid is null then
     insert into public.gyms (owner_id) values (uid) returning id into gid;
-    insert into public.gym_state (gym_id, user_id, data)
-      values (gid, uid, '{"members":[]}'::jsonb);
-  else
-    update public.gym_state
-      set user_id = coalesce(user_id, uid)
-      where gym_state.gym_id = gid;
   end if;
+  insert into public.gym_state (gym_id, user_id, data)
+    values (gid, uid, '{"members":[]}'::jsonb)
+  on conflict (gym_id) do update
+    set user_id = coalesce(public.gym_state.user_id, excluded.user_id);
+  update public.member_logs
+    set user_id = uid
+    where member_logs.gym_id = gid and member_logs.user_id is null;
   return query
     select s.gym_id, s.data, s.rev
     from public.gym_state s
-    where s.gym_id = gid and s.user_id = uid;
+    where s.gym_id = gid;
+end;
+$$;
+
+create or replace function public.load_trainer_state()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid;
+  gid uuid;
+  payload jsonb;
+  r_rev bigint;
+  logs jsonb;
+begin
+  uid := auth.uid();
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+  select g.id into gid from public.gyms g where g.owner_id = uid;
+  if gid is null then
+    insert into public.gyms (owner_id) values (uid) returning id into gid;
+  end if;
+  insert into public.gym_state (gym_id, user_id, data)
+    values (gid, uid, '{"members":[]}'::jsonb)
+  on conflict (gym_id) do update
+    set user_id = coalesce(public.gym_state.user_id, excluded.user_id);
+  update public.member_logs
+    set user_id = uid
+    where member_logs.gym_id = gid and member_logs.user_id is null;
+  select s.data, s.rev into payload, r_rev
+    from public.gym_state s
+    where s.gym_id = gid;
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', l.id,
+      'share', l.share,
+      'kind', l.kind,
+      'payload', l.payload
+    ) order by l.updated_at), '[]'::jsonb)
+    into logs
+    from public.member_logs l
+    where l.gym_id = gid;
+  return jsonb_build_object(
+    'gym_id', gid,
+    'data', coalesce(payload, '{"members":[]}'::jsonb),
+    'rev', coalesce(r_rev, 1),
+    'logs', coalesce(logs, '[]'::jsonb)
+  );
 end;
 $$;
 
@@ -112,27 +227,71 @@ begin
   select g.id into gid from public.gyms g where g.owner_id = uid;
   if gid is null then
     insert into public.gyms (owner_id) values (uid) returning id into gid;
-    insert into public.gym_state (gym_id, user_id, data, rev)
-      values (gid, uid, coalesce(p_data, '{"members":[]}'::jsonb), 1);
-    return 1;
   end if;
-  update public.gym_state
-    set data = coalesce(p_data, '{"members":[]}'::jsonb),
+  insert into public.gym_state (gym_id, user_id, data, rev)
+    values (gid, uid, coalesce(p_data, '{"members":[]}'::jsonb), 1)
+  on conflict (gym_id) do update
+    set data = excluded.data,
         user_id = uid,
-        rev = rev + 1,
+        rev = public.gym_state.rev + 1,
         updated_at = now()
-    where gym_id = gid and user_id = uid
     returning rev into new_rev;
-  if new_rev is null then
-    update public.gym_state
-      set data = coalesce(p_data, '{"members":[]}'::jsonb),
-          user_id = uid,
-          rev = rev + 1,
-          updated_at = now()
-      where gym_id = gid
-      returning rev into new_rev;
-  end if;
   return coalesce(new_rev, 1);
+end;
+$$;
+
+create or replace function public.upsert_member_logs(p_rows jsonb)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid;
+  gid uuid;
+  n int := 0;
+  rec jsonb;
+begin
+  uid := auth.uid();
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    return 0;
+  end if;
+  select g.id into gid from public.gyms g where g.owner_id = uid;
+  if gid is null then
+    return 0;
+  end if;
+  for rec in select value from jsonb_array_elements(p_rows)
+  loop
+    if coalesce(rec->>'id', '') = '' then
+      continue;
+    end if;
+    if coalesce(rec->>'kind', '') not in ('self_workout', 'diet') then
+      continue;
+    end if;
+    insert into public.member_logs (id, gym_id, user_id, share, kind, payload, updated_at)
+    values (
+      rec->>'id',
+      gid,
+      uid,
+      coalesce(rec->>'share', ''),
+      rec->>'kind',
+      coalesce(rec->'payload', '{}'::jsonb),
+      now()
+    )
+    on conflict (id) do update
+      set payload = excluded.payload,
+          kind = excluded.kind,
+          share = excluded.share,
+          gym_id = excluded.gym_id,
+          user_id = excluded.user_id,
+          updated_at = now()
+      where public.member_logs.gym_id = gid;
+    n := n + 1;
+  end loop;
+  return n;
 end;
 $$;
 
@@ -153,7 +312,7 @@ begin
   end if;
   select e into mem
   from public.gym_state s,
-       jsonb_array_elements(s.data->'members') e
+       jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
   where e->>'share' = p_ref or e->>'id' = p_ref
   limit 1;
   if mem is null then
@@ -193,16 +352,14 @@ begin
   if rid = '' then
     raise exception 'missing id';
   end if;
-  select s.gym_id, s.user_id into gid, uid
-  from public.gym_state s,
-       jsonb_array_elements(s.data->'members') e
+  select s.gym_id, coalesce(s.user_id, g.owner_id) into gid, uid
+  from public.gym_state s
+  join public.gyms g on g.id = s.gym_id,
+       jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
   where e->>'share' = p_share
   limit 1;
   if gid is null then
     raise exception 'member not found';
-  end if;
-  if uid is null then
-    select g.owner_id into uid from public.gyms g where g.id = gid;
   end if;
   insert into public.member_logs (id, gym_id, user_id, share, kind, payload, updated_at)
   values (rid, gid, uid, p_share, p_kind, p_row, now())
@@ -236,15 +393,28 @@ begin
 end;
 $$;
 
-revoke all on public.gyms from anon;
-revoke all on public.gym_state from anon;
-revoke all on public.member_logs from anon;
+grant usage on schema public to anon, authenticated, service_role;
+revoke all on public.gyms from anon, public;
+revoke all on public.gym_state from anon, public;
+revoke all on public.member_logs from anon, public;
 grant select, insert, update, delete on public.gyms to authenticated;
 grant select, insert, update, delete on public.gym_state to authenticated;
 grant select, insert, update, delete on public.member_logs to authenticated;
+grant all on public.gyms to service_role;
+grant all on public.gym_state to service_role;
+grant all on public.member_logs to service_role;
 
+grant execute on function public.owns_gym(uuid) to authenticated, anon, public;
+grant execute on function public.own_user(uuid) to authenticated, anon, public;
+
+revoke all on function public.ensure_gym() from public, anon;
+revoke all on function public.load_trainer_state() from public, anon;
+revoke all on function public.push_gym_state(jsonb) from public, anon;
+revoke all on function public.upsert_member_logs(jsonb) from public, anon;
 grant execute on function public.ensure_gym() to authenticated;
+grant execute on function public.load_trainer_state() to authenticated;
 grant execute on function public.push_gym_state(jsonb) to authenticated;
+grant execute on function public.upsert_member_logs(jsonb) to authenticated;
 grant execute on function public.member_public(text) to anon, authenticated;
 grant execute on function public.member_upsert_log(text, text, jsonb) to anon, authenticated;
 grant execute on function public.member_delete_log(text, text) to anon, authenticated;
@@ -306,3 +476,5 @@ do $$ begin
   alter publication supabase_realtime add table public.member_logs;
 exception when duplicate_object then null;
 end $$;
+
+notify pgrst, 'reload schema';
