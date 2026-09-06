@@ -100,12 +100,34 @@ create policy gyms_delete on public.gyms
   using (owner_id = auth.uid());
 
 -- user_id 가 아직 비어 있는 기존 행도 gym 소유자면 읽을 수 있게 둡니다.
+create or replace function public.fill_row_user_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if NEW.user_id is null then
+    NEW.user_id := auth.uid();
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists gym_state_fill_user_id on public.gym_state;
+create trigger gym_state_fill_user_id
+  before insert or update on public.gym_state
+  for each row execute procedure public.fill_row_user_id();
+
+drop trigger if exists member_logs_fill_user_id on public.member_logs;
+create trigger member_logs_fill_user_id
+  before insert or update on public.member_logs
+  for each row execute procedure public.fill_row_user_id();
+
 create policy gym_state_select on public.gym_state
   for select to authenticated
   using (public.own_user(user_id) or public.owns_gym(gym_id));
 create policy gym_state_insert on public.gym_state
   for insert to authenticated
-  with check (public.own_user(user_id) and public.owns_gym(gym_id));
+  with check ((public.own_user(user_id) or (user_id is null and auth.uid() is not null)) and public.owns_gym(gym_id));
 create policy gym_state_update on public.gym_state
   for update to authenticated
   using (public.own_user(user_id) or public.owns_gym(gym_id))
@@ -119,7 +141,7 @@ create policy member_logs_select on public.member_logs
   using (public.own_user(user_id) or public.owns_gym(gym_id));
 create policy member_logs_insert on public.member_logs
   for insert to authenticated
-  with check (public.own_user(user_id) and public.owns_gym(gym_id));
+  with check ((public.own_user(user_id) or (user_id is null and auth.uid() is not null)) and public.owns_gym(gym_id));
 create policy member_logs_update on public.member_logs
   for update to authenticated
   using (public.own_user(user_id) or public.owns_gym(gym_id))

@@ -649,9 +649,10 @@
     .auth-setup ol { margin: 10px 0 12px; padding-left: 18px; color: var(--muted); font-size: .8rem; line-height: 1.5; }
     .auth-setup a { color: var(--accent); font-weight: 700; }
     #cloudToast {
-      position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
-      z-index: 70; display: none; background: #1A1D21; color: #fff; font-size: .78rem; font-weight: 700;
-      padding: 8px 14px; border-radius: 999px; box-shadow: var(--shadow-lg); white-space: nowrap;
+      position: fixed; left: 16px; right: 16px; bottom: calc(var(--nav) + 16px + env(safe-area-inset-bottom, 0px));
+      z-index: 70; display: none; background: #1A1D21; color: #fff; font-size: .86rem; font-weight: 700;
+      padding: 12px 16px; border-radius: 14px; box-shadow: var(--shadow-lg); text-align: center;
+      white-space: normal; max-width: 520px; margin: 0 auto;
     }
     #cloudToast.on { display: block; }
     #cloudToast.err { background: var(--danger); }
@@ -815,6 +816,7 @@
             <textarea class="field ex-note" id="logMemo" placeholder="기타 특이사항"></textarea>
           </div>
         </div>
+        <button class="btn wide" id="logSave" type="button" style="margin-top:14px">일지 저장</button>
         <div class="share-bar">
           <button class="btn" id="logClientLinkWide" type="button">공유</button>
           <button class="btn soft" id="logShareWide" type="button">이 날 일지 공유</button>
@@ -1165,21 +1167,68 @@
     function loadData() {
       try {
         const raw = JSON.parse(localStorage.getItem(dataKey()) || "null");
-        return { members: ((raw && raw.members) || []).map(normalizeMember) };
-      } catch { return { members: [] }; }
+        return {
+          members: ((raw && raw.members) || []).map(normalizeMember),
+          dirty: !!(raw && raw.dirty),
+          rev: (raw && raw.rev) || 0
+        };
+      } catch { return { members: [], dirty: false, rev: 0 }; }
     }
     const liveCh = ("BroadcastChannel" in window) ? new BroadcastChannel("pt-logger-v3") : null;
     function cacheLocal() {
-      localStorage.setItem(dataKey(), JSON.stringify(state));
+      const payload = {
+        members: state.members,
+        dirty: !!(window.Cloud && Cloud._dirty),
+        rev: (window.Cloud && Cloud.rev) || 0,
+        savedAt: Date.now()
+      };
+      localStorage.setItem(dataKey(), JSON.stringify(payload));
       if (liveCh) liveCh.postMessage({ t: Date.now() });
     }
+    function saveErrText(err) {
+      return (window.Cloud && Cloud.errorMessage && Cloud.errorMessage(err)) || (err && err.message) || "저장에 실패했습니다.";
+    }
     function saveData() {
-      cacheLocal();
+      try { cacheLocal(); }
+      catch (err) { toastCloud("이 기기에 임시 저장하지 못했습니다", true); console.warn(err); }
       if (window.Cloud && Cloud.canWrite) Cloud.schedulePush();
     }
+    let suppressStatusAlert = false;
+    async function persistCloud(opts) {
+      const silent = !!(opts && opts.silent);
+      const notify = !silent && !(opts && opts.notify === false);
+      try { cacheLocal(); }
+      catch (err) {
+        if (!silent) alert("이 기기에 임시 저장하지 못했습니다. 저장 공간을 확인해 주세요.");
+        return false;
+      }
+      if (!(window.Cloud && Cloud.ready)) {
+        if (!silent) alert("클라우드에 연결되지 않았습니다. 네트워크를 확인하고 다시 시도해 주세요.");
+        return false;
+      }
+      if (!Cloud.canWrite) {
+        if (!silent && !isClientRoute()) alert("로그인 세션이 없어 클라우드에 저장하지 못했습니다. 다시 로그인해 주세요.");
+        return !isClientRoute() ? false : true;
+      }
+      suppressStatusAlert = true;
+      let result;
+      try { result = await Cloud.flush(); }
+      finally { suppressStatusAlert = false; }
+      if (!result || !result.ok) {
+        const msg = saveErrText(result && result.error);
+        if (!silent) alert(msg);
+        else toastCloud(msg, true);
+        return false;
+      }
+      try { cacheLocal(); } catch (_) {}
+      if (notify) alert("저장했습니다.");
+      else if (!silent) toastCloud("저장했습니다.");
+      return true;
+    }
     function setCloudState(next) {
+      if (window.Cloud && Cloud.isBusy && Cloud.isBusy()) return;
       state = { members: ((next && next.members) || []).map(normalizeMember) };
-      cacheLocal();
+      try { cacheLocal(); } catch (_) {}
     }
     function toastCloud(msg, err) {
       const el = $("cloudToast");
@@ -1188,7 +1237,7 @@
       el.classList.toggle("err", !!err);
       el.classList.add("on");
       clearTimeout(toastCloud._t);
-      toastCloud._t = setTimeout(() => el.classList.remove("on"), err ? 4200 : 1600);
+      toastCloud._t = setTimeout(() => el.classList.remove("on"), err ? 5200 : 1800);
     }
     function setSyncDot(mode) {
       const d = $("syncDot");
@@ -1219,7 +1268,7 @@
       refreshLiveViews();
     });
     if (liveCh) liveCh.onmessage = () => {
-      try { state = loadData(); } catch { return; }
+      try { state = { members: loadData().members }; } catch { return; }
       refreshLiveViews();
     };
     function openDb() {
@@ -1249,8 +1298,12 @@
     async function putFile(id, blob, share) {
       await putFileLocal(id, blob);
       if (window.Cloud && Cloud.ready) {
-        const url = await Cloud.upload(id, blob, share || (shareCtx && shareCtx.code) || "");
-        if (url) { urls.set(id, url); return; }
+        try {
+          const url = await Cloud.upload(id, blob, share || (shareCtx && shareCtx.code) || "");
+          if (url) { urls.set(id, url); return; }
+        } catch (err) {
+          throw new Error("사진은 기기에 남겼지만 클라우드 업로드에 실패했습니다.\n" + saveErrText(err));
+        }
       }
     }
     async function getFile(id) {
@@ -2407,23 +2460,25 @@
       if (m) return { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] };
       return loadPortal(code);
     }
-    function writeSelfWorkout(code, row) {
+    async function writeSelfWorkout(code, row) {
       const m = memberByShare(code);
       if (m) { m.selfWorkouts = m.selfWorkouts || []; m.selfWorkouts.push(row); saveData(); }
       else { const g = loadPortal(code); g.selfWorkouts = g.selfWorkouts || []; g.selfWorkouts.push(row); savePortal(code, g); }
-      if (window.Cloud && Cloud.ready) Cloud.upsertLog(code, "self_workout", row);
+      if (!(window.Cloud && Cloud.ready)) throw new Error("클라우드에 연결되지 않았습니다. 네트워크를 확인해 주세요.");
+      await Cloud.upsertLog(code, "self_workout", row);
     }
-    function removeSelfWorkout(code, id) {
+    async function removeSelfWorkout(code, id) {
       const m = memberByShare(code);
       if (m) { m.selfWorkouts = (m.selfWorkouts || []).filter((x) => x.id !== id); saveData(); }
       else { const g = loadPortal(code); g.selfWorkouts = (g.selfWorkouts || []).filter((x) => x.id !== id); savePortal(code, g); }
-      if (window.Cloud && Cloud.ready) Cloud.deleteLog(code, id);
+      if (window.Cloud && Cloud.ready) await Cloud.deleteLog(code, id);
     }
-    function writeMemberDiet(code, row) {
+    async function writeMemberDiet(code, row) {
       const m = memberByShare(code);
       if (m) { m.dietLogs = m.dietLogs || []; m.dietLogs.push(row); saveData(); }
       else { const g = loadPortal(code); g.dietLogs = g.dietLogs || []; g.dietLogs.push(row); savePortal(code, g); }
-      if (window.Cloud && Cloud.ready) Cloud.upsertLog(code, "diet", row);
+      if (!(window.Cloud && Cloud.ready)) throw new Error("클라우드에 연결되지 않았습니다. 네트워크를 확인해 주세요.");
+      await Cloud.upsertLog(code, "diet", row);
     }
     function trainerDayHtml(data, bare) {
       let date = data.date || today();
@@ -3324,7 +3379,7 @@
     $("editProfile").onclick = () => openModal(currentId);
     $("closeModal").onclick = closeModal;
     $("modalBg").addEventListener("click", (e) => { if (e.target.id === "modalBg") closeModal(); });
-    $("profileForm").addEventListener("submit", (e) => {
+    $("profileForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = $("pName").value.trim(); if (!name) return;
       const profile = {
@@ -3345,14 +3400,24 @@
         state.members.push(m);
         currentId = m.id;
       }
-      saveData(); closeModal();
+      const ok = await persistCloud({ notify: true });
+      if (!ok) return;
+      closeModal();
       if (currentId) setTab("detail", true); else renderMembers();
     });
     $("addEx").onclick = async () => {
       const name = $("exName").value.trim(); const s = sessionOf();
       if (!name || !s) return;
       s.exercises.push({ id: uid(), name, sets: [], media: [], feedback: "" });
-      $("exName").value = ""; saveData(); await renderExercises();
+      $("exName").value = "";
+      await persistCloud({ silent: true });
+      await renderExercises();
+    };
+    $("logSave").onclick = async () => {
+      const btn = $("logSave");
+      btn.disabled = true;
+      try { await persistCloud({ notify: true }); }
+      finally { btn.disabled = false; }
     };
     $("exName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addEx").click(); });
     $("logWork").addEventListener("click", (e) => {
@@ -3400,6 +3465,8 @@
           if (charged === "ok") toastCloud("잔여 1회 차감");
           else if (charged === "empty") toastCloud("잔여 회차가 없어 차감하지 않았습니다", true);
         } else saveData();
+        const saved = await persistCloud({ notify: true });
+        if (!saved) return;
         const attendBtn = $("logAttend");
         if (attendBtn && sess) {
           attendBtn.textContent = attendBtnLabel(sess);
@@ -3437,14 +3504,20 @@
       const input = e.target.closest("[data-files]");
       if (!input || !input.files.length) return;
       const ex = findEx(input.dataset.files); ex.media = ex.media || [];
-      for (const file of [...input.files]) {
-        const isVideo = file.type.startsWith("video");
-        if (isVideo && file.size > 40 * 1024 * 1024) { alert("영상은 40MB 이하만 저장됩니다."); continue; }
-        const id = uid();
-        await putFile(id, isVideo ? file : await compressImage(file));
-        ex.media.push({ id, kind: isVideo ? "video" : "image" });
+      try {
+        for (const file of [...input.files]) {
+          const isVideo = file.type.startsWith("video");
+          if (isVideo && file.size > 40 * 1024 * 1024) { alert("영상은 40MB 이하만 저장됩니다."); continue; }
+          const id = uid();
+          await putFile(id, isVideo ? file : await compressImage(file));
+          ex.media.push({ id, kind: isVideo ? "video" : "image" });
+        }
+        input.value = "";
+        const ok = await persistCloud({ notify: true });
+        if (ok) await renderExercises();
+      } catch (err) {
+        alert(saveErrText(err));
       }
-      input.value = ""; saveData(); await renderExercises();
     });
     $("exercises").addEventListener("input", (e) => {
       const w = e.target.closest("[data-set-w]"); const r = e.target.closest("[data-set-r]");
@@ -3470,7 +3543,8 @@
       m.body.push(row);
       $("bw").value = $("bm").value = $("bf").value = "";
       $("bodyFile").value = "";
-      saveData(); renderDetail();
+      const ok = await persistCloud({ notify: true });
+      if (ok) renderDetail();
     };
     ["bodyCmpA", "bodyCmpB"].forEach((id) => {
       $(id).addEventListener("change", async () => {
@@ -3478,11 +3552,11 @@
         $("bodyCompare").innerHTML = await bodyCompareHtml(m, $("bodyCmpA").value, $("bodyCmpB").value);
       });
     });
-    function savePackFields() {
+    async function savePackFields(opts) {
       const m = currentMember(); if (!m) return;
       writePack(m, $("packTotalIn").value, $("packLeftIn").value, $("packEndDate").value);
-      saveData();
-      renderDetail();
+      const ok = await persistCloud({ notify: !!(opts && opts.notify), silent: !(opts && opts.notify) });
+      if (ok) renderDetail();
     }
     $("packUse").onclick = () => {
       const m = currentMember(); if (!m) return;
@@ -3490,7 +3564,7 @@
       if (p.left <= 0) { alert("잔여 횟수가 없습니다. 회차를 구매하거나 잔여를 입력하세요."); return; }
       m.pack.used = p.used + 1; saveData(); renderDetail();
     };
-    $("packSaveInfo").onclick = savePackFields;
+    $("packSaveInfo").onclick = () => savePackFields({ notify: true });
     $("packTotalIn").addEventListener("change", savePackFields);
     $("packLeftIn").addEventListener("change", savePackFields);
     $("packBuy").onclick = () => {
@@ -3537,12 +3611,19 @@
       if (file) { row.photoId = uid(); await putFile(row.photoId, await compressImage(file)); }
       m.dietLogs = m.dietLogs || [];
       m.dietLogs.push(row);
+      saveData();
       $("dietText").value = "";
       $("dietFile").value = "";
       $("dietFileHint").textContent = "";
       const prev = $("dietPreview");
       if (prev) { prev.classList.add("hidden"); prev.innerHTML = ""; }
-      saveData(); renderDetail();
+      try {
+        if (window.Cloud && Cloud.ready) await Cloud.upsertLog(m.share, "diet", row);
+        const ok = await persistCloud({ notify: true });
+        if (ok) renderDetail();
+      } catch (err) {
+        alert(saveErrText(err));
+      }
     };
     $("pageDetail").addEventListener("click", async (e) => {
       if (e.target.closest("[data-edit-profile]")) { openModal(currentId); return; }
@@ -3562,12 +3643,17 @@
         const row = (m[kind] || []).find((x) => x.id === id);
         if (!row) return;
         row.coachComment = ((ta && ta.value) || "").trim();
-        saveData();
-        if (window.Cloud && Cloud.ready && (kind === "dietLogs" || kind === "selfWorkouts")) {
-          Cloud.upsertLog(m.share, kind === "dietLogs" ? "diet" : "self_workout", row);
+        try {
+          if (window.Cloud && Cloud.ready && (kind === "dietLogs" || kind === "selfWorkouts")) {
+            await Cloud.upsertLog(m.share, kind === "dietLogs" ? "diet" : "self_workout", row);
+          }
+          const ok = await persistCloud({ notify: false });
+          if (!ok) return;
+          alert("코멘트를 저장했습니다. 회원 공유 페이지에서 확인할 수 있습니다.");
+          renderDetail();
+        } catch (err) {
+          alert(saveErrText(err));
         }
-        alert("코멘트를 저장했습니다. 회원 공유 페이지에서 확인할 수 있습니다.");
-        renderDetail();
         return;
       }
       const logDay = e.target.closest("[data-open-log-date]");
@@ -3702,14 +3788,23 @@
       if (e.target.closest("[data-add-self]")) {
         const name = $("selfName").value.trim();
         if (!name) { alert("종목을 입력해 주세요."); return; }
-        writeSelfWorkout(shareCtx.code, {
-          id: uid(), date: shareWriteDate(), name,
-          weight: $("selfWeight").value.trim(),
-          reps: $("selfReps").value.trim(),
-          note: $("selfNote").value.trim()
-        });
-        $("selfName").value = $("selfWeight").value = $("selfReps").value = $("selfNote").value = "";
-        await renderShareLive();
+        const btn = e.target.closest("[data-add-self]");
+        if (btn) btn.disabled = true;
+        try {
+          await writeSelfWorkout(shareCtx.code, {
+            id: uid(), date: shareWriteDate(), name,
+            weight: $("selfWeight").value.trim(),
+            reps: $("selfReps").value.trim(),
+            note: $("selfNote").value.trim()
+          });
+          $("selfName").value = $("selfWeight").value = $("selfReps").value = $("selfNote").value = "";
+          alert("개인 운동을 저장했습니다.");
+          await renderShareLive();
+        } catch (err) {
+          alert(saveErrText(err));
+        } finally {
+          if (btn) btn.disabled = false;
+        }
         return;
       }
       const delS = e.target.closest("[data-del-self]");
@@ -3722,17 +3817,26 @@
         const text = $("shareDietText").value.trim();
         const file = $("shareDietFile").files[0];
         if (!text && !file) { alert("메모나 사진을 남겨 주세요."); return; }
-        const row = { id: uid(), date: shareWriteDate(), text, meal: shareCtx.meal, source: "member" };
-        if (file) {
-          row.photoId = uid();
-          await putFile(row.photoId, await compressImage(file), shareCtx.code);
+        const btn = e.target.closest("[data-add-diet]");
+        if (btn) btn.disabled = true;
+        try {
+          const row = { id: uid(), date: shareWriteDate(), text, meal: shareCtx.meal, source: "member" };
+          if (file) {
+            row.photoId = uid();
+            await putFile(row.photoId, await compressImage(file), shareCtx.code);
+          }
+          await writeMemberDiet(shareCtx.code, row);
+          $("shareDietText").value = "";
+          $("shareDietFile").value = "";
+          const prev = $("shareDietPreview");
+          if (prev) { prev.classList.add("hidden"); prev.innerHTML = ""; }
+          alert("식단을 저장했습니다.");
+          await renderShareLive();
+        } catch (err) {
+          alert(saveErrText(err));
+        } finally {
+          if (btn) btn.disabled = false;
         }
-        writeMemberDiet(shareCtx.code, row);
-        $("shareDietText").value = "";
-        $("shareDietFile").value = "";
-        const prev = $("shareDietPreview");
-        if (prev) { prev.classList.add("hidden"); prev.innerHTML = ""; }
-        await renderShareLive();
         return;
       }
       if (e.target.closest("[data-copy-sync]")) {
@@ -3968,23 +4072,38 @@
     async function enterTrainerApp() {
       showAuthGate(false);
       setSyncDot("off");
-      state = { members: [] };
+      const cached = loadData();
+      state = { members: cached.members || [] };
       currentId = null;
       toastCloud("클라우드에서 불러오는 중…");
       try {
         const next = await Cloud.hydrate();
-        setCloudState(next);
-        Cloud.subscribe();
-        setSyncDot("on");
-        toastCloud("내 계정 데이터와 동기화됨");
+        if (cached.dirty && cached.members && cached.members.length) {
+          state = { members: cached.members };
+          Cloud._dirty = true;
+          const pushed = await Cloud.flush();
+          if (!pushed || !pushed.ok) {
+            setSyncDot("error");
+            alert("이전에 저장하지 못한 기록이 이 기기에 남아 있습니다.\n" + saveErrText(pushed && pushed.error));
+          } else {
+            setCloudState(state);
+            Cloud.subscribe();
+            setSyncDot("on");
+            toastCloud("미저장 기록을 클라우드에 올렸습니다.");
+          }
+        } else {
+          setCloudState(next);
+          Cloud.subscribe();
+          setSyncDot("on");
+          toastCloud("내 계정 데이터와 동기화됨");
+        }
       } catch (err) {
         console.error("hydrate", err);
         setSyncDot("error");
-        const msg = String((err && (err.message || err.code)) || "");
-        const needSql = /schema cache|does not exist|permission denied|row-level|42501|PGRST|not authenticated/i.test(msg);
-        toastCloud(needSql
-          ? "클라우드 불러오기 실패 — Supabase SQL Editor에서 schema.sql을 다시 실행해 주세요"
-          : "클라우드 불러오기 실패 — 네트워크를 확인하고 다시 로그인해 주세요", true);
+        if (cached.members && cached.members.length) state = { members: cached.members };
+        const msg = saveErrText(err);
+        toastCloud(msg, true);
+        alert("클라우드 불러오기 실패\n" + msg);
       }
       const opened = await openShare();
       if (!opened) setTab(tab && tab !== "share" ? tab : "home");
@@ -3996,7 +4115,16 @@
       onStatus: (mode, err) => {
         if (mode === "saving") { setSyncDot("on"); }
         else if (mode === "saved") { setSyncDot("on"); }
-        else if (mode === "error") { setSyncDot("error"); toastCloud("저장 실패 — 네트워크를 확인해 주세요", true); console.warn(err); }
+        else if (mode === "error") {
+          setSyncDot("error");
+          const msg = saveErrText(err);
+          toastCloud(msg, true);
+          console.warn(err);
+          if (!suppressStatusAlert && (!toastCloud._alerted || Date.now() - toastCloud._alerted > 4000)) {
+            toastCloud._alerted = Date.now();
+            alert(msg);
+          }
+        }
       },
       shares: () => (state.members || []).map((m) => m.share),
       onRecovery: () => showNewPassForm()
