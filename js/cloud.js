@@ -153,6 +153,7 @@
     return {
       members: (state.members || []).map((m) => {
         const copy = Object.assign({}, m);
+        if (Cloud.user && Cloud.user.id) copy.ownerId = Cloud.user.id;
         delete copy.selfWorkouts;
         delete copy.dietLogs;
         return copy;
@@ -500,6 +501,19 @@
     return "share/unknown/" + id;
   };
 
+  Cloud.mediaPaths = function (id, share, ownerId) {
+    const paths = [];
+    const add = function (p) {
+      if (p && paths.indexOf(p) < 0) paths.push(p);
+    };
+    if (ownerId) add("user/" + ownerId + "/" + id);
+    if (Cloud.user) add("user/" + Cloud.user.id + "/" + id);
+    if (Cloud.gymId) add("gym/" + Cloud.gymId + "/" + id);
+    if (share) add("share/" + share + "/" + id);
+    add("share/unknown/" + id);
+    return paths;
+  };
+
   Cloud.upload = async function (id, blob, share) {
     if (!Cloud.sb || !blob) return "";
     const path = Cloud.storagePath(id, share);
@@ -525,22 +539,25 @@
     await Cloud.sb.storage.from("pt-media").remove(paths);
   };
 
-  Cloud.publicUrl = function (id, share) {
+  Cloud.publicUrl = function (id, share, ownerId) {
     if (!Cloud.sb) return "";
-    const path = Cloud.user
-      ? "user/" + Cloud.user.id + "/" + id
-      : (Cloud.gymId ? "gym/" + Cloud.gymId + "/" + id : (share ? "share/" + share + "/" + id : ""));
-    if (!path) return "";
-    const { data } = Cloud.sb.storage.from("pt-media").getPublicUrl(path);
+    const paths = Cloud.mediaPaths(id, share, ownerId);
+    if (!paths.length) return "";
+    const { data } = Cloud.sb.storage.from("pt-media").getPublicUrl(paths[0]);
     return (data && data.publicUrl) || "";
   };
 
-  Cloud.download = async function (id, share) {
+  Cloud.publicUrls = function (id, share, ownerId) {
+    if (!Cloud.sb) return [];
+    return Cloud.mediaPaths(id, share, ownerId).map((p) => {
+      const { data } = Cloud.sb.storage.from("pt-media").getPublicUrl(p);
+      return (data && data.publicUrl) || "";
+    }).filter(Boolean);
+  };
+
+  Cloud.download = async function (id, share, ownerId) {
     if (!Cloud.sb) return null;
-    const paths = [];
-    if (Cloud.user) paths.push("user/" + Cloud.user.id + "/" + id);
-    if (Cloud.gymId) paths.push("gym/" + Cloud.gymId + "/" + id);
-    if (share) paths.push("share/" + share + "/" + id);
+    const paths = Cloud.mediaPaths(id, share, ownerId);
     const seen = {};
     for (let i = 0; i < paths.length; i++) {
       const p = paths[i];

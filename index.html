@@ -463,8 +463,22 @@
     }
     .tabbar button.on { color: var(--accent); }
     .tabbar .ico { font-size: 1.15rem; line-height: 1; }
-    .viewer { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .viewer { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 24px; }
     .viewer img, .viewer video { max-width: 100%; max-height: 80dvh; border-radius: 12px; }
+    #dayLogBg { z-index: 55; }
+    .day-log-modal { width: min(560px, 100%); max-height: min(90dvh, 100%); }
+    .day-log-modal .media-view { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .day-log-modal .media-view .thumb,
+    .day-combo .media-view .thumb {
+      width: 100%; max-width: 100%; height: auto; min-height: 120px; border-radius: 12px; overflow: hidden;
+      background: #111; padding: 0;
+    }
+    .day-log-modal .media-view video,
+    .day-log-modal .media-view img,
+    .day-combo .media-view video,
+    .day-combo .media-view img { width: 100%; height: auto; max-height: 52dvh; object-fit: contain; display: block; background: #111; }
+    .hist-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .client-cal-day.has { font-weight: 800; }
     #closeViewer { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 16px; }
     .modal-bg {
       position: fixed; inset: 0; z-index: 40; background: rgba(44,42,38,.45);
@@ -1084,6 +1098,16 @@
     </form>
   </div>
 
+  <div id="dayLogBg" class="modal-bg hidden">
+    <div class="modal day-log-modal" role="dialog" aria-labelledby="dayLogTitle">
+      <div class="row">
+        <h2 id="dayLogTitle" style="flex:1">그날 기록</h2>
+        <button class="btn soft hdr-btn" id="closeDayLog" type="button">닫기</button>
+      </div>
+      <div id="dayLogBody"></div>
+    </div>
+  </div>
+
   <div id="viewer" class="viewer hidden">
     <button class="btn" id="closeViewer" type="button">닫기</button>
     <div id="viewerBody"></div>
@@ -1119,9 +1143,23 @@
       return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
     };
     const emptyProfile = () => ({ gender: "", age: "", goal: "", history: "", experience: "", notes: "" });
+    function isoDate(v) {
+      if (!v) return "";
+      const s = String(v).trim();
+      const m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+      if (m) return m[1] + "-" + String(m[2]).padStart(2, "0") + "-" + String(m[3]).padStart(2, "0");
+      if (/^\d{8}$/.test(s)) return s.slice(0, 4) + "-" + s.slice(4, 6) + "-" + s.slice(6, 8);
+      return s.length >= 10 ? s.slice(0, 10) : s;
+    }
+    function sameDate(a, b) {
+      return isoDate(a) === isoDate(b);
+    }
     function normalizeExercise(e) {
       e = e || {};
-      return Object.assign({}, e, { feedback: e.feedback || "" });
+      return Object.assign({}, e, {
+        feedback: e.feedback || "",
+        media: (e.media || []).map((x) => Object.assign({}, x))
+      });
     }
     function normalizeSession(s) {
       s = Object.assign({ program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60, attended: false, charged: false }, s || {});
@@ -1141,7 +1179,10 @@
     function normalizeMember(m) {
       const profile = Object.assign(emptyProfile(), m.profile || {});
       const sessions = {};
-      Object.keys(m.sessions || {}).forEach((d) => { sessions[d] = normalizeSession(m.sessions[d]); });
+      Object.keys(m.sessions || {}).forEach((d) => {
+        const key = isoDate(d) || d;
+        sessions[key] = normalizeSession(m.sessions[d]);
+      });
       return {
         id: m.id || uid(), name: m.name || "이름 없음", share: m.share || shareCode(),
         createdAt: m.createdAt || 0,
@@ -1156,8 +1197,9 @@
         injuries: m.injuries != null ? m.injuries : (profile.history || ""),
         consults: m.consults || [],
         painLogs: m.painLogs || [],
-        dietLogs: m.dietLogs || [],
-        selfWorkouts: m.selfWorkouts || []
+        dietLogs: (m.dietLogs || []).map((n) => Object.assign({}, n, { date: isoDate(n.date) || n.date })),
+        selfWorkouts: (m.selfWorkouts || []).map((w) => Object.assign({}, w, { date: isoDate(w.date) || w.date })),
+        ownerId: m.ownerId || m.owner_id || ""
       };
     }
     function dataKey() {
@@ -1300,7 +1342,7 @@
       if (window.Cloud && Cloud.ready) {
         try {
           const url = await Cloud.upload(id, blob, share || (shareCtx && shareCtx.code) || "");
-          if (url) { urls.set(id, url); return; }
+          if (url) { urls.set(id, url); return url; }
         } catch (err) {
           throw new Error("사진은 기기에 남겼지만 클라우드 업로드에 실패했습니다.\n" + saveErrText(err));
         }
@@ -1324,22 +1366,35 @@
       const u = urls.get(id); if (u) { URL.revokeObjectURL(u); urls.delete(id); }
       if (window.Cloud && Cloud.ready) Cloud.removeFile(id, share || (shareCtx && shareCtx.code) || "");
     }
-    async function fileUrl(id, share) {
+    function mediaOwnerId(extra) {
+      extra = extra || {};
+      return extra.ownerId || (shareCtx && shareCtx.ownerId) || (shareCtx && shareCtx.data && shareCtx.data.ownerId) || "";
+    }
+    async function fileUrl(id, share, extra) {
+      extra = extra || {};
+      if (!id) return extra.url || "";
       if (urls.has(id)) return urls.get(id);
+      if (extra.url) { urls.set(id, extra.url); return extra.url; }
       const blob = await getFile(id);
       if (blob) {
         const u = URL.createObjectURL(blob); urls.set(id, u); return u;
       }
+      const code = share || (shareCtx && shareCtx.code) || "";
+      const ownerId = mediaOwnerId(extra);
       if (window.Cloud && Cloud.ready) {
-        const remote = await Cloud.download(id, share || (shareCtx && shareCtx.code) || "");
+        const remote = await Cloud.download(id, code, ownerId);
         if (remote) {
           await putFileLocal(id, remote);
           const u = URL.createObjectURL(remote); urls.set(id, u); return u;
         }
-        const pub = Cloud.publicUrl(id, share || (shareCtx && shareCtx.code) || "");
-        if (pub) { urls.set(id, pub); return pub; }
+        if (extra.path && Cloud.sb) {
+          const { data } = Cloud.sb.storage.from("pt-media").getPublicUrl(extra.path);
+          if (data && data.publicUrl) { urls.set(id, data.publicUrl); return data.publicUrl; }
+        }
+        const pubs = (Cloud.publicUrls && Cloud.publicUrls(id, code, ownerId)) || [Cloud.publicUrl(id, code, ownerId)];
+        if (pubs[0]) { urls.set(id, pubs[0]); return pubs[0]; }
       }
-      return "";
+      return extra.url || "";
     }
     function compressImage(file) {
       return new Promise((resolve) => {
@@ -1375,7 +1430,7 @@
     function sessionOf(m, date) {
       m = m || currentMember();
       if (!m) return null;
-      const d = date || logDate || today();
+      const d = isoDate(date || logDate || today()) || (date || logDate || today());
       m.sessions = m.sessions || {};
       if (!m.sessions[d]) m.sessions[d] = { program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60, attended: false, charged: false };
       if (m.sessions[d].program == null) m.sessions[d].program = "";
@@ -1424,11 +1479,22 @@
       const notes = !!(s.program || s.feedback || s.memo || (s.exercises || []).some((e) => e.feedback || e.note));
       return { exercises: (s.exercises || []).length, sets, memo: notes || "" };
     }
+    function packMedia(x) {
+      if (!x) return null;
+      return {
+        id: x.id || "",
+        kind: x.kind || "image",
+        url: x.url || "",
+        path: x.path || ""
+      };
+    }
     function packEx(e) {
       return {
+        id: e.id || "",
         name: e.name,
         feedback: e.feedback || "",
-        sets: (e.sets || []).map((st) => ({ weight: st.weight, reps: st.reps }))
+        sets: (e.sets || []).map((st) => ({ id: st.id || "", weight: st.weight, reps: st.reps })),
+        media: (e.media || []).map(packMedia).filter(Boolean)
       };
     }
     function packSession(s) {
@@ -2265,21 +2331,23 @@
       $("afterBox").innerHTML = await photoCol("after");
     }
     function snapshot(m) {
-      const dates = Object.keys(m.sessions || {}).sort().reverse().slice(0, 40);
       const sessions = {};
-      dates.forEach((d) => {
-        const s = m.sessions[d];
+      Object.keys(m.sessions || {}).forEach((raw) => {
+        const d = isoDate(raw) || raw;
+        const s = m.sessions[raw];
         if (!s) return;
         sessions[d] = packSession(s);
       });
       return {
         name: m.name, share: m.share, id: m.id, profile: m.profile, body: m.body || [], photos: m.photos || [], sessions,
+        ownerId: m.ownerId || (window.Cloud && Cloud.user && Cloud.user.id) || "",
         selfWorkouts: (m.selfWorkouts || []).map((w) => ({
-          id: w.id, date: w.date, name: w.name, weight: w.weight, reps: w.reps, note: w.note,
+          id: w.id, date: isoDate(w.date) || w.date, name: w.name, weight: w.weight, reps: w.reps, note: w.note,
           coachComment: w.coachComment || ""
         })),
         dietLogs: (m.dietLogs || []).map((n) => ({
-          id: n.id, date: n.date, text: n.text, meal: n.meal, source: n.source,
+          id: n.id, date: isoDate(n.date) || n.date, text: n.text, meal: n.meal, source: n.source,
+          photoId: n.photoId || "", photoData: n.photoData || "",
           coachComment: n.coachComment || ""
         }))
       };
@@ -2344,19 +2412,27 @@
     function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
     function recordDatesSet(selfWorkouts, dietLogs, sessions) {
       const set = new Set();
-      (selfWorkouts || []).forEach((w) => { if (w.date) set.add(w.date); });
-      (dietLogs || []).forEach((n) => { if (n.date) set.add(n.date); });
-      Object.keys(sessions || {}).forEach((d) => {
-        const s = sessions[d] || {};
-        if ((s.exercises || []).length || s.program || s.feedback || s.memo) set.add(d);
+      (selfWorkouts || []).forEach((w) => { const d = isoDate(w.date); if (d) set.add(d); });
+      (dietLogs || []).forEach((n) => { const d = isoDate(n.date); if (d) set.add(d); });
+      Object.keys(sessions || {}).forEach((raw) => {
+        const d = isoDate(raw) || raw;
+        const s = sessions[raw] || sessions[d] || {};
+        if ((s.exercises || []).length || s.program || s.feedback || s.memo || s.attended || s.charged) set.add(d);
       });
       return set;
     }
+    function sessionForDate(sessions, date) {
+      if (!sessions) return null;
+      const key = isoDate(date) || date;
+      if (sessions[key]) return sessions[key];
+      const found = Object.keys(sessions).find((d) => sameDate(d, key));
+      return found ? sessions[found] : null;
+    }
     function selfForDate(list, date) {
-      return (list || []).filter((w) => w.date === date).slice().reverse();
+      return (list || []).filter((w) => sameDate(w.date, date)).slice().reverse();
     }
     function dietForDate(list, date) {
-      return (list || []).filter((n) => n.date === date).slice().reverse();
+      return (list || []).filter((n) => sameDate(n.date, date)).slice().reverse();
     }
     function selfDayHtml(rows, canDel) {
       if (!(rows || []).length) return '<p class="hint" style="margin:0">개인 운동 기록이 없습니다.</p>';
@@ -2379,10 +2455,12 @@
       return parts.join("");
     }
     async function dailyComboHtml(date, portal, pack, canDel) {
-      const workouts = selfForDate(portal.selfWorkouts, date);
-      const diets = dietForDate(portal.dietLogs, date);
-      const sess = (pack.sessions && pack.sessions[date]) || (pack.date === date ? pack : null);
-      const trainer = sess ? trainerDayHtml(Object.assign({ date }, sess), true) : "";
+      date = isoDate(date) || date;
+      const workouts = selfForDate((portal && portal.selfWorkouts) || (pack && pack.selfWorkouts), date);
+      const diets = dietForDate((portal && portal.dietLogs) || (pack && pack.dietLogs), date);
+      let sess = sessionForDate(pack && pack.sessions, date);
+      if (!sess && pack && sameDate(pack.date, date)) sess = pack;
+      const trainer = sess ? await trainerDayHtml(Object.assign({ date }, sess), true) : "";
       const dietBlock = await dietDayHtml(diets);
       const empty = !workouts.length && !diets.length && !trainer;
       return `<div class="card day-combo">
@@ -2390,7 +2468,7 @@
         ${empty ? '<p class="hint" style="margin:0">이 날의 기록이 아직 없습니다.</p>' : ""}
         <div class="combo-block"><p class="section-label">개인 운동</p>${selfDayHtml(workouts, canDel)}</div>
         <div class="combo-block"><p class="section-label">식단</p>${dietBlock}</div>
-        ${trainer ? `<div class="combo-block"><p class="section-label">트레이너 수업</p>${trainer}</div>` : ""}
+        ${trainer ? `<div class="combo-block"><p class="section-label">트레이너 수업</p>${trainer}</div>` : '<div class="combo-block"><p class="section-label">트레이너 수업</p><p class="hint" style="margin:0">이 날 수업 일지가 없습니다.</p></div>'}
       </div>`;
     }
     function clientCalHtml(monthKey, marked, selected) {
@@ -2480,54 +2558,71 @@
       if (!(window.Cloud && Cloud.ready)) throw new Error("클라우드에 연결되지 않았습니다. 네트워크를 확인해 주세요.");
       await Cloud.upsertLog(code, "diet", row);
     }
-    function trainerDayHtml(data, bare) {
-      let date = data.date || today();
+    async function mediaViewHtml(ex) {
+      const parts = [];
+      for (const media of ex.media || []) {
+        if (!media) continue;
+        if (media.kind === "link") {
+          if (media.url) parts.push(`<a class="btn soft" href="${esc(media.url)}" target="_blank" rel="noopener">링크 열기</a>`);
+          continue;
+        }
+        const url = await fileUrl(media.id, shareCtx.code, { url: media.url, path: media.path });
+        if (!url) continue;
+        if (media.kind === "video") {
+          parts.push(`<div class="thumb lg"><video src="${url}" controls playsinline preload="metadata"></video></div>`);
+        } else {
+          parts.push(`<button class="thumb lg" type="button" data-view="${esc(media.id)}:image"><img src="${url}" alt="" /></button>`);
+        }
+      }
+      return parts.length ? `<div class="media media-view">${parts.join("")}</div>` : "";
+    }
+    async function trainerDayHtml(data, bare) {
+      let date = isoDate(data.date) || data.date || today();
       let exercises = data.exercises || [];
       let program = data.program || "";
       let feedback = data.feedback || "";
       let memo = data.memo || "";
-      if ((!exercises.length) && data.sessions) {
-        const s = data.sessions[date] || {};
-        if ((s.exercises || []).length || s.program || s.feedback || s.memo) {
-          exercises = s.exercises || [];
-          program = s.program || "";
-          feedback = s.feedback || "";
-          memo = s.memo || "";
-        } else {
-          const last = Object.keys(data.sessions).sort().reverse()[0];
-          if (last) {
-            date = last;
-            exercises = (data.sessions[last].exercises || []);
-            program = data.sessions[last].program || "";
-            feedback = data.sessions[last].feedback || "";
-            memo = data.sessions[last].memo || "";
-          }
+      if (data.sessions) {
+        const s = sessionForDate(data.sessions, date);
+        if (s && ((s.exercises || []).length || s.program || s.feedback || s.memo)) {
+          exercises = s.exercises || exercises;
+          program = s.program || program;
+          feedback = s.feedback || feedback;
+          memo = s.memo || memo;
         }
       }
       if (!exercises.length && !program && !feedback && !memo) return "";
-      const head = program ? `<p class="kv"><span>오늘 프로그램</span>${esc(program)}</p>` : "";
-      const blocks = exercises.map((ex) => {
+      const head = program ? `<p class="kv"><span>프로그램</span>${esc(program)}</p>` : "";
+      const blocks = [];
+      for (const ex of exercises) {
         const sets = (ex.sets || []).map((st, i) => `<div class="set-line"><span>${i + 1}세트</span><b>${esc(st.weight)}kg × ${esc(st.reps)}회</b></div>`).join("");
         const fb = ex.feedback || "";
-        return `<div class="log-ex"><h3>${esc(ex.name)}</h3>${sets || '<p class="hint">세트 없음</p>'}
-          ${fb ? `<p class="kv"><span>피드백</span>${esc(fb)}</p>` : ""}</div>`;
-      }).join("");
+        const media = await mediaViewHtml(ex);
+        blocks.push(`<div class="log-ex"><h3>${esc(ex.name)}</h3>${sets || '<p class="hint">세트 없음</p>'}
+          ${media}
+          ${fb ? `<p class="kv"><span>종목 피드백</span>${esc(fb)}</p>` : ""}</div>`);
+      }
       const foot = [
-        feedback ? `<p class="kv"><span>피드백</span>${esc(feedback)}</p>` : "",
+        feedback ? `<p class="kv"><span>트레이너 피드백</span>${esc(feedback)}</p>` : "",
         memo ? `<p class="kv"><span>메모</span>${esc(memo)}</p>` : ""
       ].join("");
       const title = bare ? "" : `<p class="label" style="margin-top:0">${prettyDate(date)} · ${date}</p>`;
-      const inner = `${title}${head}${blocks}${foot}`;
+      const inner = `${title}${head}${blocks.join("")}${foot}`;
       return bare ? inner : `<div class="card">${inner}</div>`;
     }
-    function trainerLogsHtml(data, full) {
+    async function trainerLogsHtml(data, full) {
       if (!full && data.kind === "log") {
-        return trainerDayHtml(data) || '<div class="card"><p class="hint" style="margin:0">이 날 트레이너 수업 기록이 없습니다.</p></div>';
+        return (await trainerDayHtml(data)) || '<div class="card"><p class="hint" style="margin:0">이 날 트레이너 수업 기록이 없습니다.</p></div>';
       }
       const sessions = data.sessions || {};
-      const dates = Object.keys(sessions).sort().reverse();
-      const html = dates.map((date) => trainerDayHtml(Object.assign({ date }, sessions[date] || {}))).join("");
-      return html || '<div class="card"><p class="hint" style="margin:0">아직 트레이너 수업 일지가 없습니다.</p></div>';
+      const dates = Object.keys(sessions).map((d) => isoDate(d) || d).sort().reverse();
+      const parts = [];
+      for (const date of dates) {
+        const s = sessionForDate(sessions, date);
+        if (!s) continue;
+        parts.push(await trainerDayHtml(Object.assign({ date }, s)));
+      }
+      return parts.filter(Boolean).join("") || '<div class="card"><p class="hint" style="margin:0">아직 트레이너 수업 일지가 없습니다.</p></div>';
     }
     async function dietCardsHtml(list) {
       const rows = [...(list || [])].reverse();
@@ -2561,18 +2656,69 @@
         : null;
       if (remote) {
         const m = normalizeMember(remote);
+        if (m.ownerId) shareCtx.ownerId = m.ownerId;
         savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
-        await renderShare({ ...snapshot(m), name: m.name, share: m.share, photos: m.photos, kind: shareCtx.kind });
+        await renderShare({ ...snapshot(m), name: m.name, share: m.share, photos: m.photos, kind: shareCtx.kind, ownerId: m.ownerId });
         return;
       }
       const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
       if (local) await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos, kind: shareCtx.kind });
       else if (shareCtx.data) await renderShare(shareCtx.data);
     }
+    function histListHtml(marked, selected) {
+      const dates = [...marked].sort().reverse();
+      if (!dates.length) return '<div class="empty">아직 저장된 날짜가 없습니다.</div>';
+      return `<div class="hist-list">${dates.map((d) =>
+        `<button class="tile" type="button" data-open-day="${d}"><span><b>${prettyDate(d)} · ${d}</b><small>${d === today() ? "오늘" : "기록 보기"}</small></span><span class="chev">›</span></button>`
+      ).join("")}</div>`;
+    }
+    async function shareViewPack() {
+      const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
+      if (local) {
+        const snap = snapshot(local);
+        if (snap.ownerId) shareCtx.ownerId = snap.ownerId;
+        return snap;
+      }
+      if (window.Cloud && Cloud.ready && shareCtx.code) {
+        const remote = await Cloud.fetchMember(shareCtx.code);
+        if (remote) {
+          const m = normalizeMember(remote);
+          if (m.ownerId) shareCtx.ownerId = m.ownerId;
+          savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
+          const snap = snapshot(m);
+          shareCtx.data = { ...snap, name: m.name, share: m.share, photos: m.photos, kind: shareCtx.kind, ownerId: m.ownerId };
+          return snap;
+        }
+      }
+      return shareCtx.data || { sessions: {}, selfWorkouts: [], dietLogs: [] };
+    }
+    async function openDayLog(date) {
+      date = isoDate(date || shareCtx.histDate || today());
+      shareCtx.histDate = date;
+      shareCtx.histMonth = ymOf(date);
+      const title = $("dayLogTitle");
+      const body = $("dayLogBody");
+      const bg = $("dayLogBg");
+      if (!title || !body || !bg) return;
+      title.textContent = prettyDate(date) + " 기록";
+      body.innerHTML = '<p class="hint">기록을 불러오는 중…</p>';
+      bg.classList.remove("hidden");
+      document.querySelectorAll("[data-hist-day]").forEach((b) => {
+        b.classList.toggle("on", b.dataset.histDay === date);
+      });
+      const pack = await shareViewPack();
+      const portal = portalData(shareCtx.code);
+      body.innerHTML = await dailyComboHtml(date, portal, pack, false);
+    }
+    function closeDayLog() {
+      const bg = $("dayLogBg");
+      if (bg) bg.classList.add("hidden");
+    }
     async function renderShare(data) {
       shareCtx.code = data.share || "";
       shareCtx.kind = data.kind || "";
       shareCtx.data = data;
+      if (data.ownerId) shareCtx.ownerId = data.ownerId;
       if (shareCtx.prevCode !== shareCtx.code) {
         shareCtx.meal = "점심";
         shareCtx.view = "today";
@@ -2603,7 +2749,7 @@
         $("shareSub").textContent = "오늘 수업 일지 · 개인 기록";
         $("shareBody").innerHTML = `
           <div class="label">오늘 수업 일지</div>
-          ${trainerLogsHtml(pack, false)}
+          ${await trainerLogsHtml(pack, false)}
           <p class="hint">프로그램 · 피드백 · 메모 · 종목 세트·피드백은 트레이너가 작성한 내용입니다.</p>
           <div class="label">개인 운동 · 식단</div>
           ${await dailyComboHtml(data.date || today(), portal, pack, false)}`;
@@ -2660,8 +2806,9 @@
 
         <div class="share-panel${shareCtx.view === "history" ? " on" : ""}" data-panel="history">
           <div class="label">이전 기록 보기</div>
-          <p class="hint">날짜를 고르면 그날의 개인 운동·식단·수업 기록을 모아 봅니다.</p>
+          <p class="hint">날짜를 누르면 그날의 영상·식단·운동·피드백이 새 창으로 열립니다.</p>
           ${cal}
+          ${histListHtml(marked, shareCtx.histDate)}
           <div id="shareHistDay">${histCombo}</div>
         </div>
 
@@ -3509,8 +3656,10 @@
           const isVideo = file.type.startsWith("video");
           if (isVideo && file.size > 40 * 1024 * 1024) { alert("영상은 40MB 이하만 저장됩니다."); continue; }
           const id = uid();
-          await putFile(id, isVideo ? file : await compressImage(file));
-          ex.media.push({ id, kind: isVideo ? "video" : "image" });
+          const share = (currentMember() && currentMember().share) || "";
+          const url = await putFile(id, isVideo ? file : await compressImage(file), share);
+          const path = (window.Cloud && Cloud.storagePath) ? Cloud.storagePath(id, share) : "";
+          ex.media.push({ id, kind: isVideo ? "video" : "image", url: url || "", path });
         }
         input.value = "";
         const ok = await persistCloud({ notify: true });
@@ -3757,10 +3906,14 @@
       }
       const histDay = e.target.closest("[data-hist-day]");
       if (histDay) {
-        shareCtx.histDate = histDay.dataset.histDay;
+        shareCtx.histDate = isoDate(histDay.dataset.histDay);
         shareCtx.histMonth = ymOf(shareCtx.histDate);
-        if (shareCtx.data) await renderShare(shareCtx.data);
-        else await renderShareLive();
+        await openDayLog(shareCtx.histDate);
+        return;
+      }
+      const openDay = e.target.closest("[data-open-day]");
+      if (openDay) {
+        await openDayLog(openDay.dataset.openDay);
         return;
       }
       const attendNav = e.target.closest("[data-attend-week]");
@@ -3773,10 +3926,13 @@
       const attendDay = e.target.closest("[data-attend-day]");
       if (attendDay) {
         shareCtx.view = "history";
-        shareCtx.histDate = attendDay.dataset.attendDay;
+        shareCtx.histDate = isoDate(attendDay.dataset.attendDay);
         shareCtx.histMonth = ymOf(shareCtx.histDate);
-        if (shareCtx.data) await renderShare(shareCtx.data);
-        else await renderShareLive();
+        syncClientNav();
+        document.querySelectorAll(".share-panel").forEach((p) => {
+          p.classList.toggle("on", p.getAttribute("data-panel") === "history");
+        });
+        await openDayLog(shareCtx.histDate);
         return;
       }
       const meal = e.target.closest("[data-meal]");
@@ -3846,7 +4002,11 @@
         return;
       }
       const view = e.target.closest("[data-view]");
-      if (view) { showViewer(view.dataset.view.split(":")[0], "image"); return; }
+      if (view) {
+        const [id, kind] = (view.dataset.view || "").split(":");
+        showViewer(id, kind || "image");
+        return;
+      }
       const src = e.target.closest("[data-src-view]");
       if (src) {
         const img = src.querySelector("img");
@@ -3855,11 +4015,21 @@
     });
     $("closeViewer").onclick = () => { $("viewer").classList.add("hidden"); $("viewerBody").innerHTML = ""; };
     $("viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") $("closeViewer").click(); });
+    $("closeDayLog").onclick = () => closeDayLog();
+    $("dayLogBg").addEventListener("click", async (e) => {
+      if (e.target.id === "dayLogBg") { closeDayLog(); return; }
+      const view = e.target.closest("[data-view]");
+      if (view) {
+        const [id, kind] = (view.dataset.view || "").split(":");
+        await showViewer(id, kind || "image");
+      }
+    });
     async function fetchCloudMember(ref) {
       if (!(window.Cloud && Cloud.ready) || !ref) return null;
       const remote = await Cloud.fetchMember(ref);
       if (!remote) return null;
       const m = normalizeMember(remote);
+      if (m.ownerId) shareCtx.ownerId = m.ownerId;
       savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
       return m;
     }

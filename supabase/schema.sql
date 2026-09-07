@@ -328,12 +328,14 @@ declare
   p_share text;
   workouts jsonb;
   diets jsonb;
+  oid uuid;
 begin
   if p_ref is null or length(trim(p_ref)) < 4 then
     return null;
   end if;
-  select e into mem
-  from public.gym_state s,
+  select e, coalesce(s.user_id, g.owner_id) into mem, oid
+  from public.gym_state s
+  join public.gyms g on g.id = s.gym_id,
        jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
   where e->>'share' = p_ref or e->>'id' = p_ref
   limit 1;
@@ -349,7 +351,11 @@ begin
     into diets
     from public.member_logs
     where share = p_share and kind = 'diet';
-  return mem || jsonb_build_object('selfWorkouts', workouts, 'dietLogs', diets);
+  return mem || jsonb_build_object(
+    'selfWorkouts', workouts,
+    'dietLogs', diets,
+    'ownerId', oid
+  );
 end;
 $$;
 
