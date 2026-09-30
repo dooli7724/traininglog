@@ -689,14 +689,23 @@
       console.warn("uploadVideo", error);
       throw error;
     }
-    const { data } = Cloud.sb.storage.from(Cloud.VIDEO_BUCKET).getPublicUrl(path);
-    return (data && data.publicUrl) || "";
+    return Cloud.videoPublicUrl(path);
+  };
+
+  Cloud.toPublicStorageUrl = function (url) {
+    const s = String(url || "");
+    if (!s) return "";
+    return s
+      .replace("/storage/v1/object/sign/", "/storage/v1/object/public/")
+      .replace(/[?&]token=[^&]+/g, "")
+      .replace(/\?$/, "");
   };
 
   Cloud.videoPublicUrl = function (path) {
     if (!Cloud.sb || !path) return "";
+    if (/^https?:\/\//i.test(path)) return Cloud.toPublicStorageUrl(path);
     const { data } = Cloud.sb.storage.from(Cloud.VIDEO_BUCKET).getPublicUrl(path);
-    return (data && data.publicUrl) || "";
+    return Cloud.toPublicStorageUrl((data && data.publicUrl) || "");
   };
 
   Cloud.upload = async function (id, blob, share) {

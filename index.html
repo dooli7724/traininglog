@@ -1407,14 +1407,37 @@
     }
     async function fileUrl(id, share, extra) {
       extra = extra || {};
-      if (!id && extra.video_url) return extra.video_url;
+      if (!id && extra.video_url) return publicMediaUrl(extra.video_url);
       if (!id) return extra.url || "";
+      if (extra.kind === "video") {
+        const direct = publicMediaUrl(extra.video_url || extra.url);
+        if (direct) { urls.set(id, direct); return direct; }
+        if (window.Cloud && Cloud.ready && Cloud.videoPublicUrl) {
+          const code = share || (shareCtx && shareCtx.code) || "";
+          const ownerId = mediaOwnerId(extra);
+          const paths = [];
+          if (extra.path) paths.push(extra.path);
+          (Cloud.mediaPaths ? Cloud.mediaPaths(id, code, ownerId) : []).forEach((p) => {
+            if (paths.indexOf(p) < 0) paths.push(p);
+          });
+          for (let i = 0; i < paths.length; i++) {
+            const pub = Cloud.videoPublicUrl(paths[i]);
+            if (pub) { urls.set(id, pub); return pub; }
+          }
+        }
+        return "";
+      }
       if (extra.video_url && publicMediaUrl(extra.video_url)) {
-        urls.set(id, extra.video_url);
-        return extra.video_url;
+        const pub = publicMediaUrl(extra.video_url);
+        urls.set(id, pub);
+        return pub;
       }
       if (urls.has(id)) return urls.get(id);
-      if (extra.url && publicMediaUrl(extra.url)) { urls.set(id, extra.url); return extra.url; }
+      if (extra.url && publicMediaUrl(extra.url)) {
+        const pub = publicMediaUrl(extra.url);
+        urls.set(id, pub);
+        return pub;
+      }
       const blob = await getFile(id);
       if (blob) {
         const u = URL.createObjectURL(blob); urls.set(id, u); return u;
@@ -1428,16 +1451,8 @@
           const u = URL.createObjectURL(remote); urls.set(id, u); return u;
         }
         if (extra.path && Cloud.sb) {
-          const bucket = extra.kind === "video" ? "workout-videos" : "pt-media";
-          const { data } = Cloud.sb.storage.from(bucket).getPublicUrl(extra.path);
+          const { data } = Cloud.sb.storage.from("pt-media").getPublicUrl(extra.path);
           if (data && data.publicUrl) { urls.set(id, data.publicUrl); return data.publicUrl; }
-        }
-        if (extra.kind === "video" && Cloud.videoPublicUrl) {
-          const paths = (Cloud.mediaPaths && Cloud.mediaPaths(id, code, ownerId)) || [];
-          for (const p of paths) {
-            const pub = Cloud.videoPublicUrl(p);
-            if (pub) { urls.set(id, pub); return pub; }
-          }
         }
         const pubs = (Cloud.publicUrls && Cloud.publicUrls(id, code, ownerId)) || [Cloud.publicUrl(id, code, ownerId)];
         if (pubs[0]) { urls.set(id, pubs[0]); return pubs[0]; }
@@ -1531,7 +1546,8 @@
     function publicMediaUrl(u) {
       const s = String(u || "");
       if (!s || /^blob:/i.test(s) || s.indexOf("data:") === 0) return "";
-      return s;
+      if (window.Cloud && Cloud.toPublicStorageUrl) return Cloud.toPublicStorageUrl(s);
+      return s.replace("/storage/v1/object/sign/", "/storage/v1/object/public/").replace(/[?&]token=[^&]+/g, "").replace(/\?$/, "");
     }
     function packMedia(x) {
       if (!x) return null;

@@ -604,15 +604,40 @@ on conflict (id) do update
   set public = excluded.public,
       file_size_limit = excluded.file_size_limit;
 
+-- SELECT 는 로그인·승인 없이 공개 URL 로 재생. 쓰기는 본인 경로만.
+drop policy if exists "workout videos auth write own" on storage.objects;
 drop policy if exists "workout videos public read" on storage.objects;
+drop policy if exists "workout videos anon read" on storage.objects;
+drop policy if exists "workout videos authenticated read" on storage.objects;
+
 create policy "workout videos public read"
   on storage.objects for select
   to public
   using (bucket_id = 'workout-videos');
 
-drop policy if exists "workout videos auth write own" on storage.objects;
-create policy "workout videos auth write own"
-  on storage.objects for all
+create policy "workout videos anon read"
+  on storage.objects for select
+  to anon
+  using (bucket_id = 'workout-videos');
+
+create policy "workout videos authenticated read"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'workout-videos');
+
+drop policy if exists "workout videos auth insert own" on storage.objects;
+create policy "workout videos auth insert own"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'workout-videos'
+    and split_part(name, '/', 1) = 'user'
+    and split_part(name, '/', 2) = auth.uid()::text
+  );
+
+drop policy if exists "workout videos auth update own" on storage.objects;
+create policy "workout videos auth update own"
+  on storage.objects for update
   to authenticated
   using (
     bucket_id = 'workout-videos'
@@ -620,6 +645,16 @@ create policy "workout videos auth write own"
     and split_part(name, '/', 2) = auth.uid()::text
   )
   with check (
+    bucket_id = 'workout-videos'
+    and split_part(name, '/', 1) = 'user'
+    and split_part(name, '/', 2) = auth.uid()::text
+  );
+
+drop policy if exists "workout videos auth delete own" on storage.objects;
+create policy "workout videos auth delete own"
+  on storage.objects for delete
+  to authenticated
+  using (
     bucket_id = 'workout-videos'
     and split_part(name, '/', 1) = 'user'
     and split_part(name, '/', 2) = auth.uid()::text
