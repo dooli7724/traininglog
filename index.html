@@ -1171,6 +1171,7 @@
       s.program = s.program || "";
       s.feedback = s.feedback || "";
       s.memo = s.memo || "";
+      s.video_url = s.video_url || "";
       s.attended = !!s.attended;
       s.charged = !!s.charged;
       s.exercises = rawEx.map(normalizeExercise);
@@ -1370,11 +1371,50 @@
       extra = extra || {};
       return extra.ownerId || (shareCtx && shareCtx.ownerId) || (shareCtx && shareCtx.data && shareCtx.data.ownerId) || "";
     }
+    function isVideoFile(file) {
+      if (!file) return false;
+      if (file.type && file.type.indexOf("video/") === 0) return true;
+      return /\.(mp4|mov|m4v|webm|3gp|3gpp|qt)$/i.test(file.name || "");
+    }
+    function applyJournalVideos(raw, videos) {
+      if (!raw || !raw.sessions) return raw;
+      const memberId = raw.id || "";
+      (videos || []).forEach((row) => {
+        if (!row || !row.video_url) return;
+        if (row.member_id && memberId && row.member_id !== memberId) return;
+        const payload = row.payload || {};
+        const date = isoDate(payload.date) || payload.date;
+        const exId = payload.exerciseId;
+        if (!date || !exId) return;
+        const key = Object.keys(raw.sessions).find((d) => (isoDate(d) || d) === date);
+        if (!key) return;
+        const sess = raw.sessions[key];
+        const ex = (sess.exercises || []).find((e) => e.id === exId);
+        if (!ex) return;
+        ex.media = ex.media || [];
+        let media = ex.media.find((x) => x.id === row.id);
+        if (!media) {
+          media = { id: row.id, kind: "video", url: row.video_url, video_url: row.video_url, path: payload.path || "" };
+          ex.media.push(media);
+        } else {
+          media.kind = "video";
+          media.video_url = row.video_url;
+          if (!media.url || /^blob:/i.test(media.url)) media.url = row.video_url;
+        }
+        if (!sess.video_url) sess.video_url = row.video_url;
+      });
+      return raw;
+    }
     async function fileUrl(id, share, extra) {
       extra = extra || {};
+      if (!id && extra.video_url) return extra.video_url;
       if (!id) return extra.url || "";
+      if (extra.video_url && publicMediaUrl(extra.video_url)) {
+        urls.set(id, extra.video_url);
+        return extra.video_url;
+      }
       if (urls.has(id)) return urls.get(id);
-      if (extra.url) { urls.set(id, extra.url); return extra.url; }
+      if (extra.url && publicMediaUrl(extra.url)) { urls.set(id, extra.url); return extra.url; }
       const blob = await getFile(id);
       if (blob) {
         const u = URL.createObjectURL(blob); urls.set(id, u); return u;
@@ -1388,8 +1428,16 @@
           const u = URL.createObjectURL(remote); urls.set(id, u); return u;
         }
         if (extra.path && Cloud.sb) {
-          const { data } = Cloud.sb.storage.from("pt-media").getPublicUrl(extra.path);
+          const bucket = extra.kind === "video" ? "workout-videos" : "pt-media";
+          const { data } = Cloud.sb.storage.from(bucket).getPublicUrl(extra.path);
           if (data && data.publicUrl) { urls.set(id, data.publicUrl); return data.publicUrl; }
+        }
+        if (extra.kind === "video" && Cloud.videoPublicUrl) {
+          const paths = (Cloud.mediaPaths && Cloud.mediaPaths(id, code, ownerId)) || [];
+          for (const p of paths) {
+            const pub = Cloud.videoPublicUrl(p);
+            if (pub) { urls.set(id, pub); return pub; }
+          }
         }
         const pubs = (Cloud.publicUrls && Cloud.publicUrls(id, code, ownerId)) || [Cloud.publicUrl(id, code, ownerId)];
         if (pubs[0]) { urls.set(id, pubs[0]); return pubs[0]; }
@@ -1436,6 +1484,7 @@
       if (m.sessions[d].program == null) m.sessions[d].program = "";
       if (m.sessions[d].feedback == null) m.sessions[d].feedback = "";
       if (m.sessions[d].memo == null) m.sessions[d].memo = "";
+      if (m.sessions[d].video_url == null) m.sessions[d].video_url = "";
       if (!m.sessions[d].start) m.sessions[d].start = "16:00";
       if (!m.sessions[d].minutes) m.sessions[d].minutes = 60;
       if (m.sessions[d].attended == null) m.sessions[d].attended = false;
@@ -1479,13 +1528,20 @@
       const notes = !!(s.program || s.feedback || s.memo || (s.exercises || []).some((e) => e.feedback || e.note));
       return { exercises: (s.exercises || []).length, sets, memo: notes || "" };
     }
+    function publicMediaUrl(u) {
+      const s = String(u || "");
+      if (!s || /^blob:/i.test(s) || s.indexOf("data:") === 0) return "";
+      return s;
+    }
     function packMedia(x) {
       if (!x) return null;
+      const videoUrl = x.kind === "video" ? publicMediaUrl(x.video_url || x.url) : "";
       return {
         id: x.id || "",
         kind: x.kind || "image",
-        url: x.url || "",
-        path: x.path || ""
+        url: x.kind === "video" ? videoUrl : publicMediaUrl(x.url),
+        path: x.path || "",
+        video_url: videoUrl
       };
     }
     function packEx(e) {
@@ -1507,8 +1563,22 @@
         start: (s && s.start) || "",
         minutes: (s && s.minutes) || 60,
         attended: !!(s && s.attended),
-        charged: !!(s && s.charged)
+        charged: !!(s && s.charged),
+        video_url: sessionVideoUrl(s)
       };
+    }
+    function sessionVideoUrl(s) {
+      if (!s) return "";
+      const list = s.exercises || [];
+      for (let i = list.length - 1; i >= 0; i--) {
+        const media = list[i].media || [];
+        for (let j = media.length - 1; j >= 0; j--) {
+          if (media[j].kind !== "video") continue;
+          const u = publicMediaUrl(media[j].video_url || media[j].url);
+          if (u) return u;
+        }
+      }
+      return publicMediaUrl(s.video_url);
     }
     function isScheduledSession(s) {
       if (!s) return false;
@@ -1849,8 +1919,11 @@
       const parts = [];
       for (const media of ex.media || []) {
         if (media.kind === "link") continue;
-        const url = await fileUrl(media.id); if (!url) continue;
-        const inner = media.kind === "video" ? `<video src="${url}" muted></video>` : `<img src="${url}" alt="" />`;
+        const url = await fileUrl(media.id, (currentMember() && currentMember().share) || "", {
+          url: media.url, video_url: media.video_url, path: media.path, kind: media.kind
+        });
+        if (!url) continue;
+        const inner = media.kind === "video" ? `<video src="${url}" muted playsinline></video>` : `<img src="${url}" alt="" />`;
         parts.push(`<button class="thumb" type="button" data-view="${media.id}:${media.kind}">${inner}<span class="x" data-del-media="${ex.id}:${media.id}">×</span></button>`);
       }
       return parts.join("");
@@ -1895,7 +1968,7 @@
             <button class="btn wide" type="button" data-add-set="${ex.id}">세트 완료</button></div>
           <div class="label" style="margin-top:12px">사진 · 영상</div>
           <div class="media">${await mediaHtml(ex)}</div>
-          <div class="add" style="margin:0"><label class="btn soft file" style="flex:1">앨범에서 첨부<input type="file" accept="image/*,video/*" multiple data-files="${ex.id}" /></label></div>
+          <div class="add" style="margin:0;flex-wrap:wrap"><label class="btn soft file" style="flex:1">영상 촬영<input type="file" accept="video/*" capture="environment" data-files="${ex.id}" /></label><label class="btn soft file" style="flex:1">앨범에서 첨부<input type="file" accept="image/*,video/*" multiple data-files="${ex.id}" /></label></div>
           <label class="cap">피드백</label>
           <textarea class="field ex-note" data-ex-feedback="${ex.id}" placeholder="이 종목에 대한 코칭 피드백">${esc(ex.feedback || "")}</textarea>
           </div></article>`);
@@ -2566,7 +2639,7 @@
           if (media.url) parts.push(`<a class="btn soft" href="${esc(media.url)}" target="_blank" rel="noopener">링크 열기</a>`);
           continue;
         }
-        const url = await fileUrl(media.id, shareCtx.code, { url: media.url, path: media.path });
+        const url = await fileUrl(media.id, shareCtx.code, { url: media.url, video_url: media.video_url, path: media.path, kind: media.kind });
         if (!url) continue;
         if (media.kind === "video") {
           parts.push(`<div class="thumb lg"><video src="${url}" controls playsinline preload="metadata"></video></div>`);
@@ -2651,19 +2724,16 @@
       return parts.join("") || '<div class="empty" style="padding:12px">없음</div>';
     }
     async function renderShareLive() {
-      const remote = (window.Cloud && Cloud.ready)
-        ? await Cloud.fetchMember(shareCtx.code || (shareCtx.data && (shareCtx.data.id || shareCtx.data.share)))
-        : null;
+      const wanted = clientViewId();
+      const ref = shareCtx.code || (shareCtx.data && (shareCtx.data.id || shareCtx.data.share));
+      const remote = await fetchCloudMember(ref, wanted || "");
       if (remote) {
-        const m = normalizeMember(remote);
-        if (m.ownerId) shareCtx.ownerId = m.ownerId;
-        savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
-        await renderShare({ ...snapshot(m), name: m.name, share: m.share, photos: m.photos, kind: shareCtx.kind, ownerId: m.ownerId });
+        await renderShare({ ...snapshot(remote), name: remote.name, share: remote.share, photos: remote.photos, id: remote.id, kind: shareCtx.kind, ownerId: remote.ownerId });
         return;
       }
-      const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
-      if (local) await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos, kind: shareCtx.kind });
-      else if (shareCtx.data) await renderShare(shareCtx.data);
+      const local = wanted ? memberBy(wanted) : (memberByShare(shareCtx.code) || memberBy(shareCtx.code));
+      if (local) await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos, id: local.id, kind: shareCtx.kind });
+      else if (!wanted && shareCtx.data) await renderShare(shareCtx.data);
     }
     function histListHtml(marked, selected) {
       const dates = [...marked].sort().reverse();
@@ -2673,23 +2743,26 @@
       ).join("")}</div>`;
     }
     async function shareViewPack() {
-      const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
+      const wanted = clientViewId();
+      const local = wanted ? memberBy(wanted) : (memberByShare(shareCtx.code) || memberBy(shareCtx.code));
       if (local) {
+        if (window.Cloud && Cloud.user && Cloud.fetchMemberJournal) {
+          const journal = await Cloud.fetchMemberJournal(local.id);
+          applyJournalVideos(local, (journal || []).filter((row) => row && row.member_id === local.id));
+        }
         const snap = snapshot(local);
         if (snap.ownerId) shareCtx.ownerId = snap.ownerId;
         return snap;
       }
-      if (window.Cloud && Cloud.ready && shareCtx.code) {
-        const remote = await Cloud.fetchMember(shareCtx.code);
-        if (remote) {
-          const m = normalizeMember(remote);
-          if (m.ownerId) shareCtx.ownerId = m.ownerId;
-          savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
-          const snap = snapshot(m);
-          shareCtx.data = { ...snap, name: m.name, share: m.share, photos: m.photos, kind: shareCtx.kind, ownerId: m.ownerId };
+      if (window.Cloud && Cloud.ready && (shareCtx.code || wanted)) {
+        const remoteMember = await fetchCloudMember(shareCtx.code || wanted, wanted || "");
+        if (remoteMember) {
+          const snap = snapshot(remoteMember);
+          shareCtx.data = { ...snap, name: remoteMember.name, share: remoteMember.share, photos: remoteMember.photos, id: remoteMember.id, kind: shareCtx.kind, ownerId: remoteMember.ownerId };
           return snap;
         }
       }
+      if (wanted) return { id: wanted, sessions: {}, selfWorkouts: [], dietLogs: [] };
       return shareCtx.data || { sessions: {}, selfWorkouts: [], dietLogs: [] };
     }
     async function openDayLog(date) {
@@ -3254,8 +3327,28 @@
       saveData();
       return true;
     }
+    function findMediaRecord(id) {
+      const pools = [];
+      const m = currentMember();
+      if (m) pools.push(m);
+      if (shareCtx && shareCtx.data) pools.push(shareCtx.data);
+      for (const src of pools) {
+        const sessions = (src && src.sessions) || {};
+        for (const d of Object.keys(sessions)) {
+          for (const ex of ((sessions[d] && sessions[d].exercises) || [])) {
+            const hit = (ex.media || []).find((x) => x.id === id);
+            if (hit) return hit;
+          }
+        }
+      }
+      return null;
+    }
     async function showViewer(id, kind) {
-      const url = await fileUrl(id); if (!url) return;
+      const media = findMediaRecord(id);
+      const url = await fileUrl(id, (shareCtx && shareCtx.code) || "", media ? {
+        url: media.url, video_url: media.video_url, path: media.path, kind: media.kind || kind
+      } : { kind: kind });
+      if (!url) return;
       $("viewerBody").innerHTML = kind === "video" ? `<video src="${url}" controls autoplay playsinline></video>` : `<img src="${url}" alt="" />`;
       $("viewer").classList.remove("hidden");
     }
@@ -3629,7 +3722,12 @@
       if (delEx) {
         const ex = findEx(delEx.dataset.delEx);
         if (!ex || !confirm(ex.name + " 종목을 삭제할까요?")) return;
-        for (const media of ex.media || []) if (media.kind !== "link") await delFile(media.id);
+        const share = (currentMember() && currentMember().share) || "";
+        for (const media of ex.media || []) {
+          if (media.kind === "link") continue;
+          await delFile(media.id, share);
+          if (media.kind === "video" && window.Cloud && Cloud.ready && share) await Cloud.deleteLog(share, media.id);
+        }
         sessionOf().exercises = sessionOf().exercises.filter((x) => x.id !== ex.id);
         saveData(); await renderExercises(); return;
       }
@@ -3638,7 +3736,10 @@
         const [exId, mediaId] = delMedia.dataset.delMedia.split(":");
         const ex = findEx(exId);
         const media = (ex.media || []).find((x) => x.id === mediaId);
-        if (media && media.kind !== "link") await delFile(media.id);
+        if (media && media.kind !== "link") await delFile(media.id, (currentMember() && currentMember().share) || "");
+        if (media && media.kind === "video" && window.Cloud && Cloud.ready && currentMember()) {
+          await Cloud.deleteLog(currentMember().share, media.id);
+        }
         ex.media = (ex.media || []).filter((x) => x.id !== mediaId);
         saveData(); await renderExercises(); return;
       }
@@ -3650,19 +3751,56 @@
     $("exercises").addEventListener("change", async (e) => {
       const input = e.target.closest("[data-files]");
       if (!input || !input.files.length) return;
-      const ex = findEx(input.dataset.files); ex.media = ex.media || [];
+      const ex = findEx(input.dataset.files);
+      if (!ex) return;
+      ex.media = ex.media || [];
+      const member = currentMember();
+      const share = (member && member.share) || "";
       try {
         for (const file of [...input.files]) {
-          const isVideo = file.type.startsWith("video");
-          if (isVideo && file.size > 40 * 1024 * 1024) { alert("영상은 40MB 이하만 저장됩니다."); continue; }
+          const isVideo = isVideoFile(file);
+          if (isVideo && file.size > 50 * 1024 * 1024) { alert("영상은 50MB 이하만 업로드됩니다."); continue; }
           const id = uid();
-          const share = (currentMember() && currentMember().share) || "";
-          const url = await putFile(id, isVideo ? file : await compressImage(file), share);
-          const path = (window.Cloud && Cloud.storagePath) ? Cloud.storagePath(id, share) : "";
-          ex.media.push({ id, kind: isVideo ? "video" : "image", url: url || "", path });
+          if (isVideo) {
+            if (!(window.Cloud && Cloud.ready && Cloud.uploadVideo)) {
+              alert("클라우드에 연결되지 않아 영상을 저장소에 올릴 수 없습니다.");
+              continue;
+            }
+            toastCloud("영상을 클라우드에 업로드하는 중…");
+            const url = await Cloud.uploadVideo(id, file, share);
+            if (!url) throw new Error("영상 공개 주소를 만들지 못했습니다.");
+            const path = Cloud.storagePath(id, share);
+            ex.media.push({ id, kind: "video", url, video_url: url, path });
+            const sess = sessionOf(member);
+            if (sess) sess.video_url = url;
+            urls.set(id, url);
+            try { await putFileLocal(id, file); } catch (_) {}
+          } else {
+            const url = await putFile(id, await compressImage(file), share);
+            const path = (window.Cloud && Cloud.storagePath) ? Cloud.storagePath(id, share) : "";
+            ex.media.push({ id, kind: "image", url: url || "", path, video_url: "" });
+          }
         }
         input.value = "";
         const ok = await persistCloud({ notify: true });
+        if (ok && member && window.Cloud && Cloud.ready) {
+          for (const media of ex.media || []) {
+            if (media.kind !== "video" || !media.video_url) continue;
+            try {
+              await Cloud.upsertLog(share, "video", {
+                id: media.id,
+                member_id: member.id,
+                date: logDate || today(),
+                exerciseId: ex.id,
+                video_url: media.video_url,
+                path: media.path || ""
+              });
+            } catch (err) {
+              console.warn(err);
+              toastCloud("영상은 저장소에 올렸습니다. 일지 테이블 반영은 schema.sql 실행 후 다시 저장해 주세요.", true);
+            }
+          }
+        }
         if (ok) await renderExercises();
       } catch (err) {
         alert(saveErrText(err));
@@ -3869,7 +4007,11 @@
       for (const n of m.dietLogs || []) if (n.photoId) await delFile(n.photoId);
       for (const sess of Object.values(m.sessions || {})) {
         for (const ex of sess.exercises || []) {
-          for (const media of ex.media || []) if (media.kind !== "link") await delFile(media.id);
+          for (const media of ex.media || []) {
+            if (media.kind === "link") continue;
+            await delFile(media.id, m.share);
+            if (media.kind === "video" && window.Cloud && Cloud.ready) await Cloud.deleteLog(m.share, media.id);
+          }
         }
       }
       state.members = state.members.filter((x) => x.id !== m.id);
@@ -4024,11 +4166,18 @@
         await showViewer(id, kind || "image");
       }
     });
-    async function fetchCloudMember(ref) {
+    async function fetchCloudMember(ref, onlyMemberId) {
       if (!(window.Cloud && Cloud.ready) || !ref) return null;
       const remote = await Cloud.fetchMember(ref);
       if (!remote) return null;
+      if (onlyMemberId && remote.id && remote.id !== onlyMemberId) return null;
+      applyJournalVideos(remote, remote.videos);
+      if (Cloud.user && remote.id) {
+        const journal = await Cloud.fetchMemberJournal(remote.id);
+        applyJournalVideos(remote, (journal || []).filter((row) => row.member_id === remote.id));
+      }
       const m = normalizeMember(remote);
+      if (onlyMemberId && m.id !== onlyMemberId) return null;
       if (m.ownerId) shareCtx.ownerId = m.ownerId;
       savePortal(m.share, { selfWorkouts: m.selfWorkouts || [], dietLogs: m.dietLogs || [] });
       return m;
@@ -4044,27 +4193,26 @@
     async function bootClientView() {
       const id = clientViewId();
       if (!id) return false;
-      const remote = await fetchCloudMember(shareRefFromLocation() || id);
-      if (remote) {
+      const remote = await fetchCloudMember(shareRefFromLocation() || id, id);
+      if (remote && remote.id === id) {
         currentId = remote.id;
         setTab("share", true);
-        await renderShare({ ...snapshot(remote), name: remote.name, share: remote.share, photos: remote.photos });
+        await renderShare({ ...snapshot(remote), name: remote.name, share: remote.share, photos: remote.photos, id: remote.id });
         return true;
       }
-      const parsed = parseShareHash();
-      const local = memberBy(id) || memberByShare(id) || memberByShare(shareRefFromLocation());
+      const local = memberBy(id);
       if (local) {
+        if (window.Cloud && Cloud.user && Cloud.fetchMemberJournal) {
+          const journal = await Cloud.fetchMemberJournal(local.id);
+          applyJournalVideos(local, (journal || []).filter((row) => row.member_id === local.id));
+        }
         currentId = local.id;
         setTab("share", true);
-        await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos });
+        await renderShare({ ...snapshot(local), name: local.name, share: local.share, photos: local.photos, id: local.id });
         return true;
       }
       setTab("share", true);
-      if (parsed && !parsed.sync && !parsed.missing) {
-        await renderShare(parsed);
-        return true;
-      }
-      $("shareBody").innerHTML = '<div class="empty">회원 기록을 불러오지 못했습니다.<br>트레이너가 보낸 링크로 다시 열어 주세요.</div>';
+      $("shareBody").innerHTML = '<div class="empty">이 회원에게 등록된 일지를 찾지 못했습니다.<br>본인 링크로 다시 열어 주세요.</div>';
       return true;
     }
     async function openShare() {

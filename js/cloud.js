@@ -60,8 +60,60 @@
     if (/Failed to fetch|NetworkError|network|Load failed|The Internet connection appears to be offline/i.test(msg)) {
       return "네트워크 연결을 확인하고 다시 저장해 주세요.";
     }
+    if (/workout-videos|Bucket not found|bucket/i.test(msg)) {
+      return "영상 저장소(workout-videos)가 없습니다. Supabase SQL Editor에서 schema.sql을 다시 실행해 주세요.";
+    }
     return msg || "저장에 실패했습니다.";
   };
+
+  function localAuthStorage() {
+    const memory = {};
+    function ls() {
+      try {
+        const probe = "__pt_ls_probe__";
+        global.localStorage.setItem(probe, "1");
+        global.localStorage.removeItem(probe);
+        return global.localStorage;
+      } catch (e) {
+        return null;
+      }
+    }
+    return {
+      getItem: function (key) {
+        const store = ls();
+        if (store) {
+          try { return store.getItem(key); } catch (e) {}
+        }
+        return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null;
+      },
+      setItem: function (key, value) {
+        memory[key] = String(value);
+        const store = ls();
+        if (!store) return;
+        try { store.setItem(key, value); } catch (e) {}
+      },
+      removeItem: function (key) {
+        delete memory[key];
+        const store = ls();
+        if (!store) return;
+        try { store.removeItem(key); } catch (e) {}
+      }
+    };
+  }
+
+  function keepSessionAlive() {
+    if (Cloud._sessionWatch || !Cloud.sb) return;
+    Cloud._sessionWatch = true;
+    const wake = function () {
+      if (!Cloud.sb) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      Cloud.sb.auth.startAutoRefresh();
+      Cloud.ensureSession().catch(function () {});
+    };
+    document.addEventListener("visibilitychange", wake);
+    global.addEventListener("pageshow", wake);
+    global.addEventListener("focus", wake);
+  }
 
   Cloud.initClient = async function () {
     const c = Cloud.cfg();
@@ -76,9 +128,18 @@
       return false;
     }
     Cloud.sb = sdk.createClient(c.url, c.anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: localAuthStorage(),
+        lock: async function (_name, _acquireTimeout, fn) {
+          return await fn();
+        }
+      }
     });
     Cloud.ready = true;
+    keepSessionAlive();
     return true;
   };
 
@@ -163,7 +224,14 @@
 
   function attachLogs(members, logs) {
     const bag = {};
+    const videos = {};
     (logs || []).forEach((row) => {
+      if (row.kind === "video") {
+        const mid = row.member_id || row.share;
+        if (!videos[mid]) videos[mid] = [];
+        videos[mid].push(row);
+        return;
+      }
       const share = row.share;
       if (!bag[share]) bag[share] = { selfWorkouts: [], dietLogs: [] };
       if (row.kind === "self_workout") bag[share].selfWorkouts.push(row.payload);
@@ -173,6 +241,34 @@
       const g = bag[m.share] || { selfWorkouts: [], dietLogs: [] };
       m.selfWorkouts = g.selfWorkouts;
       m.dietLogs = g.dietLogs;
+      const rows = []
+        .concat(videos[m.id] || [])
+        .concat(m.share && videos[m.share] ? videos[m.share] : []);
+      rows.forEach((row) => {
+        if (!row || !row.video_url || !row.payload) return;
+        if (row.member_id && row.member_id !== m.id) return;
+        const date = row.payload.date;
+        const exId = row.payload.exerciseId;
+        const sess = m.sessions && date ? m.sessions[date] : null;
+        if (!sess || !exId) return;
+        const ex = (sess.exercises || []).find((e) => e.id === exId);
+        if (!ex) return;
+        ex.media = ex.media || [];
+        let media = ex.media.find((x) => x.id === row.id);
+        if (!media) {
+          ex.media.push({
+            id: row.id,
+            kind: "video",
+            url: row.video_url,
+            video_url: row.video_url,
+            path: row.payload.path || ""
+          });
+        } else {
+          media.video_url = row.video_url;
+          if (!media.url || String(media.url).indexOf("blob:") === 0) media.url = row.video_url;
+        }
+        if (!sess.video_url) sess.video_url = row.video_url;
+      });
     });
     return members;
   }
@@ -186,24 +282,44 @@
     return { members };
   }
 
+  async function selectLogs(build) {
+    const full = "id, share, kind, payload, updated_at, member_id, video_url";
+    const legacy = "id, share, kind, payload, updated_at";
+    let res = await build(full);
+    if (res.error) res = await build(legacy);
+    if (res.error) return null;
+    return res.data || [];
+  }
+
   async function fetchOwnLogs() {
     const uid = Cloud.user && Cloud.user.id;
     if (uid) {
-      const byUser = await Cloud.sb
-        .from("member_logs")
-        .select("id, share, kind, payload, updated_at")
-        .eq("user_id", uid);
-      if (!byUser.error) return byUser.data || [];
+      const byUser = await selectLogs((cols) => Cloud.sb.from("member_logs").select(cols).eq("user_id", uid));
+      if (byUser) return byUser;
     }
     if (Cloud.gymId) {
-      const byGym = await Cloud.sb
-        .from("member_logs")
-        .select("id, share, kind, payload, updated_at")
-        .eq("gym_id", Cloud.gymId);
-      if (!byGym.error) return byGym.data || [];
+      const byGym = await selectLogs((cols) => Cloud.sb.from("member_logs").select(cols).eq("gym_id", Cloud.gymId));
+      if (byGym) return byGym;
     }
     return [];
   }
+
+  Cloud.fetchMemberJournal = async function (memberId) {
+    if (!Cloud.sb || !memberId) return [];
+    try { await Cloud.ensureSession(); } catch (e) {}
+    if (!Cloud.user) return [];
+    const viaRpc = await Cloud.sb.rpc("member_journal_for", { p_member_id: memberId });
+    if (!viaRpc.error && Array.isArray(viaRpc.data)) {
+      return viaRpc.data.filter((row) => row && row.member_id === memberId);
+    }
+    const cols = "id, member_id, share, kind, video_url, payload, updated_at";
+    const fromView = await Cloud.sb.from("member_journal").select(cols).eq("member_id", memberId);
+    if (!fromView.error) {
+      return (fromView.data || []).filter((row) => row && row.member_id === memberId);
+    }
+    const fromTable = await selectLogs((c) => Cloud.sb.from("member_logs").select(c).eq("member_id", memberId));
+    return (fromTable || []).filter((row) => row && row.member_id === memberId);
+  };
 
   Cloud.ensureSession = async function () {
     if (!Cloud.sb) return null;
@@ -295,15 +411,54 @@
 
   function collectLogRows(state, uid, gid) {
     const rows = [];
+    const push = function (row) {
+      if (!row || !row.id || !row.share) return;
+      row.member_id = row.member_id || "";
+      row.video_url = row.video_url || null;
+      rows.push(row);
+    };
     (state.members || []).forEach((m) => {
       if (!m || !m.share) return;
       (m.selfWorkouts || []).forEach((w) => {
         if (!w || !w.id) return;
-        rows.push({ id: w.id, gym_id: gid, user_id: uid, share: m.share, kind: "self_workout", payload: w });
+        push({
+          id: w.id, gym_id: gid, user_id: uid, share: m.share, member_id: m.id,
+          kind: "self_workout", video_url: w.video_url || null, payload: w
+        });
       });
       (m.dietLogs || []).forEach((d) => {
         if (!d || !d.id) return;
-        rows.push({ id: d.id, gym_id: gid, user_id: uid, share: m.share, kind: "diet", payload: d });
+        push({
+          id: d.id, gym_id: gid, user_id: uid, share: m.share, member_id: m.id,
+          kind: "diet", video_url: d.video_url || null, payload: d
+        });
+      });
+      Object.keys(m.sessions || {}).forEach((date) => {
+        const sess = m.sessions[date] || {};
+        (sess.exercises || []).forEach((ex) => {
+          (ex.media || []).forEach((media) => {
+            if (!media || media.kind !== "video" || !media.id) return;
+            const videoUrl = media.video_url || media.url || "";
+            if (!videoUrl || /^blob:/i.test(videoUrl)) return;
+            push({
+              id: media.id,
+              gym_id: gid,
+              user_id: uid,
+              share: m.share,
+              member_id: m.id,
+              kind: "video",
+              video_url: videoUrl,
+              payload: {
+                id: media.id,
+                member_id: m.id,
+                date: date,
+                exerciseId: ex.id,
+                video_url: videoUrl,
+                path: media.path || ""
+              }
+            });
+          });
+        });
       });
     });
     return rows;
@@ -314,7 +469,9 @@
     const rpcRows = rows.map((r) => ({
       id: r.id,
       share: r.share,
+      member_id: r.member_id || "",
       kind: r.kind,
+      video_url: r.video_url || "",
       payload: r.payload
     }));
     const viaRpc = await Cloud.sb.rpc("upsert_member_logs", { p_rows: rpcRows });
@@ -473,9 +630,11 @@
           id: row.id,
           gym_id: Cloud.gymId,
           user_id: uid,
+          member_id: row.member_id || "",
           share,
           kind,
           payload: row,
+          video_url: row.video_url || null,
           updated_at: new Date().toISOString()
         }, { onConflict: "id" });
         if (!upErr) return true;
@@ -514,6 +673,32 @@
     return paths;
   };
 
+  Cloud.VIDEO_BUCKET = "workout-videos";
+
+  Cloud.uploadVideo = async function (id, blob, share) {
+    if (!Cloud.sb || !blob) return "";
+    await Cloud.ensureSession();
+    if (!Cloud.user) throw new Error("로그인 세션이 만료되었습니다. 다시 로그인해 주세요.");
+    const path = Cloud.storagePath(id, share);
+    const { error } = await Cloud.sb.storage.from(Cloud.VIDEO_BUCKET).upload(path, blob, {
+      upsert: true,
+      contentType: blob.type || "video/mp4",
+      cacheControl: "3600"
+    });
+    if (error) {
+      console.warn("uploadVideo", error);
+      throw error;
+    }
+    const { data } = Cloud.sb.storage.from(Cloud.VIDEO_BUCKET).getPublicUrl(path);
+    return (data && data.publicUrl) || "";
+  };
+
+  Cloud.videoPublicUrl = function (path) {
+    if (!Cloud.sb || !path) return "";
+    const { data } = Cloud.sb.storage.from(Cloud.VIDEO_BUCKET).getPublicUrl(path);
+    return (data && data.publicUrl) || "";
+  };
+
   Cloud.upload = async function (id, blob, share) {
     if (!Cloud.sb || !blob) return "";
     const path = Cloud.storagePath(id, share);
@@ -537,6 +722,7 @@
     if (share) paths.push("share/" + share + "/" + id);
     if (!paths.length) return;
     await Cloud.sb.storage.from("pt-media").remove(paths);
+    await Cloud.sb.storage.from(Cloud.VIDEO_BUCKET).remove(paths);
   };
 
   Cloud.publicUrl = function (id, share, ownerId) {

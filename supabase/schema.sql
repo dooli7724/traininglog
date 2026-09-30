@@ -31,6 +31,28 @@ create table if not exists public.member_logs (
 
 alter table public.gym_state add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.member_logs add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.member_logs add column if not exists member_id text;
+alter table public.member_logs add column if not exists video_url text;
+
+do $$
+declare r record;
+begin
+  for r in
+    select con.conname
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    where nsp.nspname = 'public'
+      and rel.relname = 'member_logs'
+      and con.contype = 'c'
+  loop
+    execute format('alter table public.member_logs drop constraint %I', r.conname);
+  end loop;
+end $$;
+
+alter table public.member_logs
+  add constraint member_logs_kind_check
+  check (kind in ('self_workout', 'diet', 'video'));
 
 update public.gym_state s
   set user_id = g.owner_id
@@ -42,9 +64,19 @@ update public.member_logs m
   from public.gyms g
   where g.id = m.gym_id and m.user_id is null;
 
+update public.member_logs l
+set member_id = e->>'id'
+from public.gym_state s,
+     jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
+where (l.member_id is null or l.member_id = '')
+  and l.gym_id = s.gym_id
+  and e->>'share' = l.share
+  and coalesce(e->>'id', '') <> '';
+
 create index if not exists member_logs_share_idx on public.member_logs(share);
 create index if not exists member_logs_gym_idx on public.member_logs(gym_id);
 create index if not exists member_logs_user_idx on public.member_logs(user_id);
+create index if not exists member_logs_member_idx on public.member_logs(member_id);
 create index if not exists gym_state_user_idx on public.gym_state(user_id);
 
 alter table public.gyms enable row level security;
@@ -217,6 +249,8 @@ begin
       'id', l.id,
       'share', l.share,
       'kind', l.kind,
+      'member_id', l.member_id,
+      'video_url', l.video_url,
       'payload', l.payload
     ) order by l.updated_at), '[]'::jsonb)
     into logs
@@ -290,17 +324,19 @@ begin
     if coalesce(rec->>'id', '') = '' then
       continue;
     end if;
-    if coalesce(rec->>'kind', '') not in ('self_workout', 'diet') then
+    if coalesce(rec->>'kind', '') not in ('self_workout', 'diet', 'video') then
       continue;
     end if;
-    insert into public.member_logs (id, gym_id, user_id, share, kind, payload, updated_at)
+    insert into public.member_logs (id, gym_id, user_id, member_id, share, kind, payload, video_url, updated_at)
     values (
       rec->>'id',
       gid,
       uid,
+      nullif(coalesce(rec->>'member_id', rec#>>'{payload,member_id}'), ''),
       coalesce(rec->>'share', ''),
       rec->>'kind',
       coalesce(rec->'payload', '{}'::jsonb),
+      nullif(coalesce(rec->>'video_url', rec#>>'{payload,video_url}'), ''),
       now()
     )
     on conflict (id) do update
@@ -309,6 +345,8 @@ begin
           share = excluded.share,
           gym_id = excluded.gym_id,
           user_id = excluded.user_id,
+          member_id = coalesce(excluded.member_id, public.member_logs.member_id),
+          video_url = coalesce(excluded.video_url, public.member_logs.video_url),
           updated_at = now()
       where public.member_logs.gym_id = gid;
     n := n + 1;
@@ -326,8 +364,10 @@ as $$
 declare
   mem jsonb;
   p_share text;
+  p_member text;
   workouts jsonb;
   diets jsonb;
+  videos jsonb;
   oid uuid;
 begin
   if p_ref is null or length(trim(p_ref)) < 4 then
@@ -343,17 +383,34 @@ begin
     return null;
   end if;
   p_share := mem->>'share';
+  p_member := mem->>'id';
   select coalesce(jsonb_agg(payload order by updated_at), '[]'::jsonb)
     into workouts
     from public.member_logs
-    where share = p_share and kind = 'self_workout';
+    where share = p_share and kind = 'self_workout'
+      and (member_id is null or member_id = '' or member_id = p_member);
   select coalesce(jsonb_agg(payload order by updated_at), '[]'::jsonb)
     into diets
     from public.member_logs
-    where share = p_share and kind = 'diet';
+    where share = p_share and kind = 'diet'
+      and (member_id is null or member_id = '' or member_id = p_member);
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', l.id,
+      'member_id', l.member_id,
+      'share', l.share,
+      'kind', l.kind,
+      'video_url', l.video_url,
+      'payload', l.payload
+    ) order by l.updated_at), '[]'::jsonb)
+    into videos
+    from public.member_logs l
+    where l.member_id = p_member
+      and l.kind = 'video'
+      and coalesce(l.video_url, '') <> '';
   return mem || jsonb_build_object(
     'selfWorkouts', workouts,
     'dietLogs', diets,
+    'videos', videos,
     'ownerId', oid
   );
 end;
@@ -369,8 +426,10 @@ declare
   gid uuid;
   uid uuid;
   rid text;
+  mem_id text;
+  vurl text;
 begin
-  if p_kind not in ('self_workout', 'diet') then
+  if p_kind not in ('self_workout', 'diet', 'video') then
     raise exception 'invalid kind';
   end if;
   if p_share is null or length(trim(p_share)) < 4 then
@@ -380,7 +439,8 @@ begin
   if rid = '' then
     raise exception 'missing id';
   end if;
-  select s.gym_id, coalesce(s.user_id, g.owner_id) into gid, uid
+  select s.gym_id, coalesce(s.user_id, g.owner_id), e->>'id'
+    into gid, uid, mem_id
   from public.gym_state s
   join public.gyms g on g.id = s.gym_id,
        jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
@@ -389,16 +449,25 @@ begin
   if gid is null then
     raise exception 'member not found';
   end if;
-  insert into public.member_logs (id, gym_id, user_id, share, kind, payload, updated_at)
-  values (rid, gid, uid, p_share, p_kind, p_row, now())
+  if p_row ? 'member_id' and coalesce(p_row->>'member_id', '') <> '' and p_row->>'member_id' <> mem_id then
+    raise exception 'member mismatch';
+  end if;
+  vurl := nullif(coalesce(p_row->>'video_url', ''), '');
+  insert into public.member_logs (id, gym_id, user_id, member_id, share, kind, payload, video_url, updated_at)
+  values (rid, gid, uid, mem_id, p_share, p_kind, p_row, vurl, now())
   on conflict (id) do update
     set payload = excluded.payload,
         kind = excluded.kind,
         share = excluded.share,
         gym_id = excluded.gym_id,
         user_id = excluded.user_id,
-        updated_at = now();
-  return p_row;
+        member_id = excluded.member_id,
+        video_url = coalesce(excluded.video_url, public.member_logs.video_url),
+        updated_at = now()
+    where public.member_logs.member_id is null
+       or public.member_logs.member_id = ''
+       or public.member_logs.member_id = excluded.member_id;
+  return p_row || jsonb_build_object('member_id', mem_id, 'video_url', coalesce(vurl, ''));
 end;
 $$;
 
@@ -419,6 +488,36 @@ begin
   get diagnostics n = row_count;
   return n > 0;
 end;
+$$;
+
+create or replace view public.member_journal
+with (security_invoker = true) as
+select
+  id,
+  gym_id,
+  user_id,
+  member_id,
+  share,
+  kind,
+  video_url,
+  payload,
+  updated_at
+from public.member_logs
+where member_id is not null
+  and member_id <> '';
+
+create or replace function public.member_journal_for(p_member_id text)
+returns setof public.member_logs
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select l.*
+  from public.member_logs l
+  where l.member_id = p_member_id
+    and auth.uid() is not null
+    and (public.own_user(l.user_id) or public.owns_gym(l.gym_id));
 $$;
 
 grant usage on schema public to anon, authenticated, service_role;
@@ -446,6 +545,10 @@ grant execute on function public.upsert_member_logs(jsonb) to authenticated;
 grant execute on function public.member_public(text) to anon, authenticated;
 grant execute on function public.member_upsert_log(text, text, jsonb) to anon, authenticated;
 grant execute on function public.member_delete_log(text, text) to anon, authenticated;
+revoke all on function public.member_journal_for(text) from public, anon;
+grant execute on function public.member_journal_for(text) to authenticated;
+revoke all on public.member_journal from anon, public;
+grant select on public.member_journal to authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('pt-media', 'pt-media', true, 5242880)
@@ -493,6 +596,33 @@ create policy "pt media anon update share"
   with check (
     bucket_id = 'pt-media'
     and split_part(name, '/', 1) = 'share'
+  );
+
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('workout-videos', 'workout-videos', true, 52428800)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit;
+
+drop policy if exists "workout videos public read" on storage.objects;
+create policy "workout videos public read"
+  on storage.objects for select
+  to public
+  using (bucket_id = 'workout-videos');
+
+drop policy if exists "workout videos auth write own" on storage.objects;
+create policy "workout videos auth write own"
+  on storage.objects for all
+  to authenticated
+  using (
+    bucket_id = 'workout-videos'
+    and split_part(name, '/', 1) = 'user'
+    and split_part(name, '/', 2) = auth.uid()::text
+  )
+  with check (
+    bucket_id = 'workout-videos'
+    and split_part(name, '/', 1) = 'user'
+    and split_part(name, '/', 2) = auth.uid()::text
   );
 
 do $$ begin
