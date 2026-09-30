@@ -4262,8 +4262,23 @@
       await renderShare(parsed);
       return true;
     }
+    function isMemberLink() {
+      const path = location.pathname || "";
+      const hash = location.hash || "";
+      if (clientViewId()) return true;
+      if (/\/client-view\/?$/i.test(path)) return true;
+      if (/^#(?:share|sync)\//.test(hash)) return true;
+      return false;
+    }
     function isClientRoute() {
-      return !!(clientViewId() || document.documentElement.dataset.client === "1");
+      return isMemberLink();
+    }
+    async function openMemberDashboard() {
+      document.documentElement.dataset.client = "1";
+      showAuthGate(false);
+      if (window.Cloud && !Cloud.ready && Cloud.hasConfig && Cloud.hasConfig()) await Cloud.initClient();
+      const ok = await bootClientView();
+      if (!ok) await openShare();
     }
     function showAuthGate(on) {
       document.body.classList.toggle("auth-open", !!on);
@@ -4394,8 +4409,13 @@
       state = { members: [] };
       currentId = null;
       setSyncDot("off");
-      showAuthGate(true);
+      if (isMemberLink()) {
+        showAuthGate(false);
+        await openMemberDashboard();
+        return;
+      }
       showAuthForm();
+      showAuthGate(true);
     };
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && window.Cloud && Cloud.canWrite) Cloud.flush();
@@ -4463,25 +4483,30 @@
       shares: () => (state.members || []).map((m) => m.share),
       onRecovery: () => showNewPassForm()
     });
-    window.addEventListener("hashchange", () => {
-      if (clientViewId()) { bootClientView(); return; }
-      const h = location.hash || "";
-      if (h.startsWith("#share/") || h.startsWith("#sync/")) openShare();
-      else if (tab === "share") setTab("home");
+    window.addEventListener("hashchange", async () => {
+      if (isMemberLink()) {
+        await openMemberDashboard();
+        return;
+      }
+      document.documentElement.removeAttribute("data-client");
+      if (!window.Cloud || !Cloud.user) {
+        showAuthForm();
+        showAuthGate(true);
+        return;
+      }
+      if (tab === "share") setTab("home");
     });
     (async () => {
+      if (isMemberLink()) {
+        if (window.Cloud) await Cloud.init();
+        await openMemberDashboard();
+        return;
+      }
       if (!window.Cloud) {
         showAuthGate(true);
         return;
       }
       await Cloud.init();
-      if (isClientRoute()) {
-        showAuthGate(false);
-        if (!Cloud.ready && Cloud.hasConfig()) await Cloud.initClient();
-        const ok = await bootClientView();
-        if (!ok) await openShare();
-        return;
-      }
       if (Cloud.recovering) {
         showNewPassForm();
         return;
@@ -4491,6 +4516,7 @@
         showAuthGate(true);
         return;
       }
+      showAuthGate(false);
       await enterTrainerApp();
     })();
   </script>
