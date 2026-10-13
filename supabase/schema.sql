@@ -1,6 +1,6 @@
 -- PT Logger multi-tenant schema + RLS
 -- Supabase Dashboard → SQL Editor 에 이 파일 전체를 붙여넣고 Run 하세요.
--- 함수 본문은 $body$ 로 감쌉니다. $$ 를 쓰면 SQL Editor 가 본문 중간에서 끊어집니다.
+-- 함수 본문은 작은따옴표 문자열입니다. 달러 기호 구분자는 SQL Editor에서 본문이 잘립니다.
 -- 여러 번 실행해도 안전합니다.
 --
 -- 회원·스케줄·수업 일지·체성분은 gym_state.data JSON 안에 들어 있고,
@@ -35,7 +35,7 @@ alter table public.member_logs add column if not exists user_id uuid references 
 alter table public.member_logs add column if not exists member_id text;
 alter table public.member_logs add column if not exists video_url text;
 
-do $body$
+do '
 declare r record;
 begin
   for r in
@@ -43,13 +43,13 @@ begin
     from pg_constraint con
     join pg_class rel on rel.oid = con.conrelid
     join pg_namespace nsp on nsp.oid = rel.relnamespace
-    where nsp.nspname = 'public'
-      and rel.relname = 'member_logs'
-      and con.contype = 'c'
+    where nsp.nspname = ''public''
+      and rel.relname = ''member_logs''
+      and con.contype = ''c''
   loop
-    execute format('alter table public.member_logs drop constraint %I', r.conname);
+    execute format(''alter table public.member_logs drop constraint %I'', r.conname);
   end loop;
-end $body$;
+end ';
 
 alter table public.member_logs
   add constraint member_logs_kind_check
@@ -90,33 +90,33 @@ language sql
 stable
 security definer
 set search_path = public
-as $body$
+as '
   select exists (
     select 1 from public.gyms g
     where g.id = p_gym_id and g.owner_id = auth.uid()
   );
-$body$;
+';
 
 create or replace function public.own_user(p_user_id uuid)
 returns boolean
 language sql
 stable
-as $body$
+as '
   select p_user_id is not null and p_user_id = auth.uid();
-$body$;
+';
 
-do $body$
+do '
 declare pol record;
 begin
   for pol in
     select policyname, tablename
     from pg_policies
-    where schemaname = 'public'
-      and tablename in ('gyms', 'gym_state', 'member_logs')
+    where schemaname = ''public''
+      and tablename in (''gyms'', ''gym_state'', ''member_logs'')
   loop
-    execute format('drop policy if exists %I on public.%I', pol.policyname, pol.tablename);
+    execute format(''drop policy if exists %I on public.%I'', pol.policyname, pol.tablename);
   end loop;
-end $body$;
+end ';
 
 create policy gyms_select on public.gyms
   for select to authenticated
@@ -136,14 +136,14 @@ create policy gyms_delete on public.gyms
 create or replace function public.fill_row_user_id()
 returns trigger
 language plpgsql
-as $body$
+as '
 begin
   if NEW.user_id is null then
     NEW.user_id := auth.uid();
   end if;
   return NEW;
 end;
-$body$;
+';
 
 drop trigger if exists gym_state_fill_user_id on public.gym_state;
 create trigger gym_state_fill_user_id
@@ -188,21 +188,21 @@ returns table (gym_id uuid, data jsonb, rev bigint)
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   gid uuid;
   uid uuid;
 begin
   uid := auth.uid();
   if uid is null then
-    raise exception 'not authenticated';
+    raise exception ''not authenticated'';
   end if;
   select g.id into gid from public.gyms g where g.owner_id = uid;
   if gid is null then
     insert into public.gyms (owner_id) values (uid) returning id into gid;
   end if;
   insert into public.gym_state (gym_id, user_id, data)
-    values (gid, uid, '{"members":[]}'::jsonb)
+    values (gid, uid, ''{"members":[]}''::jsonb)
   on conflict (gym_id) do update
     set user_id = coalesce(public.gym_state.user_id, excluded.user_id);
   update public.member_logs
@@ -213,14 +213,14 @@ begin
     from public.gym_state s
     where s.gym_id = gid;
 end;
-$body$;
+';
 
 create or replace function public.load_trainer_state()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid;
   gid uuid;
@@ -230,14 +230,14 @@ declare
 begin
   uid := auth.uid();
   if uid is null then
-    raise exception 'not authenticated';
+    raise exception ''not authenticated'';
   end if;
   select g.id into gid from public.gyms g where g.owner_id = uid;
   if gid is null then
     insert into public.gyms (owner_id) values (uid) returning id into gid;
   end if;
   insert into public.gym_state (gym_id, user_id, data)
-    values (gid, uid, '{"members":[]}'::jsonb)
+    values (gid, uid, ''{"members":[]}''::jsonb)
   on conflict (gym_id) do update
     set user_id = coalesce(public.gym_state.user_id, excluded.user_id);
   update public.member_logs
@@ -247,31 +247,31 @@ begin
     from public.gym_state s
     where s.gym_id = gid;
   select coalesce(jsonb_agg(jsonb_build_object(
-      'id', l.id,
-      'share', l.share,
-      'kind', l.kind,
-      'member_id', l.member_id,
-      'video_url', l.video_url,
-      'payload', l.payload
-    ) order by l.updated_at), '[]'::jsonb)
+      ''id'', l.id,
+      ''share'', l.share,
+      ''kind'', l.kind,
+      ''member_id'', l.member_id,
+      ''video_url'', l.video_url,
+      ''payload'', l.payload
+    ) order by l.updated_at), ''[]''::jsonb)
     into logs
     from public.member_logs l
     where l.gym_id = gid;
   return jsonb_build_object(
-    'gym_id', gid,
-    'data', coalesce(payload, '{"members":[]}'::jsonb),
-    'rev', coalesce(r_rev, 1),
-    'logs', coalesce(logs, '[]'::jsonb)
+    ''gym_id'', gid,
+    ''data'', coalesce(payload, ''{"members":[]}''::jsonb),
+    ''rev'', coalesce(r_rev, 1),
+    ''logs'', coalesce(logs, ''[]''::jsonb)
   );
 end;
-$body$;
+';
 
 create or replace function public.push_gym_state(p_data jsonb)
 returns bigint
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   gid uuid;
   uid uuid;
@@ -279,14 +279,14 @@ declare
 begin
   uid := auth.uid();
   if uid is null then
-    raise exception 'not authenticated';
+    raise exception ''not authenticated'';
   end if;
   select g.id into gid from public.gyms g where g.owner_id = uid;
   if gid is null then
     insert into public.gyms (owner_id) values (uid) returning id into gid;
   end if;
   insert into public.gym_state (gym_id, user_id, data, rev)
-    values (gid, uid, coalesce(p_data, '{"members":[]}'::jsonb), 1)
+    values (gid, uid, coalesce(p_data, ''{"members":[]}''::jsonb), 1)
   on conflict (gym_id) do update
     set data = excluded.data,
         user_id = uid,
@@ -295,14 +295,14 @@ begin
     returning rev into new_rev;
   return coalesce(new_rev, 1);
 end;
-$body$;
+';
 
 create or replace function public.upsert_member_logs(p_rows jsonb)
 returns int
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid;
   gid uuid;
@@ -311,9 +311,9 @@ declare
 begin
   uid := auth.uid();
   if uid is null then
-    raise exception 'not authenticated';
+    raise exception ''not authenticated'';
   end if;
-  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+  if p_rows is null or jsonb_typeof(p_rows) <> ''array'' then
     return 0;
   end if;
   select g.id into gid from public.gyms g where g.owner_id = uid;
@@ -322,22 +322,22 @@ begin
   end if;
   for rec in select value from jsonb_array_elements(p_rows)
   loop
-    if coalesce(rec->>'id', '') = '' then
+    if coalesce(rec->>''id'', '''') = '''' then
       continue;
     end if;
-    if coalesce(rec->>'kind', '') not in ('self_workout', 'diet', 'video') then
+    if coalesce(rec->>''kind'', '''') not in (''self_workout'', ''diet'', ''video'') then
       continue;
     end if;
     insert into public.member_logs (id, gym_id, user_id, member_id, share, kind, payload, video_url, updated_at)
     values (
-      rec->>'id',
+      rec->>''id'',
       gid,
       uid,
-      nullif(coalesce(rec->>'member_id', rec#>>'{payload,member_id}'), ''),
-      coalesce(rec->>'share', ''),
-      rec->>'kind',
-      coalesce(rec->'payload', '{}'::jsonb),
-      nullif(coalesce(rec->>'video_url', rec#>>'{payload,video_url}'), ''),
+      nullif(coalesce(rec->>''member_id'', rec#>>''{payload,member_id}''), ''''),
+      coalesce(rec->>''share'', ''''),
+      rec->>''kind'',
+      coalesce(rec->''payload'', ''{}''::jsonb),
+      nullif(coalesce(rec->>''video_url'', rec#>>''{payload,video_url}''), ''''),
       now()
     )
     on conflict (id) do update
@@ -354,14 +354,14 @@ begin
   end loop;
   return n;
 end;
-$body$;
+';
 
 create or replace function public.member_public(p_ref text)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   mem jsonb;
   p_share text;
@@ -377,52 +377,52 @@ begin
   select e, coalesce(s.user_id, g.owner_id) into mem, oid
   from public.gym_state s
   join public.gyms g on g.id = s.gym_id,
-       jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
-  where e->>'share' = p_ref or e->>'id' = p_ref
+       jsonb_array_elements(coalesce(s.data->''members'', ''[]''::jsonb)) e
+  where e->>''share'' = p_ref or e->>''id'' = p_ref
   limit 1;
   if mem is null then
     return null;
   end if;
-  p_share := mem->>'share';
-  p_member := mem->>'id';
-  select coalesce(jsonb_agg(payload order by updated_at), '[]'::jsonb)
+  p_share := mem->>''share'';
+  p_member := mem->>''id'';
+  select coalesce(jsonb_agg(payload order by updated_at), ''[]''::jsonb)
     into workouts
     from public.member_logs
-    where share = p_share and kind = 'self_workout'
-      and (member_id is null or member_id = '' or member_id = p_member);
-  select coalesce(jsonb_agg(payload order by updated_at), '[]'::jsonb)
+    where share = p_share and kind = ''self_workout''
+      and (member_id is null or member_id = '''' or member_id = p_member);
+  select coalesce(jsonb_agg(payload order by updated_at), ''[]''::jsonb)
     into diets
     from public.member_logs
-    where share = p_share and kind = 'diet'
-      and (member_id is null or member_id = '' or member_id = p_member);
+    where share = p_share and kind = ''diet''
+      and (member_id is null or member_id = '''' or member_id = p_member);
   select coalesce(jsonb_agg(jsonb_build_object(
-      'id', l.id,
-      'member_id', l.member_id,
-      'share', l.share,
-      'kind', l.kind,
-      'video_url', l.video_url,
-      'payload', l.payload
-    ) order by l.updated_at), '[]'::jsonb)
+      ''id'', l.id,
+      ''member_id'', l.member_id,
+      ''share'', l.share,
+      ''kind'', l.kind,
+      ''video_url'', l.video_url,
+      ''payload'', l.payload
+    ) order by l.updated_at), ''[]''::jsonb)
     into videos
     from public.member_logs l
     where l.member_id = p_member
-      and l.kind = 'video'
-      and coalesce(l.video_url, '') <> '';
+      and l.kind = ''video''
+      and coalesce(l.video_url, '''') <> '''';
   return mem || jsonb_build_object(
-    'selfWorkouts', workouts,
-    'dietLogs', diets,
-    'videos', videos,
-    'ownerId', oid
+    ''selfWorkouts'', workouts,
+    ''dietLogs'', diets,
+    ''videos'', videos,
+    ''ownerId'', oid
   );
 end;
-$body$;
+';
 
 create or replace function public.member_upsert_log(p_share text, p_kind text, p_row jsonb)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   gid uuid;
   uid uuid;
@@ -430,30 +430,30 @@ declare
   mem_id text;
   vurl text;
 begin
-  if p_kind not in ('self_workout', 'diet', 'video') then
-    raise exception 'invalid kind';
+  if p_kind not in (''self_workout'', ''diet'', ''video'') then
+    raise exception ''invalid kind'';
   end if;
   if p_share is null or length(trim(p_share)) < 4 then
-    raise exception 'invalid share';
+    raise exception ''invalid share'';
   end if;
-  rid := coalesce(p_row->>'id', '');
-  if rid = '' then
-    raise exception 'missing id';
+  rid := coalesce(p_row->>''id'', '''');
+  if rid = '''' then
+    raise exception ''missing id'';
   end if;
-  select s.gym_id, coalesce(s.user_id, g.owner_id), e->>'id'
+  select s.gym_id, coalesce(s.user_id, g.owner_id), e->>''id''
     into gid, uid, mem_id
   from public.gym_state s
   join public.gyms g on g.id = s.gym_id,
-       jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
-  where e->>'share' = p_share
+       jsonb_array_elements(coalesce(s.data->''members'', ''[]''::jsonb)) e
+  where e->>''share'' = p_share
   limit 1;
   if gid is null then
-    raise exception 'member not found';
+    raise exception ''member not found'';
   end if;
-  if p_row ? 'member_id' and coalesce(p_row->>'member_id', '') <> '' and p_row->>'member_id' <> mem_id then
-    raise exception 'member mismatch';
+  if p_row ? ''member_id'' and coalesce(p_row->>''member_id'', '''') <> '''' and p_row->>''member_id'' <> mem_id then
+    raise exception ''member mismatch'';
   end if;
-  vurl := nullif(coalesce(p_row->>'video_url', ''), '');
+  vurl := nullif(coalesce(p_row->>''video_url'', ''''), '''');
   insert into public.member_logs (id, gym_id, user_id, member_id, share, kind, payload, video_url, updated_at)
   values (rid, gid, uid, mem_id, p_share, p_kind, p_row, vurl, now())
   on conflict (id) do update
@@ -466,18 +466,18 @@ begin
         video_url = coalesce(excluded.video_url, public.member_logs.video_url),
         updated_at = now()
     where public.member_logs.member_id is null
-       or public.member_logs.member_id = ''
+       or public.member_logs.member_id = ''''
        or public.member_logs.member_id = excluded.member_id;
-  return p_row || jsonb_build_object('member_id', mem_id, 'video_url', coalesce(vurl, ''));
+  return p_row || jsonb_build_object(''member_id'', mem_id, ''video_url'', coalesce(vurl, ''''));
 end;
-$body$;
+';
 
 create or replace function public.member_delete_log(p_share text, p_id text)
 returns boolean
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   n int;
 begin
@@ -489,7 +489,7 @@ begin
   get diagnostics n = row_count;
   return n > 0;
 end;
-$body$;
+';
 
 create or replace view public.member_journal
 with (security_invoker = true) as
@@ -513,13 +513,13 @@ language sql
 stable
 security invoker
 set search_path = public
-as $body$
+as '
   select l.*
   from public.member_logs l
   where l.member_id = p_member_id
     and auth.uid() is not null
     and (public.own_user(l.user_id) or public.owns_gym(l.gym_id));
-$body$;
+';
 
 grant usage on schema public to anon, authenticated, service_role;
 revoke all on public.gyms from anon, public;
@@ -661,15 +661,15 @@ create policy "workout videos auth delete own"
     and split_part(name, '/', 2) = auth.uid()::text
   );
 
-do $body$ begin
+do ' begin
   alter publication supabase_realtime add table public.gym_state;
 exception when duplicate_object then null;
-end $body$;
+end ';
 
-do $body$ begin
+do ' begin
   alter publication supabase_realtime add table public.member_logs;
 exception when duplicate_object then null;
-end $body$;
+end ';
 
 -- 1:1 수업 오픈 · 예약 · 대기
 -- 회원은 로그인 계정이 없고 공유 링크로 들어오므로 client_id 는 auth.users 가 아니라 회원 id(text) 입니다.
@@ -731,18 +731,18 @@ alter table public.schedules enable row level security;
 alter table public.reservations enable row level security;
 alter table public.booking_notices enable row level security;
 
-do $body$
+do '
 declare pol record;
 begin
   for pol in
     select policyname, tablename
     from pg_policies
-    where schemaname = 'public'
-      and tablename in ('schedules', 'reservations', 'booking_notices')
+    where schemaname = ''public''
+      and tablename in (''schedules'', ''reservations'', ''booking_notices'')
   loop
-    execute format('drop policy if exists %I on public.%I', pol.policyname, pol.tablename);
+    execute format(''drop policy if exists %I on public.%I'', pol.policyname, pol.tablename);
   end loop;
-end $body$;
+end ';
 
 create policy schedules_coach_select on public.schedules
   for select to authenticated
@@ -787,21 +787,21 @@ language sql
 stable
 security definer
 set search_path = public
-as $body$
+as '
   select
-    e->>'id',
-    coalesce(nullif(e->>'name', ''), '회원'),
-    e->>'share',
+    e->>''id'',
+    coalesce(nullif(e->>''name'', ''''), ''회원''),
+    e->>''share'',
     coalesce(s.user_id, g.owner_id),
     g.id
   from public.gym_state s
   join public.gyms g on g.id = s.gym_id,
-       jsonb_array_elements(coalesce(s.data->'members', '[]'::jsonb)) e
-  where (e->>'share' = btrim(p_ref) or e->>'id' = btrim(p_ref))
-    and coalesce(e->>'id', '') <> ''
-    and coalesce(e->>'share', '') <> ''
+       jsonb_array_elements(coalesce(s.data->''members'', ''[]''::jsonb)) e
+  where (e->>''share'' = btrim(p_ref) or e->>''id'' = btrim(p_ref))
+    and coalesce(e->>''id'', '''') <> ''''
+    and coalesce(e->>''share'', '''') <> ''''
   limit 1;
-$body$;
+';
 
 create or replace function public._booking_notice(
   p_audience text,
@@ -818,25 +818,25 @@ returns void
 language sql
 security definer
 set search_path = public
-as $body$
+as '
   insert into public.booking_notices (
     audience, coach_id, member_id, member_share, schedule_id, reservation_id, kind, title, body
   ) values (
-    p_audience, p_coach, p_member_id, p_share, p_schedule, p_reservation, p_kind, p_title, coalesce(p_body, '')
+    p_audience, p_coach, p_member_id, p_share, p_schedule, p_reservation, p_kind, p_title, coalesce(p_body, '''')
   );
-$body$;
+';
 
 create or replace function public._renumber_waitlist(p_schedule uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 begin
   with ranked as (
     select id, row_number() over (order by waiting_order, created_at) as n
     from public.reservations
-    where schedule_id = p_schedule and status = 'waiting'
+    where schedule_id = p_schedule and status = ''waiting''
   )
   update public.reservations r
   set waiting_order = ranked.n
@@ -844,60 +844,60 @@ begin
   where r.id = ranked.id
     and r.waiting_order is distinct from ranked.n;
 end;
-$body$;
+';
 
 create or replace function public._slot_label(p_start timestamptz)
 returns text
 language sql
 stable
-as $body$
-  select to_char(p_start at time zone 'Asia/Seoul', 'FMMM/FMDD HH24:MI');
-$body$;
+as '
+  select to_char(p_start at time zone ''Asia/Seoul'', ''FMMM/FMDD HH24:MI'');
+';
 
 create or replace function public.open_schedule(p_start timestamptz, p_end timestamptz)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid := auth.uid();
   sid uuid;
 begin
   if uid is null then
-    raise exception '로그인이 필요합니다';
+    raise exception ''로그인이 필요합니다'';
   end if;
   if p_start is null or p_end is null or p_end <= p_start then
-    raise exception '종료 시간은 시작 시간보다 뒤여야 합니다';
+    raise exception ''종료 시간은 시작 시간보다 뒤여야 합니다'';
   end if;
-  if p_end - p_start < interval '15 minutes' then
-    raise exception '수업은 15분 이상이어야 합니다';
+  if p_end - p_start < interval ''15 minutes'' then
+    raise exception ''수업은 15분 이상이어야 합니다'';
   end if;
   if p_start <= now() then
-    raise exception '이미 지난 시간은 오픈할 수 없습니다';
+    raise exception ''이미 지난 시간은 오픈할 수 없습니다'';
   end if;
   if exists (
     select 1 from public.schedules s
     where s.coach_id = uid
-      and s.status <> 'closed'
+      and s.status <> ''closed''
       and s.start_time < p_end
       and s.end_time > p_start
   ) then
-    raise exception '이미 겹치는 오픈 시간이 있습니다';
+    raise exception ''이미 겹치는 오픈 시간이 있습니다'';
   end if;
   insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
-  values (uid, p_start, p_end, 'available', 6)
+  values (uid, p_start, p_end, ''available'', 6)
   returning id into sid;
-  return jsonb_build_object('id', sid, 'status', 'available');
+  return jsonb_build_object(''id'', sid, ''status'', ''available'');
 end;
-$body$;
+';
 
 create or replace function public._close_coach_slot(p_schedule_id uuid, p_quiet boolean default false)
 returns void
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid := auth.uid();
   slot public.schedules%rowtype;
@@ -905,55 +905,55 @@ declare
   n int := 0;
 begin
   if uid is null then
-    raise exception '로그인이 필요합니다';
+    raise exception ''로그인이 필요합니다'';
   end if;
   select * into slot from public.schedules where id = p_schedule_id for update;
   if not found then
-    raise exception '시간을 찾을 수 없습니다';
+    raise exception ''시간을 찾을 수 없습니다'';
   end if;
   if slot.coach_id <> uid then
-    raise exception '본인이 연 시간만 마감할 수 있습니다';
+    raise exception ''본인이 연 시간만 마감할 수 있습니다'';
   end if;
-  if slot.status = 'closed' then
+  if slot.status = ''closed'' then
     return;
   end if;
-  update public.schedules set status = 'closed' where id = slot.id;
+  update public.schedules set status = ''closed'' where id = slot.id;
   for rec in
     select * from public.reservations
-    where schedule_id = slot.id and status in ('confirmed', 'waiting')
+    where schedule_id = slot.id and status in (''confirmed'', ''waiting'')
     for update
   loop
     n := n + 1;
     update public.reservations
-    set status = 'cancelled', waiting_order = 0, cancelled_at = now()
+    set status = ''cancelled'', waiting_order = 0, cancelled_at = now()
     where id = rec.id;
     perform public._booking_notice(
-      'member', slot.coach_id, rec.client_id, rec.member_share, slot.id, rec.id,
-      'closed', '수업 시간이 마감되었습니다',
-      public._slot_label(slot.start_time) || ' 수업이 마감되어 예약이 취소되었습니다.'
+      ''member'', slot.coach_id, rec.client_id, rec.member_share, slot.id, rec.id,
+      ''closed'', ''수업 시간이 마감되었습니다'',
+      public._slot_label(slot.start_time) || '' 수업이 마감되어 예약이 취소되었습니다.''
     );
   end loop;
   if n > 0 or not coalesce(p_quiet, false) then
     perform public._booking_notice(
-      'coach', slot.coach_id, null, null, slot.id, null,
-      'closed', '시간을 마감했습니다',
-      public._slot_label(slot.start_time) || ' 시간을 마감했습니다.'
+      ''coach'', slot.coach_id, null, null, slot.id, null,
+      ''closed'', ''시간을 마감했습니다'',
+      public._slot_label(slot.start_time) || '' 시간을 마감했습니다.''
     );
   end if;
 end;
-$body$;
+';
 
 create or replace function public.close_schedule(p_schedule_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 begin
   perform public._close_coach_slot(p_schedule_id, false);
-  return jsonb_build_object('id', p_schedule_id, 'status', 'closed');
+  return jsonb_build_object(''id'', p_schedule_id, ''status'', ''closed'');
 end;
-$body$;
+';
 
 -- 한국 시간 기준. 수업 길이만큼 잘라 미래 슬롯만 후보로 돌려줍니다.
 create or replace function public._slot_grid(p_date date, p_start time, p_end time, p_minutes int)
@@ -961,7 +961,7 @@ returns table(slot_start timestamptz, slot_end timestamptz, is_past boolean)
 language plpgsql
 stable
 set search_path = public
-as $body$
+as '
 declare
   cursor_ts timestamp;
   day_end timestamp;
@@ -969,19 +969,19 @@ declare
   e timestamptz;
 begin
   if p_minutes not in (30, 50, 60, 90) then
-    raise exception '수업 길이는 30, 50, 60, 90분 중에서 고르세요';
+    raise exception ''수업 길이는 30, 50, 60, 90분 중에서 고르세요'';
   end if;
   if p_start is null or p_end is null or p_end <= p_start then
-    raise exception '종료 시간은 시작 시간보다 뒤여야 합니다';
+    raise exception ''종료 시간은 시작 시간보다 뒤여야 합니다'';
   end if;
   if (p_end - p_start) < make_interval(mins => p_minutes) then
-    raise exception '시간 범위가 수업 길이보다 짧습니다';
+    raise exception ''시간 범위가 수업 길이보다 짧습니다'';
   end if;
   cursor_ts := p_date + p_start;
   day_end := p_date + p_end;
   while cursor_ts + make_interval(mins => p_minutes) <= day_end loop
-    s := cursor_ts at time zone 'Asia/Seoul';
-    e := (cursor_ts + make_interval(mins => p_minutes)) at time zone 'Asia/Seoul';
+    s := cursor_ts at time zone ''Asia/Seoul'';
+    e := (cursor_ts + make_interval(mins => p_minutes)) at time zone ''Asia/Seoul'';
     slot_start := s;
     slot_end := e;
     is_past := s <= now();
@@ -989,7 +989,7 @@ begin
     cursor_ts := cursor_ts + make_interval(mins => p_minutes);
   end loop;
 end;
-$body$;
+';
 
 create or replace function public.open_schedule_range(
   p_from date,
@@ -1003,7 +1003,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid := auth.uid();
   d date;
@@ -1014,19 +1014,19 @@ declare
   skipped_overlap int := 0;
 begin
   if uid is null then
-    raise exception '로그인이 필요합니다';
+    raise exception ''로그인이 필요합니다'';
   end if;
   if p_from is null or p_to is null or p_to < p_from then
-    raise exception '종료일은 시작일보다 뒤여야 합니다';
+    raise exception ''종료일은 시작일보다 뒤여야 합니다'';
   end if;
   if (p_to - p_from) > 92 then
-    raise exception '한 번에 최대 3개월까지 열 수 있습니다';
+    raise exception ''한 번에 최대 3개월까지 열 수 있습니다'';
   end if;
   if p_weekdays is null or cardinality(p_weekdays) = 0 then
-    raise exception '요일을 선택해 주세요';
+    raise exception ''요일을 선택해 주세요'';
   end if;
   if exists (select 1 from unnest(p_weekdays) w where w < 0 or w > 6) then
-    raise exception '요일 값이 올바르지 않습니다';
+    raise exception ''요일 값이 올바르지 않습니다'';
   end if;
 
   d := p_from;
@@ -1041,17 +1041,17 @@ begin
         elsif exists (
           select 1 from public.schedules s
           where s.coach_id = uid
-            and s.status <> 'closed'
+            and s.status <> ''closed''
             and s.start_time < slot.slot_end
             and s.end_time > slot.slot_start
         ) then
           skipped_overlap := skipped_overlap + 1;
         else
           if created >= 800 then
-            raise exception '한 번에 800개까지만 열 수 있습니다. 기간을 나눠 주세요';
+            raise exception ''한 번에 800개까지만 열 수 있습니다. 기간을 나눠 주세요'';
           end if;
           insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
-          values (uid, slot.slot_start, slot.slot_end, 'available', 6);
+          values (uid, slot.slot_start, slot.slot_end, ''available'', 6);
           created := created + 1;
         end if;
       end loop;
@@ -1060,16 +1060,16 @@ begin
   end loop;
 
   if created = 0 and skipped_past = 0 and skipped_overlap = 0 then
-    raise exception '선택한 요일에 해당하는 날이 없습니다';
+    raise exception ''선택한 요일에 해당하는 날이 없습니다'';
   end if;
 
   return jsonb_build_object(
-    'created', created,
-    'skipped_past', skipped_past,
-    'skipped_overlap', skipped_overlap
+    ''created'', created,
+    ''skipped_past'', skipped_past,
+    ''skipped_overlap'', skipped_overlap
   );
 end;
-$body$;
+';
 
 create or replace function public.override_schedule_day(
   p_date date,
@@ -1083,7 +1083,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid := auth.uid();
   booked_hit int := 0;
@@ -1094,49 +1094,49 @@ declare
   slot record;
 begin
   if uid is null then
-    raise exception '로그인이 필요합니다';
+    raise exception ''로그인이 필요합니다'';
   end if;
   if p_date is null then
-    raise exception '날짜를 선택해 주세요';
+    raise exception ''날짜를 선택해 주세요'';
   end if;
-  if p_mode not in ('closed', 'hours') then
-    raise exception '처리할 수 없는 예외입니다';
+  if p_mode not in (''closed'', ''hours'') then
+    raise exception ''처리할 수 없는 예외입니다'';
   end if;
 
   perform 1
   from public.schedules s
   where s.coach_id = uid
-    and s.status <> 'closed'
-    and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+    and s.status <> ''closed''
+    and (s.start_time at time zone ''Asia/Seoul'')::date = p_date
   for update;
 
-  if p_mode = 'closed' then
+  if p_mode = ''closed'' then
     select count(*) into booked_hit
     from public.reservations r
     join public.schedules s on s.id = r.schedule_id
     where s.coach_id = uid
-      and s.status <> 'closed'
+      and s.status <> ''closed''
       and s.start_time > now()
-      and (s.start_time at time zone 'Asia/Seoul')::date = p_date
-      and r.status in ('confirmed', 'waiting');
+      and (s.start_time at time zone ''Asia/Seoul'')::date = p_date
+      and r.status in (''confirmed'', ''waiting'');
     if booked_hit > 0 and not coalesce(p_cancel_booked, false) then
-      raise exception '%', format('이 날짜에 예약 %s건이 있습니다', booked_hit);
+      raise exception ''%'', format(''이 날짜에 예약 %s건이 있습니다'', booked_hit);
     end if;
     for rec in
       select s.id
       from public.schedules s
       where s.coach_id = uid
-        and s.status <> 'closed'
+        and s.status <> ''closed''
         and s.start_time > now()
-        and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+        and (s.start_time at time zone ''Asia/Seoul'')::date = p_date
     loop
       perform public._close_coach_slot(rec.id, true);
       closed_n := closed_n + 1;
     end loop;
     if closed_n = 0 then
-      raise exception '그 날짜에 마감할 열린 시간이 없습니다';
+      raise exception ''그 날짜에 마감할 열린 시간이 없습니다'';
     end if;
-    return jsonb_build_object('closed', closed_n, 'created', 0, 'cancelled_bookings', booked_hit);
+    return jsonb_build_object(''closed'', closed_n, ''created'', 0, ''cancelled_bookings'', booked_hit);
   end if;
 
   if p_minutes is null then
@@ -1147,10 +1147,10 @@ begin
   from public.reservations r
   join public.schedules s on s.id = r.schedule_id
   where s.coach_id = uid
-    and s.status <> 'closed'
+    and s.status <> ''closed''
     and s.start_time > now()
-    and (s.start_time at time zone 'Asia/Seoul')::date = p_date
-    and r.status in ('confirmed', 'waiting')
+    and (s.start_time at time zone ''Asia/Seoul'')::date = p_date
+    and r.status in (''confirmed'', ''waiting'')
     and not exists (
       select 1 from public._slot_grid(p_date, p_start, p_end, p_minutes) g
       where g.is_past = false
@@ -1158,16 +1158,16 @@ begin
         and g.slot_end = s.end_time
     );
   if booked_hit > 0 and not coalesce(p_cancel_booked, false) then
-    raise exception '%', format('이 날짜에 예약 %s건이 있습니다', booked_hit);
+    raise exception ''%'', format(''이 날짜에 예약 %s건이 있습니다'', booked_hit);
   end if;
 
   for rec in
     select s.id
     from public.schedules s
     where s.coach_id = uid
-      and s.status <> 'closed'
+      and s.status <> ''closed''
       and s.start_time > now()
-      and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+      and (s.start_time at time zone ''Asia/Seoul'')::date = p_date
       and not exists (
         select 1 from public._slot_grid(p_date, p_start, p_end, p_minutes) g
         where g.is_past = false
@@ -1186,37 +1186,37 @@ begin
     if exists (
       select 1 from public.schedules s
       where s.coach_id = uid
-        and s.status <> 'closed'
+        and s.status <> ''closed''
         and s.start_time < slot.slot_end
         and s.end_time > slot.slot_start
     ) then
       skipped_overlap := skipped_overlap + 1;
     else
       insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
-      values (uid, slot.slot_start, slot.slot_end, 'available', 6);
+      values (uid, slot.slot_start, slot.slot_end, ''available'', 6);
       created_n := created_n + 1;
     end if;
   end loop;
 
   if closed_n = 0 and created_n = 0 and skipped_overlap = 0 then
-    raise exception '바꿀 시간이 없습니다. 지난 시간이거나 범위가 너무 짧습니다';
+    raise exception ''바꿀 시간이 없습니다. 지난 시간이거나 범위가 너무 짧습니다'';
   end if;
 
   return jsonb_build_object(
-    'closed', closed_n,
-    'created', created_n,
-    'skipped_overlap', skipped_overlap,
-    'cancelled_bookings', booked_hit
+    ''closed'', closed_n,
+    ''created'', created_n,
+    ''skipped_overlap'', skipped_overlap,
+    ''cancelled_bookings'', booked_hit
   );
 end;
-$body$;
+';
 
 create or replace function public.book_slot(p_share text, p_schedule_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   mem record;
   slot public.schedules%rowtype;
@@ -1228,45 +1228,45 @@ declare
 begin
   select * into mem from public._booking_member(p_share);
   if mem.member_id is null then
-    raise exception '회원 정보를 찾을 수 없습니다';
+    raise exception ''회원 정보를 찾을 수 없습니다'';
   end if;
   select * into slot from public.schedules where id = p_schedule_id for update;
   if not found then
-    raise exception '시간을 찾을 수 없습니다';
+    raise exception ''시간을 찾을 수 없습니다'';
   end if;
   if slot.coach_id is distinct from mem.coach_id then
-    raise exception '이 트레이너의 시간이 아닙니다';
+    raise exception ''이 트레이너의 시간이 아닙니다'';
   end if;
-  if slot.status = 'closed' then
-    raise exception '마감된 시간입니다';
+  if slot.status = ''closed'' then
+    raise exception ''마감된 시간입니다'';
   end if;
   if slot.start_time <= now() then
-    raise exception '이미 시작된 수업은 예약할 수 없습니다';
+    raise exception ''이미 시작된 수업은 예약할 수 없습니다'';
   end if;
   if exists (
     select 1 from public.reservations r
     where r.schedule_id = slot.id
       and r.client_id = mem.member_id
-      and r.status in ('confirmed', 'waiting')
+      and r.status in (''confirmed'', ''waiting'')
   ) then
-    raise exception '이미 이 시간을 예약했거나 대기 중입니다';
+    raise exception ''이미 이 시간을 예약했거나 대기 중입니다'';
   end if;
 
   select exists (
     select 1 from public.reservations r
-    where r.schedule_id = slot.id and r.status = 'confirmed'
+    where r.schedule_id = slot.id and r.status = ''confirmed''
   ) into has_confirmed;
 
   label := public._slot_label(slot.start_time);
   if not has_confirmed then
-    new_status := 'confirmed';
+    new_status := ''confirmed'';
     next_order := 0;
-    update public.schedules set status = 'booked' where id = slot.id;
+    update public.schedules set status = ''booked'' where id = slot.id;
   else
-    new_status := 'waiting';
+    new_status := ''waiting'';
     select coalesce(max(r.waiting_order), 0) + 1 into next_order
     from public.reservations r
-    where r.schedule_id = slot.id and r.status = 'waiting';
+    where r.schedule_id = slot.id and r.status = ''waiting'';
   end if;
 
   insert into public.reservations (
@@ -1275,38 +1275,38 @@ begin
     slot.id, mem.member_id, mem.member_share, mem.member_name, new_status, next_order
   ) returning id into rid;
 
-  if new_status = 'confirmed' then
+  if new_status = ''confirmed'' then
     perform public._booking_notice(
-      'member', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
-      'booked', '예약이 확정되었습니다', label || ' 수업이 확정되었습니다.'
+      ''member'', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
+      ''booked'', ''예약이 확정되었습니다'', label || '' 수업이 확정되었습니다.''
     );
     perform public._booking_notice(
-      'coach', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
-      'booked', mem.member_name || ' 님 예약', label || ' 수업이 확정되었습니다.'
+      ''coach'', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
+      ''booked'', mem.member_name || '' 님 예약'', label || '' 수업이 확정되었습니다.''
     );
   else
     perform public._booking_notice(
-      'member', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
-      'waiting', '대기 ' || next_order || '순위로 신청되었습니다',
-      label || ' 수업은 이미 예약되어 대기 ' || next_order || '순위입니다. 앞 순번이 취소되면 자동으로 확정됩니다.'
+      ''member'', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
+      ''waiting'', ''대기 '' || next_order || ''순위로 신청되었습니다'',
+      label || '' 수업은 이미 예약되어 대기 '' || next_order || ''순위입니다. 앞 순번이 취소되면 자동으로 확정됩니다.''
     );
     perform public._booking_notice(
-      'coach', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
-      'waiting', mem.member_name || ' 님 대기 ' || next_order || '순위',
-      label || ' 수업에 대기가 추가되었습니다.'
+      ''coach'', slot.coach_id, mem.member_id, mem.member_share, slot.id, rid,
+      ''waiting'', mem.member_name || '' 님 대기 '' || next_order || ''순위'',
+      label || '' 수업에 대기가 추가되었습니다.''
     );
   end if;
 
-  return jsonb_build_object('id', rid, 'status', new_status, 'waiting_order', next_order);
+  return jsonb_build_object(''id'', rid, ''status'', new_status, ''waiting_order'', next_order);
 end;
-$body$;
+';
 
 create or replace function public.cancel_reservation(p_share text, p_reservation_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid := auth.uid();
   mem record;
@@ -1324,65 +1324,65 @@ begin
   from public.reservations r
   where r.id = p_reservation_id;
   if sid is null then
-    raise exception '예약을 찾을 수 없습니다';
+    raise exception ''예약을 찾을 수 없습니다'';
   end if;
 
   select * into slot from public.schedules where id = sid for update;
   if not found then
-    raise exception '시간을 찾을 수 없습니다';
+    raise exception ''시간을 찾을 수 없습니다'';
   end if;
   select * into res from public.reservations where id = p_reservation_id for update;
-  if not found or res.status = 'cancelled' then
-    raise exception '이미 취소된 예약입니다';
+  if not found or res.status = ''cancelled'' then
+    raise exception ''이미 취소된 예약입니다'';
   end if;
 
   if p_share is not null and length(btrim(p_share)) >= 4 then
     select * into mem from public._booking_member(p_share);
     if mem.member_id is null or mem.member_id <> res.client_id then
-      raise exception '본인 예약만 취소할 수 있습니다';
+      raise exception ''본인 예약만 취소할 수 있습니다'';
     end if;
     if slot.start_time <= now() then
-      raise exception '이미 시작된 수업은 취소할 수 없습니다';
+      raise exception ''이미 시작된 수업은 취소할 수 없습니다'';
     end if;
-    if res.status = 'confirmed'
+    if res.status = ''confirmed''
        and slot.start_time - make_interval(hours => coalesce(slot.cancel_hours, 6)) <= now() then
-      raise exception '%', format('수업 시작 %s시간 전까지만 취소할 수 있습니다', coalesce(slot.cancel_hours, 6));
+      raise exception ''%'', format(''수업 시작 %s시간 전까지만 취소할 수 있습니다'', coalesce(slot.cancel_hours, 6));
     end if;
   elsif uid is not null and uid = slot.coach_id then
     is_coach := true;
   else
-    raise exception '취소 권한이 없습니다';
+    raise exception ''취소 권한이 없습니다'';
   end if;
 
   update public.reservations
-  set status = 'cancelled', waiting_order = 0, cancelled_at = now()
+  set status = ''cancelled'', waiting_order = 0, cancelled_at = now()
   where id = res.id;
 
   label := public._slot_label(slot.start_time);
 
-  if res.status = 'confirmed' and slot.status <> 'closed' and slot.start_time > now() then
+  if res.status = ''confirmed'' and slot.status <> ''closed'' and slot.start_time > now() then
     select r.id, r.member_name, r.member_share, r.client_id
       into promoted_id, promoted_name, promoted_share, promoted_member
     from public.reservations r
     where r.schedule_id = slot.id
-      and r.status = 'waiting'
+      and r.status = ''waiting''
     order by r.waiting_order asc, r.created_at asc
     limit 1
     for update;
 
     if promoted_id is not null then
       update public.reservations
-      set status = 'confirmed', waiting_order = 0
+      set status = ''confirmed'', waiting_order = 0
       where id = promoted_id;
       perform public._booking_notice(
-        'member', slot.coach_id, promoted_member, promoted_share, slot.id, promoted_id,
-        'promoted', '대기에서 예약이 확정되었습니다',
-        label || ' 수업이 확정되었습니다. 앞 순번 취소로 자동 승계되었습니다.'
+        ''member'', slot.coach_id, promoted_member, promoted_share, slot.id, promoted_id,
+        ''promoted'', ''대기에서 예약이 확정되었습니다'',
+        label || '' 수업이 확정되었습니다. 앞 순번 취소로 자동 승계되었습니다.''
       );
       perform public._booking_notice(
-        'coach', slot.coach_id, promoted_member, promoted_share, slot.id, promoted_id,
-        'promoted', promoted_name || ' 님 자동 확정',
-        label || ' 빈자리로 ' || promoted_name || ' 님이 확정되었습니다.'
+        ''coach'', slot.coach_id, promoted_member, promoted_share, slot.id, promoted_id,
+        ''promoted'', promoted_name || '' 님 자동 확정'',
+        label || '' 빈자리로 '' || promoted_name || '' 님이 확정되었습니다.''
       );
     end if;
   end if;
@@ -1391,33 +1391,33 @@ begin
 
   if not exists (
     select 1 from public.reservations r
-    where r.schedule_id = slot.id and r.status = 'confirmed'
-  ) and slot.status = 'booked' then
-    update public.schedules set status = 'available' where id = slot.id;
+    where r.schedule_id = slot.id and r.status = ''confirmed''
+  ) and slot.status = ''booked'' then
+    update public.schedules set status = ''available'' where id = slot.id;
   end if;
 
   perform public._booking_notice(
-    'member', slot.coach_id, res.client_id, res.member_share, slot.id, res.id,
-    'cancelled', '예약이 취소되었습니다',
-    label || ' 예약이 취소되었습니다.'
+    ''member'', slot.coach_id, res.client_id, res.member_share, slot.id, res.id,
+    ''cancelled'', ''예약이 취소되었습니다'',
+    label || '' 예약이 취소되었습니다.''
   );
   perform public._booking_notice(
-    'coach', slot.coach_id, res.client_id, res.member_share, slot.id, res.id,
-    'cancelled', res.member_name || ' 님 취소',
-    label || ' 예약이 취소되었습니다.' ||
-    case when promoted_id is not null then ' ' || promoted_name || ' 님이 확정으로 올라갔습니다.' else '' end
+    ''coach'', slot.coach_id, res.client_id, res.member_share, slot.id, res.id,
+    ''cancelled'', res.member_name || '' 님 취소'',
+    label || '' 예약이 취소되었습니다.'' ||
+    case when promoted_id is not null then '' '' || promoted_name || '' 님이 확정으로 올라갔습니다.'' else '''' end
   );
 
   return jsonb_build_object(
-    'cancelled_id', res.id,
-    'promoted', case
+    ''cancelled_id'', res.id,
+    ''promoted'', case
       when promoted_id is null then null
-      when is_coach then jsonb_build_object('id', promoted_id, 'name', promoted_name)
-      else jsonb_build_object('ok', true)
+      when is_coach then jsonb_build_object(''id'', promoted_id, ''name'', promoted_name)
+      else jsonb_build_object(''ok'', true)
     end
   );
 end;
-$body$;
+';
 
 create or replace function public.booking_board(p_share text)
 returns jsonb
@@ -1425,7 +1425,7 @@ language plpgsql
 stable
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid := auth.uid();
   mem record;
@@ -1436,125 +1436,125 @@ begin
   if p_share is not null and length(btrim(p_share)) >= 4 then
     select * into mem from public._booking_member(p_share);
     if mem.member_id is null then
-      raise exception '회원 정보를 찾을 수 없습니다';
+      raise exception ''회원 정보를 찾을 수 없습니다'';
     end if;
 
-    select coalesce(jsonb_agg(x.slot order by x.start_time), '[]'::jsonb)
+    select coalesce(jsonb_agg(x.slot order by x.start_time), ''[]''::jsonb)
       into slots
     from (
       select s.start_time,
         jsonb_build_object(
-          'id', s.id,
-          'start_time', s.start_time,
-          'end_time', s.end_time,
-          'status', s.status,
-          'cancel_hours', s.cancel_hours,
-          'has_confirmed', exists (
+          ''id'', s.id,
+          ''start_time'', s.start_time,
+          ''end_time'', s.end_time,
+          ''status'', s.status,
+          ''cancel_hours'', s.cancel_hours,
+          ''has_confirmed'', exists (
             select 1 from public.reservations r
-            where r.schedule_id = s.id and r.status = 'confirmed'
+            where r.schedule_id = s.id and r.status = ''confirmed''
           ),
-          'wait_count', (
+          ''wait_count'', (
             select count(*) from public.reservations r
-            where r.schedule_id = s.id and r.status = 'waiting'
+            where r.schedule_id = s.id and r.status = ''waiting''
           ),
-          'mine', (
+          ''mine'', (
             select jsonb_build_object(
-              'id', r.id,
-              'status', r.status,
-              'waiting_order', r.waiting_order
+              ''id'', r.id,
+              ''status'', r.status,
+              ''waiting_order'', r.waiting_order
             )
             from public.reservations r
             where r.schedule_id = s.id
               and r.client_id = mem.member_id
-              and r.status in ('confirmed', 'waiting')
+              and r.status in (''confirmed'', ''waiting'')
             limit 1
           )
         ) as slot
       from public.schedules s
       where s.coach_id = mem.coach_id
-        and s.status <> 'closed'
+        and s.status <> ''closed''
         and s.end_time > now()
     ) x;
 
     select count(*) into unread
     from public.booking_notices n
-    where n.audience = 'member'
+    where n.audience = ''member''
       and n.member_share = mem.member_share
       and n.read_at is null;
 
     select coalesce(jsonb_agg(jsonb_build_object(
-      'id', n.id, 'kind', n.kind, 'title', n.title, 'body', n.body,
-      'created_at', n.created_at, 'read_at', n.read_at
-    ) order by n.created_at desc), '[]'::jsonb)
+      ''id'', n.id, ''kind'', n.kind, ''title'', n.title, ''body'', n.body,
+      ''created_at'', n.created_at, ''read_at'', n.read_at
+    ) order by n.created_at desc), ''[]''::jsonb)
       into notes
     from (
       select * from public.booking_notices
-      where audience = 'member' and member_share = mem.member_share
+      where audience = ''member'' and member_share = mem.member_share
       order by created_at desc
       limit 20
     ) n;
 
-    return jsonb_build_object('role', 'member', 'unread', unread, 'notices', notes, 'slots', slots);
+    return jsonb_build_object(''role'', ''member'', ''unread'', unread, ''notices'', notes, ''slots'', slots);
   end if;
 
   if uid is null then
-    raise exception '로그인이 필요합니다';
+    raise exception ''로그인이 필요합니다'';
   end if;
 
-  select coalesce(jsonb_agg(x.slot order by x.start_time), '[]'::jsonb)
+  select coalesce(jsonb_agg(x.slot order by x.start_time), ''[]''::jsonb)
     into slots
   from (
     select s.start_time,
       jsonb_build_object(
-        'id', s.id,
-        'start_time', s.start_time,
-        'end_time', s.end_time,
-        'status', s.status,
-        'cancel_hours', s.cancel_hours,
-        'reservations', coalesce((
+        ''id'', s.id,
+        ''start_time'', s.start_time,
+        ''end_time'', s.end_time,
+        ''status'', s.status,
+        ''cancel_hours'', s.cancel_hours,
+        ''reservations'', coalesce((
           select jsonb_agg(jsonb_build_object(
-            'id', r.id,
-            'client_id', r.client_id,
-            'name', r.member_name,
-            'status', r.status,
-            'waiting_order', r.waiting_order
-          ) order by case r.status when 'confirmed' then 0 when 'waiting' then 1 else 2 end, r.waiting_order, r.created_at)
+            ''id'', r.id,
+            ''client_id'', r.client_id,
+            ''name'', r.member_name,
+            ''status'', r.status,
+            ''waiting_order'', r.waiting_order
+          ) order by case r.status when ''confirmed'' then 0 when ''waiting'' then 1 else 2 end, r.waiting_order, r.created_at)
           from public.reservations r
-          where r.schedule_id = s.id and r.status <> 'cancelled'
-        ), '[]'::jsonb)
+          where r.schedule_id = s.id and r.status <> ''cancelled''
+        ), ''[]''::jsonb)
       ) as slot
     from public.schedules s
     where s.coach_id = uid
-      and s.status <> 'closed'
+      and s.status <> ''closed''
       and s.end_time > now()
   ) x;
 
   select count(*) into unread
   from public.booking_notices n
-  where n.audience = 'coach' and n.coach_id = uid and n.read_at is null;
+  where n.audience = ''coach'' and n.coach_id = uid and n.read_at is null;
 
   select coalesce(jsonb_agg(jsonb_build_object(
-    'id', n.id, 'kind', n.kind, 'title', n.title, 'body', n.body,
-    'created_at', n.created_at, 'read_at', n.read_at
-  ) order by n.created_at desc), '[]'::jsonb)
+    ''id'', n.id, ''kind'', n.kind, ''title'', n.title, ''body'', n.body,
+    ''created_at'', n.created_at, ''read_at'', n.read_at
+  ) order by n.created_at desc), ''[]''::jsonb)
     into notes
   from (
     select * from public.booking_notices
-    where audience = 'coach' and coach_id = uid
+    where audience = ''coach'' and coach_id = uid
     order by created_at desc
     limit 20
   ) n;
 
-  return jsonb_build_object('role', 'coach', 'unread', unread, 'notices', notes, 'slots', slots);
+  return jsonb_build_object(''role'', ''coach'', ''unread'', unread, ''notices'', notes, ''slots'', slots);
 end;
-$body$;
+';
 
 create or replace function public.read_booking_notices(p_share text)
 returns void
 language plpgsql
 security definer
 set search_path = public
-as $body$
+as '
 declare
   uid uuid := auth.uid();
   mem record;
@@ -1562,23 +1562,23 @@ begin
   if p_share is not null and length(btrim(p_share)) >= 4 then
     select * into mem from public._booking_member(p_share);
     if mem.member_id is null then
-      raise exception '회원 정보를 찾을 수 없습니다';
+      raise exception ''회원 정보를 찾을 수 없습니다'';
     end if;
     update public.booking_notices
     set read_at = now()
-    where audience = 'member'
+    where audience = ''member''
       and member_share = mem.member_share
       and read_at is null;
     return;
   end if;
   if uid is null then
-    raise exception '로그인이 필요합니다';
+    raise exception ''로그인이 필요합니다'';
   end if;
   update public.booking_notices
   set read_at = now()
-  where audience = 'coach' and coach_id = uid and read_at is null;
+  where audience = ''coach'' and coach_id = uid and read_at is null;
 end;
-$body$;
+';
 
 revoke all on function public._booking_member(text) from public, anon, authenticated;
 revoke all on function public._booking_notice(text, uuid, text, text, uuid, uuid, text, text, text) from public, anon, authenticated;
@@ -1610,17 +1610,17 @@ grant all on public.schedules to service_role;
 grant all on public.reservations to service_role;
 grant all on public.booking_notices to service_role;
 
-do $body$ begin
+do ' begin
   alter publication supabase_realtime add table public.schedules;
 exception when duplicate_object then null;
-end $body$;
-do $body$ begin
+end ';
+do ' begin
   alter publication supabase_realtime add table public.reservations;
 exception when duplicate_object then null;
-end $body$;
-do $body$ begin
+end ';
+do ' begin
   alter publication supabase_realtime add table public.booking_notices;
 exception when duplicate_object then null;
-end $body$;
+end ';
 
 notify pgrst, 'reload schema';
