@@ -1037,6 +1037,60 @@ $mig$;
 
 revoke all on function public.delete_schedule(uuid) from public, anon;
 grant execute on function public.delete_schedule(uuid) to authenticated;
+
+create or replace function public.delete_schedules_between(p_from date, p_to date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $mig$
+declare
+  uid uuid := auth.uid();
+  slot public.schedules%rowtype;
+  rec record;
+  label text;
+  deleted_n int := 0;
+  booked_n int := 0;
+begin
+  if uid is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+  if p_from is null or p_to is null or p_to < p_from then
+    raise exception '기간을 확인해 주세요';
+  end if;
+  if p_to - p_from > 92 then
+    raise exception '한 번에 최대 3개월까지 초기화할 수 있습니다';
+  end if;
+  for slot in
+    select * from public.schedules
+    where coach_id = uid
+      and (start_time at time zone 'Asia/Seoul')::date between p_from and p_to
+      and end_time > now()
+    for update
+  loop
+    label := public._slot_label(slot.start_time);
+    for rec in
+      select * from public.reservations
+      where schedule_id = slot.id and status in ('confirmed', 'waiting')
+      for update
+    loop
+      booked_n := booked_n + 1;
+      perform public._booking_notice(
+        'member', slot.coach_id, rec.client_id, rec.member_share, slot.id, rec.id,
+        'cancelled', '수업 오픈이 취소되었습니다',
+        label || ' 수업이 오픈 전 상태로 되돌려져 예약이 취소되었습니다.'
+      );
+    end loop;
+    update public.booking_notices set schedule_id = null where schedule_id = slot.id;
+    delete from public.schedules where id = slot.id;
+    deleted_n := deleted_n + 1;
+  end loop;
+  return jsonb_build_object('deleted', deleted_n, 'cancelled_bookings', booked_n);
+end;
+$mig$;
+
+revoke all on function public.delete_schedules_between(date, date) from public, anon;
+grant execute on function public.delete_schedules_between(date, date) to authenticated;
 grant execute on function public.book_slot(text, uuid) to anon, authenticated;
 grant execute on function public.cancel_reservation(text, uuid) to anon, authenticated;
 grant execute on function public.booking_board(text) to anon, authenticated;
