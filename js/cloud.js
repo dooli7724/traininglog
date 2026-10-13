@@ -766,5 +766,51 @@
 
   Cloud.migrateLocalFiles = async function () {};
 
+  Cloud.bookingBoard = async function (share) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.rpc("booking_board", { p_share: share || null });
+    if (error) throw error;
+    return data || { slots: [], notices: [], unread: 0 };
+  };
+
+  Cloud.openSchedule = async function (startIso, endIso) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("open_schedule", { p_start: startIso, p_end: endIso });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.closeSchedule = async function (scheduleId) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("close_schedule", { p_schedule_id: scheduleId });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.bookSlot = async function (share, scheduleId) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.rpc("book_slot", { p_share: share, p_schedule_id: scheduleId });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.cancelReservation = async function (share, reservationId) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.rpc("cancel_reservation", {
+      p_share: share || null,
+      p_reservation_id: reservationId
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.readBookingNotices = async function (share) {
+    if (!Cloud.sb) return;
+    const { error } = await Cloud.sb.rpc("read_booking_notices", { p_share: share || null });
+    if (error) throw error;
+  };
+
   global.Cloud = Cloud;
 })(window);

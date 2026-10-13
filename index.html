@@ -261,7 +261,7 @@
     .file { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; }
     .file input { position: absolute; inset: 0; opacity: 0; }
     .tabbar {
-      position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: 1fr 1fr 1fr;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
       height: calc(var(--nav) + env(safe-area-inset-bottom, 0px));
       padding-bottom: env(safe-area-inset-bottom, 0px);
       background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
@@ -270,7 +270,7 @@
     .client-nav {
       display: none;
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
       height: calc(var(--nav) + env(safe-area-inset-bottom, 0px));
       padding-bottom: env(safe-area-inset-bottom, 0px);
       background: var(--card); border-top: 1px solid var(--line);
@@ -285,6 +285,18 @@
     }
     .client-nav button.on { color: var(--accent); }
     .client-nav .ico { font-size: 1.1rem; line-height: 1; }
+    .tabbar button, .client-nav button { position: relative; }
+    .nav-badge {
+      position: absolute; top: 4px; left: 50%; transform: translateX(10px);
+      min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px;
+      background: var(--danger); color: #fff; font-size: .62rem; font-weight: 800; line-height: 16px;
+    }
+    .book-person { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .9rem; }
+    .book-person b { color: var(--accent); min-width: 64px; flex-shrink: 0; }
+    .book-person .btn { margin-left: auto; min-height: 36px; padding: 0 12px; }
+    .book-notes p { margin: 0 0 8px; }
+    .book-notes .hint { display: block; margin: 2px 0 0; }
+    .book-slot .btn { margin-top: 8px; }
     .day-combo { margin-bottom: 12px; }
     .day-combo .section-label {
       margin: 0 0 8px; font-size: .72rem; font-weight: 800; color: var(--accent);
@@ -760,6 +772,10 @@
       </div>
       <p id="shareSub">프로필 · 체성분 · 수업 일지</p>
     </div>
+    <div id="barBook" class="hidden">
+      <h1>수업 예약</h1>
+      <p>시간을 열면 회원이 확정 또는 대기로 신청합니다</p>
+    </div>
   </header>
 
   <main>
@@ -987,18 +1003,42 @@
     </section>
 
     <section id="pageShare" class="page hidden"><div id="shareBody"></div></section>
+
+    <section id="pageBook" class="page hidden">
+      <div class="card">
+        <label class="cap" style="margin-top:0">날짜</label>
+        <input class="field" id="bookDate" type="date" />
+        <div class="grid2">
+          <div>
+            <label class="cap">시작</label>
+            <input class="field" id="bookStart" type="time" value="10:00" />
+          </div>
+          <div>
+            <label class="cap">종료</label>
+            <input class="field" id="bookEnd" type="time" value="11:00" />
+          </div>
+        </div>
+        <button class="btn wide" id="bookOpen" type="button">이 시간 오픈</button>
+        <p class="hint" style="margin:8px 0 0">빈 시간은 바로 확정됩니다. 이미 확정된 시간이면 대기 1, 2, 3순으로 붙고, 확정 회원이 시작 6시간 전에 취소하면 대기 1순위가 자동으로 확정됩니다.</p>
+      </div>
+      <div id="bookNotices"></div>
+      <div class="label">열린 시간</div>
+      <div id="bookSlots"></div>
+    </section>
   </main>
 
   <nav class="client-nav" id="clientNav" aria-label="회원 기록 메뉴">
     <button type="button" data-client-tab="today" class="on"><span class="ico">◎</span>오늘 기록</button>
     <button type="button" data-client-tab="history"><span class="ico">▣</span>이전 기록</button>
     <button type="button" data-client-tab="write"><span class="ico">✎</span>기록 작성</button>
+    <button type="button" data-client-tab="book"><span class="ico">◷</span>예약<span class="nav-badge hidden" id="clientBookBadge"></span></button>
   </nav>
 
   <nav class="tabbar">
     <button type="button" data-tab="home" class="on"><span class="ico">⌂</span>홈</button>
     <button type="button" data-tab="log"><span class="ico">✎</span>운동 일지</button>
     <button type="button" data-tab="members"><span class="ico">☰</span>회원 관리</button>
+    <button type="button" data-tab="book"><span class="ico">◷</span>예약<span class="nav-badge hidden" id="bookBadge"></span></button>
   </nav>
 
   <div id="modalBg" class="modal-bg hidden">
@@ -1772,6 +1812,7 @@
       show("pageMembers", next === "members"); show("barMembers", next === "members");
       show("pageDetail", next === "detail"); show("barDetail", next === "detail");
       show("pageShare", next === "share"); show("barShare", next === "share");
+      show("pageBook", next === "book"); show("barBook", next === "book");
       document.querySelectorAll(".tabbar button").forEach((b) => {
         b.classList.toggle("on", b.dataset.tab === (next === "detail" ? "members" : next));
       });
@@ -1780,6 +1821,7 @@
       if (next === "log") renderLog();
       if (next === "members") renderMembers();
       if (next === "detail") renderDetail();
+      if (next === "book") renderBook();
     }
     let homeWeekAnchor = null;
     let homeWeekDay = null;
@@ -1838,7 +1880,135 @@
         <div class="home-week-list">${items}</div>
         <button class="btn soft wide" type="button" id="homeOpenCal" style="margin-top:10px">전체 캘린더 열기</button>`;
     }
+    function bookingErr(err) {
+      let msg = (err && (err.message || err.details || err.error_description)) || "예약 처리에 실패했습니다.";
+      msg = String(msg).replace(/^[\w.]+:\s*/, "");
+      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule/i.test(msg)) {
+        return "예약 기능이 아직 데이터베이스에 없습니다. Supabase SQL Editor에서 schema.sql을 실행해 주세요.";
+      }
+      return msg;
+    }
+    function fmtSlotRange(start, end) {
+      const s = new Date(start);
+      const e = new Date(end);
+      if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return "";
+      const date = s.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
+      const hm = (d) => d.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+      return date + " " + hm(s) + " – " + hm(e);
+    }
+    function canMemberCancel(slot) {
+      const start = new Date(slot.start_time).getTime();
+      const hours = Number(slot.cancel_hours);
+      const h = Number.isFinite(hours) ? hours : 6;
+      return start - h * 3600000 > Date.now();
+    }
+    function paintBookBadge(id, unread) {
+      const badge = $(id);
+      if (!badge) return;
+      const n = Number(unread) || 0;
+      badge.textContent = n > 9 ? "9+" : String(n);
+      badge.classList.toggle("hidden", n < 1);
+    }
+    async function refreshBookBadge() {
+      if (!(window.Cloud && Cloud.sb && Cloud.user && Cloud.bookingBoard)) return;
+      try {
+        const board = await Cloud.bookingBoard(null);
+        paintBookBadge("bookBadge", board && board.unread);
+      } catch (_) {}
+    }
+    function coachSlotHtml(slot) {
+      const people = (slot.reservations || []).filter((r) => r.status !== "cancelled");
+      const confirmed = people.find((r) => r.status === "confirmed");
+      const waiting = people.filter((r) => r.status === "waiting").sort((a, b) => a.waiting_order - b.waiting_order);
+      const rows = [];
+      if (confirmed) {
+        rows.push(`<div class="book-person"><b>확정</b><span>${esc(confirmed.name || "회원")}</span><button class="btn danger" type="button" data-book-cancel="${esc(confirmed.id)}">취소</button></div>`);
+      }
+      waiting.forEach((w) => {
+        rows.push(`<div class="book-person"><b>대기 ${w.waiting_order}</b><span>${esc(w.name || "회원")}</span><button class="btn danger" type="button" data-book-cancel="${esc(w.id)}">취소</button></div>`);
+      });
+      if (!rows.length) rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
+      const st = slot.status === "booked" ? "예약됨" : "비어 있음";
+      return `<div class="card book-slot">
+        <div class="row"><b style="flex:1">${esc(fmtSlotRange(slot.start_time, slot.end_time))}</b><span class="tag">${st}</span></div>
+        ${rows.join("")}
+        <button class="btn soft wide" type="button" data-book-close="${esc(slot.id)}">이 시간 마감</button>
+      </div>`;
+    }
+    function paintBook(board) {
+      paintBookBadge("bookBadge", board && board.unread);
+      const notes = ((board && board.notices) || []).filter((x) => !x.read_at).slice(0, 5);
+      const noteBox = $("bookNotices");
+      if (noteBox) {
+        noteBox.innerHTML = notes.length
+          ? `<div class="card book-notes">${notes.map((x) => `<p><b>${esc(x.title)}</b><span class="hint">${esc(x.body)}</span></p>`).join("")}<button class="btn soft wide" type="button" id="bookRead">알림 확인</button></div>`
+          : "";
+      }
+      const slots = (board && board.slots) || [];
+      const box = $("bookSlots");
+      if (!box) return;
+      box.innerHTML = slots.length
+        ? slots.map(coachSlotHtml).join("")
+        : '<div class="empty">열린 시간이 없습니다. 위에서 날짜와 시간을 열어 주세요.</div>';
+    }
+    async function renderBook() {
+      const box = $("bookSlots");
+      if (!box) return;
+      const dateInput = $("bookDate");
+      if (dateInput && !dateInput.value) dateInput.value = today();
+      if (!(window.Cloud && Cloud.bookingBoard)) {
+        box.innerHTML = '<div class="empty">클라우드에 연결되어야 예약을 열 수 있습니다.</div>';
+        return;
+      }
+      box.innerHTML = '<p class="hint">불러오는 중…</p>';
+      try {
+        paintBook(await Cloud.bookingBoard(null));
+      } catch (err) {
+        box.innerHTML = `<div class="empty">${esc(bookingErr(err))}</div>`;
+      }
+    }
+    async function memberBookingHtml(share) {
+      if (!share) return '<div class="empty">회원 링크가 없습니다.</div>';
+      if (!(window.Cloud && Cloud.bookingBoard)) return '<div class="empty">클라우드에 연결되어야 예약할 수 있습니다.</div>';
+      let board;
+      try { board = await Cloud.bookingBoard(share); }
+      catch (err) { return `<div class="empty">${esc(bookingErr(err))}</div>`; }
+      paintBookBadge("clientBookBadge", board && board.unread);
+      const notes = ((board && board.notices) || []).filter((x) => !x.read_at).slice(0, 5);
+      const noteHtml = notes.length
+        ? `<div class="card book-notes">${notes.map((x) => `<p><b>${esc(x.title)}</b><span class="hint">${esc(x.body)}</span></p>`).join("")}<button class="btn soft wide" type="button" data-member-book-read="1">알림 확인</button></div>`
+        : "";
+      const slots = (board && board.slots) || [];
+      if (!slots.length) return noteHtml + '<div class="empty">지금 신청할 수 있는 시간이 없습니다.</div>';
+      const cards = slots.map((slot) => {
+        const mine = slot.mine;
+        let action = "";
+        if (mine && mine.status === "confirmed") {
+          action = canMemberCancel(slot)
+            ? `<button class="btn danger wide" type="button" data-slot-cancel="${esc(mine.id)}">예약 취소</button>`
+            : `<p class="hint" style="margin-bottom:0">확정된 예약입니다. 시작 ${Number(slot.cancel_hours) || 6}시간 전이 지나 취소할 수 없습니다.</p>`;
+        } else if (mine && mine.status === "waiting") {
+          action = `<p class="hint">대기 ${mine.waiting_order}순위입니다. 앞 순번이 취소되면 자동으로 확정됩니다.</p><button class="btn danger wide" type="button" data-slot-cancel="${esc(mine.id)}">대기 취소</button>`;
+        } else if (slot.has_confirmed) {
+          const next = Number(slot.wait_count || 0) + 1;
+          action = `<button class="btn wide" type="button" data-slot-book="${esc(slot.id)}">대기 신청 · ${next}순위</button>`;
+        } else {
+          action = `<button class="btn wide" type="button" data-slot-book="${esc(slot.id)}">예약하기</button>`;
+        }
+        const stateLabel = mine && mine.status === "confirmed"
+          ? "내 예약 확정"
+          : mine && mine.status === "waiting"
+            ? "내 대기 " + mine.waiting_order
+            : (slot.has_confirmed ? "마감 · 대기 가능" : "예약 가능");
+        return `<div class="card book-slot">
+          <div class="row"><b style="flex:1">${esc(fmtSlotRange(slot.start_time, slot.end_time))}</b><span class="tag">${esc(stateLabel)}</span></div>
+          ${action}
+        </div>`;
+      }).join("");
+      return noteHtml + cards;
+    }
     function renderHome() {
+      refreshBookBadge();
       const d = today();
       if (!homeWeekAnchor) homeWeekAnchor = d;
       if (!homeWeekDay) homeWeekDay = d;
@@ -2846,7 +3016,10 @@
       }
 
       $("shareSub").textContent = shareCtx.view === "history" ? "이전 기록 보기"
-        : shareCtx.view === "write" ? "기록 작성하기" : "오늘 종합 기록";
+        : shareCtx.view === "write" ? "기록 작성하기"
+        : shareCtx.view === "book" ? "수업 예약 · 대기"
+        : "오늘 종합 기록";
+      const bookingHtml = await memberBookingHtml(shareCtx.code);
       const goal = profile.goal ? `<div class="share-goal"><span>목표</span><b>${esc(profile.goal)}</b></div>` : "";
       const chart = body.length
         ? `<div class="legend">
@@ -2934,6 +3107,12 @@
           <div class="label" id="shareWritePreviewLabel">${shareCtx.writeDate === today() ? "오늘 작성분" : prettyDate(shareCtx.writeDate) + " 작성분"}</div>
           <div id="shareWritePreview">${await dailyComboHtml(shareCtx.writeDate, portal, pack, true)}</div>
           ${syncHint}
+        </div>
+
+        <div class="share-panel${shareCtx.view === "book" ? " on" : ""}" data-panel="book">
+          <div class="label">수업 예약</div>
+          <p class="hint">빈 시간은 바로 확정되고, 이미 예약된 시간은 대기 순번으로 신청됩니다. 확정 예약은 수업 시작 6시간 전까지만 취소할 수 있고, 취소되면 대기 1순위가 자동으로 확정됩니다.</p>
+          ${bookingHtml}
         </div>`;
       bindDietPreview("shareDietFile", "shareDietPreview");
     }
@@ -4006,6 +4185,52 @@
     $("beforeFile").addEventListener("change", (e) => { addPhoto("before", e.target.files[0]); e.target.value = ""; });
     $("afterFile").addEventListener("change", (e) => { addPhoto("after", e.target.files[0]); e.target.value = ""; });
     $("shareMember").onclick = () => copyClientLink(currentMember());
+    $("pageBook").addEventListener("click", async (e) => {
+      const openBtn = e.target.closest("#bookOpen");
+      const closeBtn = e.target.closest("[data-book-close]");
+      const cancelBtn = e.target.closest("[data-book-cancel]");
+      const readBtn = e.target.closest("#bookRead");
+      const btn = openBtn || closeBtn || cancelBtn || readBtn;
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        if (openBtn) {
+          const date = $("bookDate").value;
+          const start = $("bookStart").value;
+          const end = $("bookEnd").value;
+          if (!date || !start || !end) { alert("날짜와 시간을 입력해 주세요."); return; }
+          const startAt = new Date(date + "T" + start);
+          const endAt = new Date(date + "T" + end);
+          if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
+            alert("종료 시간은 시작 시간보다 뒤여야 합니다.");
+            return;
+          }
+          await Cloud.openSchedule(startAt.toISOString(), endAt.toISOString());
+          alert("시간을 열었습니다. 회원이 공유 링크의 예약 탭에서 신청할 수 있습니다.");
+          await renderBook();
+          return;
+        }
+        if (closeBtn) {
+          if (!confirm("이 시간을 마감하면 확정·대기 예약이 모두 취소됩니다.")) return;
+          await Cloud.closeSchedule(closeBtn.dataset.bookClose);
+          await renderBook();
+          return;
+        }
+        if (cancelBtn) {
+          if (!confirm("이 예약을 취소할까요? 확정 예약이면 대기 1순위가 자동으로 확정됩니다.")) return;
+          const res = await Cloud.cancelReservation(null, cancelBtn.dataset.bookCancel);
+          if (res && res.promoted && res.promoted.name) alert(res.promoted.name + " 님이 대기에서 확정으로 올라갔습니다.");
+          await renderBook();
+          return;
+        }
+        await Cloud.readBookingNotices(null);
+        await renderBook();
+      } catch (err) {
+        alert(bookingErr(err));
+      } finally {
+        btn.disabled = false;
+      }
+    });
     $("clientNav").addEventListener("click", async (e) => {
       const tabBtn = e.target.closest("[data-client-tab]");
       if (!tabBtn) return;
@@ -4049,6 +4274,34 @@
       if (e.target && e.target.id === "shareWriteDate") await refreshShareWritePreview();
     });
     $("pageShare").addEventListener("click", async (e) => {
+      const slotBook = e.target.closest("[data-slot-book]");
+      const slotCancel = e.target.closest("[data-slot-cancel]");
+      const memberRead = e.target.closest("[data-member-book-read]");
+      if (slotBook || slotCancel || memberRead) {
+        const btn = slotBook || slotCancel || memberRead;
+        btn.disabled = true;
+        try {
+          if (slotBook) {
+            const res = await Cloud.bookSlot(shareCtx.code, slotBook.dataset.slotBook);
+            alert(res && res.status === "waiting"
+              ? "대기 " + res.waiting_order + "순위로 신청했습니다. 앞 순번이 취소되면 자동으로 확정됩니다."
+              : "예약이 확정되었습니다.");
+          } else if (slotCancel) {
+            if (!confirm("이 예약을 취소할까요?")) return;
+            await Cloud.cancelReservation(shareCtx.code, slotCancel.dataset.slotCancel);
+            alert("취소했습니다.");
+          } else {
+            await Cloud.readBookingNotices(shareCtx.code);
+          }
+          if (shareCtx.data) await renderShare(shareCtx.data);
+          else await renderShareLive();
+        } catch (err) {
+          alert(bookingErr(err));
+        } finally {
+          btn.disabled = false;
+        }
+        return;
+      }
       const acc = e.target.closest("[data-share-acc]");
       if (acc) {
         const box = acc.closest(".acc");
