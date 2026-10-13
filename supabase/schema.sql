@@ -891,8 +891,8 @@ begin
 end;
 $$;
 
-create or replace function public.close_schedule(p_schedule_id uuid)
-returns jsonb
+create or replace function public._close_coach_slot(p_schedule_id uuid, p_quiet boolean default false)
+returns void
 language plpgsql
 security definer
 set search_path = public
@@ -901,6 +901,7 @@ declare
   uid uuid := auth.uid();
   slot public.schedules%rowtype;
   rec record;
+  n int := 0;
 begin
   if uid is null then
     raise exception '로그인이 필요합니다';
@@ -912,12 +913,16 @@ begin
   if slot.coach_id <> uid then
     raise exception '본인이 연 시간만 마감할 수 있습니다';
   end if;
+  if slot.status = 'closed' then
+    return;
+  end if;
   update public.schedules set status = 'closed' where id = slot.id;
   for rec in
     select * from public.reservations
     where schedule_id = slot.id and status in ('confirmed', 'waiting')
     for update
   loop
+    n := n + 1;
     update public.reservations
     set status = 'cancelled', waiting_order = 0, cancelled_at = now()
     where id = rec.id;
@@ -927,12 +932,281 @@ begin
       public._slot_label(slot.start_time) || ' 수업이 마감되어 예약이 취소되었습니다.'
     );
   end loop;
-  perform public._booking_notice(
-    'coach', slot.coach_id, null, null, slot.id, null,
-    'closed', '시간을 마감했습니다',
-    public._slot_label(slot.start_time) || ' 시간을 마감했습니다.'
+  if n > 0 or not coalesce(p_quiet, false) then
+    perform public._booking_notice(
+      'coach', slot.coach_id, null, null, slot.id, null,
+      'closed', '시간을 마감했습니다',
+      public._slot_label(slot.start_time) || ' 시간을 마감했습니다.'
+    );
+  end if;
+end;
+$$;
+
+create or replace function public.close_schedule(p_schedule_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public._close_coach_slot(p_schedule_id, false);
+  return jsonb_build_object('id', p_schedule_id, 'status', 'closed');
+end;
+$$;
+
+-- 한국 시간 기준. 수업 길이만큼 잘라 미래 슬롯만 후보로 돌려줍니다.
+create or replace function public._slot_grid(p_date date, p_start time, p_end time, p_minutes int)
+returns table(slot_start timestamptz, slot_end timestamptz, is_past boolean)
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  cursor_ts timestamp;
+  day_end timestamp;
+  s timestamptz;
+  e timestamptz;
+begin
+  if p_minutes not in (30, 50, 60, 90) then
+    raise exception '수업 길이는 30, 50, 60, 90분 중에서 고르세요';
+  end if;
+  if p_start is null or p_end is null or p_end <= p_start then
+    raise exception '종료 시간은 시작 시간보다 뒤여야 합니다';
+  end if;
+  if (p_end - p_start) < make_interval(mins => p_minutes) then
+    raise exception '시간 범위가 수업 길이보다 짧습니다';
+  end if;
+  cursor_ts := p_date + p_start;
+  day_end := p_date + p_end;
+  while cursor_ts + make_interval(mins => p_minutes) <= day_end loop
+    s := cursor_ts at time zone 'Asia/Seoul';
+    e := (cursor_ts + make_interval(mins => p_minutes)) at time zone 'Asia/Seoul';
+    slot_start := s;
+    slot_end := e;
+    is_past := s <= now();
+    return next;
+    cursor_ts := cursor_ts + make_interval(mins => p_minutes);
+  end loop;
+end;
+$$;
+
+create or replace function public.open_schedule_range(
+  p_from date,
+  p_to date,
+  p_weekdays int[],
+  p_start time,
+  p_end time,
+  p_minutes int
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  d date;
+  dow int;
+  slot record;
+  created int := 0;
+  skipped_past int := 0;
+  skipped_overlap int := 0;
+begin
+  if uid is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+  if p_from is null or p_to is null or p_to < p_from then
+    raise exception '종료일은 시작일보다 뒤여야 합니다';
+  end if;
+  if (p_to - p_from) > 92 then
+    raise exception '한 번에 최대 3개월까지 열 수 있습니다';
+  end if;
+  if p_weekdays is null or cardinality(p_weekdays) = 0 then
+    raise exception '요일을 선택해 주세요';
+  end if;
+  if exists (select 1 from unnest(p_weekdays) w where w < 0 or w > 6) then
+    raise exception '요일 값이 올바르지 않습니다';
+  end if;
+
+  d := p_from;
+  while d <= p_to loop
+    dow := extract(dow from d)::int;
+    if dow = any (p_weekdays) then
+      for slot in
+        select * from public._slot_grid(d, p_start, p_end, p_minutes)
+      loop
+        if slot.is_past then
+          skipped_past := skipped_past + 1;
+        elsif exists (
+          select 1 from public.schedules s
+          where s.coach_id = uid
+            and s.status <> 'closed'
+            and s.start_time < slot.slot_end
+            and s.end_time > slot.slot_start
+        ) then
+          skipped_overlap := skipped_overlap + 1;
+        else
+          if created >= 800 then
+            raise exception '한 번에 800개까지만 열 수 있습니다. 기간을 나눠 주세요';
+          end if;
+          insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
+          values (uid, slot.slot_start, slot.slot_end, 'available', 6);
+          created := created + 1;
+        end if;
+      end loop;
+    end if;
+    d := d + 1;
+  end loop;
+
+  if created = 0 and skipped_past = 0 and skipped_overlap = 0 then
+    raise exception '선택한 요일에 해당하는 날이 없습니다';
+  end if;
+
+  return jsonb_build_object(
+    'created', created,
+    'skipped_past', skipped_past,
+    'skipped_overlap', skipped_overlap
   );
-  return jsonb_build_object('id', slot.id, 'status', 'closed');
+end;
+$$;
+
+create or replace function public.override_schedule_day(
+  p_date date,
+  p_mode text,
+  p_start time,
+  p_end time,
+  p_minutes int,
+  p_cancel_booked boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  booked_hit int := 0;
+  closed_n int := 0;
+  created_n int := 0;
+  skipped_overlap int := 0;
+  rec record;
+  slot record;
+begin
+  if uid is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+  if p_date is null then
+    raise exception '날짜를 선택해 주세요';
+  end if;
+  if p_mode not in ('closed', 'hours') then
+    raise exception '처리할 수 없는 예외입니다';
+  end if;
+
+  perform 1
+  from public.schedules s
+  where s.coach_id = uid
+    and s.status <> 'closed'
+    and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+  for update;
+
+  if p_mode = 'closed' then
+    select count(*) into booked_hit
+    from public.reservations r
+    join public.schedules s on s.id = r.schedule_id
+    where s.coach_id = uid
+      and s.status <> 'closed'
+      and s.start_time > now()
+      and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+      and r.status in ('confirmed', 'waiting');
+    if booked_hit > 0 and not coalesce(p_cancel_booked, false) then
+      raise exception '%', format('이 날짜에 예약 %s건이 있습니다', booked_hit);
+    end if;
+    for rec in
+      select s.id
+      from public.schedules s
+      where s.coach_id = uid
+        and s.status <> 'closed'
+        and s.start_time > now()
+        and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+    loop
+      perform public._close_coach_slot(rec.id, true);
+      closed_n := closed_n + 1;
+    end loop;
+    if closed_n = 0 then
+      raise exception '그 날짜에 마감할 열린 시간이 없습니다';
+    end if;
+    return jsonb_build_object('closed', closed_n, 'created', 0, 'cancelled_bookings', booked_hit);
+  end if;
+
+  if p_minutes is null then
+    p_minutes := 60;
+  end if;
+
+  select count(*) into booked_hit
+  from public.reservations r
+  join public.schedules s on s.id = r.schedule_id
+  where s.coach_id = uid
+    and s.status <> 'closed'
+    and s.start_time > now()
+    and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+    and r.status in ('confirmed', 'waiting')
+    and not exists (
+      select 1 from public._slot_grid(p_date, p_start, p_end, p_minutes) g
+      where g.is_past = false
+        and g.slot_start = s.start_time
+        and g.slot_end = s.end_time
+    );
+  if booked_hit > 0 and not coalesce(p_cancel_booked, false) then
+    raise exception '%', format('이 날짜에 예약 %s건이 있습니다', booked_hit);
+  end if;
+
+  for rec in
+    select s.id
+    from public.schedules s
+    where s.coach_id = uid
+      and s.status <> 'closed'
+      and s.start_time > now()
+      and (s.start_time at time zone 'Asia/Seoul')::date = p_date
+      and not exists (
+        select 1 from public._slot_grid(p_date, p_start, p_end, p_minutes) g
+        where g.is_past = false
+          and g.slot_start = s.start_time
+          and g.slot_end = s.end_time
+      )
+  loop
+    perform public._close_coach_slot(rec.id, true);
+    closed_n := closed_n + 1;
+  end loop;
+
+  for slot in
+    select * from public._slot_grid(p_date, p_start, p_end, p_minutes)
+    where is_past = false
+  loop
+    if exists (
+      select 1 from public.schedules s
+      where s.coach_id = uid
+        and s.status <> 'closed'
+        and s.start_time < slot.slot_end
+        and s.end_time > slot.slot_start
+    ) then
+      skipped_overlap := skipped_overlap + 1;
+    else
+      insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
+      values (uid, slot.slot_start, slot.slot_end, 'available', 6);
+      created_n := created_n + 1;
+    end if;
+  end loop;
+
+  if closed_n = 0 and created_n = 0 and skipped_overlap = 0 then
+    raise exception '바꿀 시간이 없습니다. 지난 시간이거나 범위가 너무 짧습니다';
+  end if;
+
+  return jsonb_build_object(
+    'closed', closed_n,
+    'created', created_n,
+    'skipped_overlap', skipped_overlap,
+    'cancelled_bookings', booked_hit
+  );
 end;
 $$;
 
@@ -1309,11 +1583,17 @@ revoke all on function public._booking_member(text) from public, anon, authentic
 revoke all on function public._booking_notice(text, uuid, text, text, uuid, uuid, text, text, text) from public, anon, authenticated;
 revoke all on function public._renumber_waitlist(uuid) from public, anon, authenticated;
 revoke all on function public._slot_label(timestamptz) from public, anon, authenticated;
+revoke all on function public._close_coach_slot(uuid, boolean) from public, anon, authenticated;
+revoke all on function public._slot_grid(date, time, time, int) from public, anon, authenticated;
 
 revoke all on function public.open_schedule(timestamptz, timestamptz) from public, anon;
 revoke all on function public.close_schedule(uuid) from public, anon;
+revoke all on function public.open_schedule_range(date, date, int[], time, time, int) from public, anon;
+revoke all on function public.override_schedule_day(date, text, time, time, int, boolean) from public, anon;
 grant execute on function public.open_schedule(timestamptz, timestamptz) to authenticated;
 grant execute on function public.close_schedule(uuid) to authenticated;
+grant execute on function public.open_schedule_range(date, date, int[], time, time, int) to authenticated;
+grant execute on function public.override_schedule_day(date, text, time, time, int, boolean) to authenticated;
 grant execute on function public.book_slot(text, uuid) to anon, authenticated;
 grant execute on function public.cancel_reservation(text, uuid) to anon, authenticated;
 grant execute on function public.booking_board(text) to anon, authenticated;

@@ -781,6 +781,36 @@
     return data;
   };
 
+  Cloud.openScheduleRange = async function (range) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("open_schedule_range", {
+      p_from: range.from,
+      p_to: range.to,
+      p_weekdays: range.weekdays,
+      p_start: range.start,
+      p_end: range.end,
+      p_minutes: range.minutes
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.overrideScheduleDay = async function (override) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("override_schedule_day", {
+      p_date: override.date,
+      p_mode: override.mode,
+      p_start: override.start || null,
+      p_end: override.end || null,
+      p_minutes: override.minutes || 60,
+      p_cancel_booked: !!override.cancelBooked
+    });
+    if (error) throw error;
+    return data;
+  };
+
   Cloud.closeSchedule = async function (scheduleId) {
     if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
     await Cloud.ensureSession();
