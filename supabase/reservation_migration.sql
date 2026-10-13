@@ -928,6 +928,73 @@ grant execute on function public.open_schedule(timestamptz, timestamptz) to auth
 grant execute on function public.close_schedule(uuid) to authenticated;
 grant execute on function public.open_schedule_range(date, date, int[], time, time, int) to authenticated;
 grant execute on function public.override_schedule_day(date, text, time, time, int, boolean) to authenticated;
+
+create or replace function public.move_schedule(p_schedule_id uuid, p_start timestamptz, p_end timestamptz)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $mig$
+declare
+  uid uuid := auth.uid();
+  slot public.schedules%rowtype;
+  rec record;
+  old_label text;
+  new_label text;
+begin
+  if uid is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+  if p_start is null or p_end is null or p_end <= p_start then
+    raise exception '종료 시간은 시작 시간보다 뒤여야 합니다';
+  end if;
+  if p_end - p_start < interval '15 minutes' then
+    raise exception '수업은 15분 이상이어야 합니다';
+  end if;
+  if p_start <= now() then
+    raise exception '이미 지난 시간으로는 옮길 수 없습니다';
+  end if;
+  select * into slot from public.schedules where id = p_schedule_id for update;
+  if not found then
+    raise exception '시간을 찾을 수 없습니다';
+  end if;
+  if slot.coach_id <> uid then
+    raise exception '본인이 연 시간만 수정할 수 있습니다';
+  end if;
+  if slot.status = 'closed' then
+    raise exception '마감된 시간은 수정할 수 없습니다';
+  end if;
+  if exists (
+    select 1 from public.schedules s
+    where s.coach_id = uid
+      and s.id <> slot.id
+      and s.status <> 'closed'
+      and s.start_time < p_end
+      and s.end_time > p_start
+  ) then
+    raise exception '이미 겹치는 오픈 시간이 있습니다';
+  end if;
+  old_label := public._slot_label(slot.start_time);
+  update public.schedules
+  set start_time = p_start, end_time = p_end
+  where id = slot.id;
+  new_label := public._slot_label(p_start);
+  for rec in
+    select * from public.reservations
+    where schedule_id = slot.id and status in ('confirmed', 'waiting')
+  loop
+    perform public._booking_notice(
+      'member', slot.coach_id, rec.client_id, rec.member_share, slot.id, rec.id,
+      'closed', '수업 시간이 변경되었습니다',
+      old_label || ' 수업이 ' || new_label || ' 으로 옮겨졌습니다. 예약은 그대로입니다.'
+    );
+  end loop;
+  return jsonb_build_object('id', slot.id, 'start_time', p_start, 'end_time', p_end);
+end;
+$mig$;
+
+revoke all on function public.move_schedule(uuid, timestamptz, timestamptz) from public, anon;
+grant execute on function public.move_schedule(uuid, timestamptz, timestamptz) to authenticated;
 grant execute on function public.book_slot(text, uuid) to anon, authenticated;
 grant execute on function public.cancel_reservation(text, uuid) to anon, authenticated;
 grant execute on function public.booking_board(text) to anon, authenticated;

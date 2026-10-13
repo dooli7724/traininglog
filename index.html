@@ -325,6 +325,14 @@
       font-size: .72rem; font-weight: 800; color: var(--muted);
     }
     .book-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .book-slot-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .book-slot-actions .btn { margin-top: 0; }
+    .book-edit { margin-top: 8px; }
+    #bookDaySlots { margin-top: 12px; }
+    #bookDayBg { z-index: 46; align-items: flex-end; }
+    @media (min-width: 720px) {
+      #bookDayBg { align-items: center; }
+    }
     #bookDays { flex-wrap: wrap; }
     #bookDays button { flex: 1 1 36px; min-width: 36px; padding: 0 4px; }
     .day-combo { margin-bottom: 12px; }
@@ -1036,91 +1044,74 @@
 
     <section id="pageBook" class="page hidden">
       <div id="bookNotices"></div>
-      <div class="label">예약 캘린더</div>
       <div id="bookSlots"></div>
-      <div class="seg" id="bookMode" style="grid-template-columns:1fr 1fr">
-        <button type="button" data-book-mode="one" class="on">하루 오픈</button>
-        <button type="button" data-book-mode="repeat">반복 오픈</button>
-      </div>
-      <div id="bookOne">
-        <div class="card">
-          <label class="cap" style="margin-top:0">날짜</label>
-          <input class="field" id="bookDate" type="date" />
-          <div class="grid2">
-            <div>
-              <label class="cap">시작</label>
-              <input class="field" id="bookStart" type="time" value="10:00" />
+      <div id="bookDayBg" class="modal-bg hidden">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bookDayTitle">
+          <div class="row">
+            <h2 id="bookDayTitle" style="flex:1;margin:0">날짜</h2>
+            <button class="btn soft hdr-btn" id="bookDayDismiss" type="button">닫기</button>
+          </div>
+          <div class="seg book-cal-mode" id="bookMode">
+            <button type="button" data-book-mode="one" class="on">이 날</button>
+            <button type="button" data-book-mode="repeat">반복 오픈</button>
+          </div>
+          <div id="bookOne">
+            <label class="cap">시간 오픈</label>
+            <div class="grid2">
+              <div>
+                <input class="field" id="bookStart" type="time" value="10:00" aria-label="시작" />
+              </div>
+              <div>
+                <input class="field" id="bookEnd" type="time" value="11:00" aria-label="종료" />
+              </div>
             </div>
-            <div>
-              <label class="cap">종료</label>
-              <input class="field" id="bookEnd" type="time" value="11:00" />
+            <button class="btn wide" id="bookOpen" type="button">이 시간 오픈</button>
+            <div id="bookDaySlots"></div>
+            <button class="btn danger wide" id="bookExClose" type="button" style="margin-top:8px">이 날 휴무</button>
+            <p class="hint" style="margin:8px 0 0">마감하면 그 칸의 확정·대기가 취소됩니다. 시간 수정은 예약을 유지한 채 시각만 옮깁니다.</p>
+          </div>
+          <div id="bookRepeat" class="hidden">
+            <label class="cap">기간</label>
+            <div class="grid2">
+              <input class="field" id="bookFrom" type="date" aria-label="시작일" />
+              <input class="field" id="bookTo" type="date" aria-label="종료일" />
             </div>
+            <div class="grid2" style="margin-top:8px">
+              <button class="btn soft" id="bookThisMonth" type="button">이번 달</button>
+              <button class="btn soft" id="bookNextMonth" type="button">다음 달</button>
+            </div>
+            <label class="cap">요일</label>
+            <div class="meal-pills" id="bookDays">
+              <button type="button" data-dow="1" class="on">월</button>
+              <button type="button" data-dow="2" class="on">화</button>
+              <button type="button" data-dow="3" class="on">수</button>
+              <button type="button" data-dow="4" class="on">목</button>
+              <button type="button" data-dow="5" class="on">금</button>
+              <button type="button" data-dow="6">토</button>
+              <button type="button" data-dow="0">일</button>
+            </div>
+            <div class="meal-pills">
+              <button type="button" data-dow-preset="weekdays">평일</button>
+              <button type="button" data-dow-preset="weekend">주말</button>
+              <button type="button" data-dow-preset="mwf">월수금</button>
+            </div>
+            <label class="cap">하루 운영 시간</label>
+            <div class="grid2">
+              <input class="field" id="bookWinStart" type="time" value="09:00" aria-label="운영 시작" />
+              <input class="field" id="bookWinEnd" type="time" value="21:00" aria-label="운영 종료" />
+            </div>
+            <label class="cap">수업 길이</label>
+            <select class="field" id="bookMins">
+              <option value="30">30분</option>
+              <option value="50">50분</option>
+              <option value="60" selected>60분</option>
+              <option value="90">90분</option>
+            </select>
+            <p class="hint" id="bookRepeatPreview" style="margin-top:8px"></p>
+            <button class="btn wide" id="bookRepeatGo" type="button">이 기간 일괄 오픈</button>
+            <p class="hint" style="margin:8px 0 0">이미 열린 시간과 겹치면 그 칸만 건너뜁니다.</p>
           </div>
-          <button class="btn wide" id="bookOpen" type="button">이 시간 오픈</button>
-          <p class="hint" style="margin:8px 0 0">하루치 한 칸입니다. 빈 시간은 바로 확정되고, 이미 있으면 대기가 붙습니다.</p>
         </div>
-      </div>
-      <div id="bookRepeat" class="hidden">
-        <div class="card">
-          <label class="cap" style="margin-top:0">기간</label>
-          <div class="grid2">
-            <input class="field" id="bookFrom" type="date" />
-            <input class="field" id="bookTo" type="date" />
-          </div>
-          <div class="grid2" style="margin-top:8px">
-            <button class="btn soft" id="bookThisMonth" type="button">이번 달</button>
-            <button class="btn soft" id="bookNextMonth" type="button">다음 달</button>
-          </div>
-          <label class="cap">요일</label>
-          <div class="meal-pills" id="bookDays">
-            <button type="button" data-dow="1" class="on">월</button>
-            <button type="button" data-dow="2" class="on">화</button>
-            <button type="button" data-dow="3" class="on">수</button>
-            <button type="button" data-dow="4" class="on">목</button>
-            <button type="button" data-dow="5" class="on">금</button>
-            <button type="button" data-dow="6">토</button>
-            <button type="button" data-dow="0">일</button>
-          </div>
-          <div class="meal-pills">
-            <button type="button" data-dow-preset="weekdays">평일</button>
-            <button type="button" data-dow-preset="weekend">주말</button>
-            <button type="button" data-dow-preset="mwf">월수금</button>
-          </div>
-          <label class="cap">하루 운영 시간</label>
-          <div class="grid2">
-            <input class="field" id="bookWinStart" type="time" value="09:00" />
-            <input class="field" id="bookWinEnd" type="time" value="21:00" />
-          </div>
-          <label class="cap">수업 길이</label>
-          <select class="field" id="bookMins">
-            <option value="30">30분</option>
-            <option value="50">50분</option>
-            <option value="60" selected>60분</option>
-            <option value="90">90분</option>
-          </select>
-          <p class="hint" id="bookRepeatPreview" style="margin-top:8px"></p>
-          <button class="btn wide" id="bookRepeatGo" type="button">이 기간 일괄 오픈</button>
-          <p class="hint" style="margin:8px 0 0">한국 시간 기준입니다. 이미 열린 시간과 겹치면 그 칸만 건너뛰고, 하루 오픈과 같이 저장됩니다.</p>
-        </div>
-      </div>
-      <div class="card">
-        <label class="cap" style="margin-top:0">예외 날짜</label>
-        <input class="field" id="bookExDate" type="date" />
-        <button class="btn danger wide" id="bookExClose" type="button" style="margin-top:8px">이 날 휴무</button>
-        <label class="cap">이 날만 운영 시간</label>
-        <div class="grid2">
-          <input class="field" id="bookExStart" type="time" value="10:00" />
-          <input class="field" id="bookExEnd" type="time" value="14:00" />
-        </div>
-        <label class="cap">수업 길이</label>
-        <select class="field" id="bookExMins">
-          <option value="30">30분</option>
-          <option value="50">50분</option>
-          <option value="60" selected>60분</option>
-          <option value="90">90분</option>
-        </select>
-        <button class="btn soft wide" id="bookExApply" type="button" style="margin-top:8px">이 날만 시간 변경</button>
-        <p class="hint" style="margin:8px 0 0">휴무는 그 날 앞으로 남은 시간을 마감합니다. 시간 변경은 새 범위에 없는 빈 시간을 닫고, 부족한 칸을 새로 엽니다. 예약이 있으면 확인 후에만 취소됩니다.</p>
       </div>
     </section>
   </main>
@@ -1981,7 +1972,7 @@
     function bookingErr(err) {
       let msg = (err && (err.message || err.details || err.error_description)) || "예약 처리에 실패했습니다.";
       msg = String(msg).replace(/^[\w.]+:\s*/, "");
-      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule/i.test(msg)) {
+      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule|move_schedule/i.test(msg)) {
         return "예약 기능이 아직 데이터베이스에 없습니다. Supabase SQL Editor에서 reservation_migration.sql 만 실행해 주세요.";
       }
       return msg;
@@ -2034,11 +2025,28 @@
       });
       if (!rows.length) rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
       const st = slot.status === "booked" ? "예약됨" : "비어 있음";
+      const start = slotClockValue(slot.start_time);
+      const end = slotClockValue(slot.end_time);
       return `<div class="card book-slot">
         <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag">${st}</span></div>
         ${rows.join("")}
-        <button class="btn soft wide" type="button" data-book-close="${esc(slot.id)}">이 시간 마감</button>
+        <div class="book-slot-actions">
+          <button class="btn soft" type="button" data-book-edit="${esc(slot.id)}">시간 수정</button>
+          <button class="btn danger" type="button" data-book-close="${esc(slot.id)}">마감</button>
+        </div>
+        <div class="book-edit hidden" data-book-edit-form="${esc(slot.id)}">
+          <div class="grid2">
+            <input class="field" type="time" data-edit-start="${esc(slot.id)}" value="${esc(start)}" aria-label="시작 수정" />
+            <input class="field" type="time" data-edit-end="${esc(slot.id)}" value="${esc(end)}" aria-label="종료 수정" />
+          </div>
+          <button class="btn wide" type="button" data-book-save="${esc(slot.id)}">이 시간으로 저장</button>
+        </div>
       </div>`;
+    }
+    function slotClockValue(iso) {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "";
+      return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
     }
     function slotDayKey(iso) {
       const d = new Date(iso);
@@ -2165,6 +2173,7 @@
         </div>
         ${grid}
         ${bookLegendHtml()}
+        ${member ? "" : `<p class="hint" style="margin:8px 0 0">날짜를 누르면 그 날 시간을 열고, 마감하고, 수정할 수 있습니다.</p><button class="btn soft wide" type="button" id="bookOpenRepeat">반복으로 여러 날 열기</button>`}
       </div>`;
     }
     function bookDaySummary(list, member) {
@@ -2277,8 +2286,46 @@
     function focusBookDay(day) {
       bookCal.day = day;
       bookCal.cursor = day;
-      if ($("bookDate")) $("bookDate").value = day;
-      if ($("bookExDate")) $("bookExDate").value = day;
+    }
+    function setBookPanel(repeat) {
+      document.querySelectorAll("#bookMode button").forEach((b) => {
+        b.classList.toggle("on", (b.dataset.bookMode === "repeat") === !!repeat);
+      });
+      const one = $("bookOne");
+      const rep = $("bookRepeat");
+      if (one) one.classList.toggle("hidden", !!repeat);
+      if (rep) rep.classList.toggle("hidden", !repeat);
+      if (repeat) updateBookPreview();
+    }
+    function renderBookDayModal() {
+      const day = bookCal.day || today();
+      const hol = holidayName(day);
+      const title = $("bookDayTitle");
+      if (title) title.textContent = prettyDate(day) + " · " + weekdayName(day) + (hol ? " · " + hol : "");
+      const list = bookSlotsOn((bookBoard && bookBoard.slots) || [], day);
+      const box = $("bookDaySlots");
+      if (box) {
+        box.innerHTML = list.length
+          ? list.map(coachSlotHtml).join("")
+          : '<div class="empty" style="padding:16px 8px">이 날은 열린 시간이 없습니다.</div>';
+      }
+      const closeDay = $("bookExClose");
+      if (closeDay) closeDay.classList.toggle("hidden", !list.length);
+    }
+    function openBookDay(repeat) {
+      if (!bookCal.day) bookCal.day = today();
+      if (!bookCal.cursor) bookCal.cursor = bookCal.day;
+      setBookPanel(!!repeat);
+      renderBookDayModal();
+      const bg = $("bookDayBg");
+      if (!bg) return;
+      bg.classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+    }
+    function closeBookDay() {
+      const bg = $("bookDayBg");
+      if (bg) bg.classList.add("hidden");
+      document.body.style.overflow = "";
     }
     function applyBookCalClick(e, kind) {
       const modeBtn = e.target.closest("[data-book-cal]");
@@ -2309,6 +2356,7 @@
       if (navBtn) shiftBookCal(bookCal, Number(navBtn.dataset.bookCalNav));
       if (dayBtn) focusBookDay(dayBtn.dataset.bookCalDay);
       paintBook(bookBoard);
+      if (dayBtn) openBookDay(false);
       return true;
     }
     function paintBook(board) {
@@ -2326,19 +2374,17 @@
       const slots = bookBoard.slots || [];
       if (!bookCal.cursor) bookCal.cursor = today();
       if (!bookCal.day) bookCal.day = today();
-      box.innerHTML = bookCalendarHtml(slots, bookCal, false) + bookDayDetailHtml(slots, bookCal.day, false);
+      box.innerHTML = bookCalendarHtml(slots, bookCal, false);
+      if ($("bookDayBg") && !$("bookDayBg").classList.contains("hidden")) renderBookDayModal();
     }
     async function renderBook() {
       const box = $("bookSlots");
       if (!box) return;
-      const dateInput = $("bookDate");
-      if (dateInput && !dateInput.value) dateInput.value = today();
       if ($("bookFrom") && !$("bookFrom").value) {
         const month = monthBounds(0);
         $("bookFrom").value = month.from;
         $("bookTo").value = month.to;
       }
-      if ($("bookExDate") && !$("bookExDate").value) $("bookExDate").value = today();
       updateBookPreview();
       if (!(window.Cloud && Cloud.bookingBoard)) {
         box.innerHTML = '<div class="empty">클라우드에 연결되어야 예약을 열 수 있습니다.</div>';
@@ -4592,14 +4638,25 @@
     $("pageBook").addEventListener("input", () => updateBookPreview());
     $("pageBook").addEventListener("change", () => updateBookPreview());
     $("pageBook").addEventListener("click", async (e) => {
+      if (e.target.id === "bookDayBg" || e.target.closest("#bookDayDismiss")) {
+        closeBookDay();
+        return;
+      }
+      if (e.target.closest("#bookOpenRepeat")) {
+        if (!bookCal.day) bookCal.day = today();
+        openBookDay(true);
+        return;
+      }
       if (applyBookCalClick(e, "coach")) return;
+      const editBtn = e.target.closest("[data-book-edit]");
+      if (editBtn) {
+        const form = document.querySelector('[data-book-edit-form="' + editBtn.dataset.bookEdit + '"]');
+        if (form) form.classList.toggle("hidden");
+        return;
+      }
       const modeBtn = e.target.closest("[data-book-mode]");
       if (modeBtn) {
-        document.querySelectorAll("#bookMode button").forEach((b) => b.classList.toggle("on", b === modeBtn));
-        const repeat = modeBtn.dataset.bookMode === "repeat";
-        $("bookOne").classList.toggle("hidden", repeat);
-        $("bookRepeat").classList.toggle("hidden", !repeat);
-        updateBookPreview();
+        setBookPanel(modeBtn.dataset.bookMode === "repeat");
         return;
       }
       const dowBtn = e.target.closest("#bookDays [data-dow]");
@@ -4624,17 +4681,17 @@
       const openBtn = e.target.closest("#bookOpen");
       const repeatBtn = e.target.closest("#bookRepeatGo");
       const exClose = e.target.closest("#bookExClose");
-      const exApply = e.target.closest("#bookExApply");
       const dayClose = e.target.closest("[data-book-day-close]");
       const closeBtn = e.target.closest("[data-book-close]");
+      const saveBtn = e.target.closest("[data-book-save]");
       const cancelBtn = e.target.closest("[data-book-cancel]");
       const readBtn = e.target.closest("#bookRead");
-      const btn = openBtn || repeatBtn || exClose || exApply || dayClose || closeBtn || cancelBtn || readBtn;
+      const btn = openBtn || repeatBtn || exClose || dayClose || closeBtn || saveBtn || cancelBtn || readBtn;
       if (!btn) return;
       btn.disabled = true;
       try {
         if (openBtn) {
-          const date = $("bookDate").value;
+          const date = bookCal.day || today();
           const start = $("bookStart").value;
           const end = $("bookEnd").value;
           if (!date || !start || !end) { alert("날짜와 시간을 입력해 주세요."); return; }
@@ -4645,8 +4702,28 @@
             return;
           }
           await Cloud.openSchedule(startAt.toISOString(), endAt.toISOString());
-          alert("시간을 열었습니다. 회원이 공유 링크의 예약 탭에서 신청할 수 있습니다.");
           focusBookDay(date);
+          await renderBook();
+          return;
+        }
+        if (saveBtn) {
+          const id = saveBtn.dataset.bookSave;
+          const date = bookCal.day || today();
+          const startEl = document.querySelector('[data-edit-start="' + id + '"]');
+          const endEl = document.querySelector('[data-edit-end="' + id + '"]');
+          const start = startEl && startEl.value;
+          const end = endEl && endEl.value;
+          if (!start || !end) { alert("시작과 종료 시간을 입력해 주세요."); return; }
+          const startAt = new Date(date + "T" + start);
+          const endAt = new Date(date + "T" + end);
+          if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
+            alert("종료 시간은 시작 시간보다 뒤여야 합니다.");
+            return;
+          }
+          const slot = ((bookBoard && bookBoard.slots) || []).find((s) => s.id === id);
+          const booked = ((slot && slot.reservations) || []).filter((r) => r.status !== "cancelled").length;
+          if (booked && !confirm("이 시간에 예약 " + booked + "건이 있습니다. 시간을 옮기면 예약은 유지되고 회원에게 알립니다.")) return;
+          await Cloud.moveSchedule(id, startAt.toISOString(), endAt.toISOString());
           await renderBook();
           return;
         }
@@ -4668,32 +4745,13 @@
           return;
         }
         if (exClose || dayClose) {
-          const date = dayClose ? dayClose.dataset.bookDayClose : $("bookExDate").value;
+          const date = dayClose ? dayClose.dataset.bookDayClose : (bookCal.day || today());
           if (!date) { alert("날짜를 선택해 주세요."); return; }
           if (!confirm(prettyDate(date) + " 열린 시간을 모두 휴무로 마감할까요?")) return;
           focusBookDay(date);
           const res = await runDayOverride({ date, mode: "closed", minutes: 60 });
           if (res) {
             alert(res.closed + "개 시간을 마감했습니다.");
-            await renderBook();
-          }
-          return;
-        }
-        if (exApply) {
-          const date = $("bookExDate").value;
-          const start = $("bookExStart").value;
-          const end = $("bookExEnd").value;
-          if (!date || !start || !end || end <= start) { alert("예외 날짜와 시간을 확인해 주세요."); return; }
-          focusBookDay(date);
-          const res = await runDayOverride({
-            date, mode: "hours", start, end, minutes: Number($("bookExMins").value)
-          });
-          if (res) {
-            const parts = [];
-            if (res.created) parts.push(res.created + "개 시간을 열었습니다.");
-            if (res.closed) parts.push(res.closed + "개 시간을 닫았습니다.");
-            if (res.skipped_overlap) parts.push("겹치는 " + res.skipped_overlap + "개는 그대로 뒀습니다.");
-            alert(parts.join(" ") || "바꿀 시간이 없습니다.");
             await renderBook();
           }
           return;

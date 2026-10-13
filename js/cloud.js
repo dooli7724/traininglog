@@ -811,6 +811,18 @@
     return data;
   };
 
+  Cloud.moveSchedule = async function (scheduleId, startIso, endIso) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("move_schedule", {
+      p_schedule_id: scheduleId,
+      p_start: startIso,
+      p_end: endIso
+    });
+    if (error) throw error;
+    return data;
+  };
+
   Cloud.closeSchedule = async function (scheduleId) {
     if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
     await Cloud.ensureSession();
