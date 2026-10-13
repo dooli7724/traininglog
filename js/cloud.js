@@ -823,6 +823,14 @@
     return data;
   };
 
+  Cloud.deleteSchedule = async function (scheduleId) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("delete_schedule", { p_schedule_id: scheduleId });
+    if (error) throw error;
+    return data;
+  };
+
   Cloud.closeSchedule = async function (scheduleId) {
     if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
     await Cloud.ensureSession();

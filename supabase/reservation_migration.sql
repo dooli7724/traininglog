@@ -858,7 +858,6 @@ begin
       ) as slot
     from public.schedules s
     where s.coach_id = uid
-      and s.status <> 'closed'
       and s.end_time > now()
   ) x;
 
@@ -995,6 +994,49 @@ $mig$;
 
 revoke all on function public.move_schedule(uuid, timestamptz, timestamptz) from public, anon;
 grant execute on function public.move_schedule(uuid, timestamptz, timestamptz) to authenticated;
+
+create or replace function public.delete_schedule(p_schedule_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $mig$
+declare
+  uid uuid := auth.uid();
+  slot public.schedules%rowtype;
+  rec record;
+  label text;
+begin
+  if uid is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+  select * into slot from public.schedules where id = p_schedule_id for update;
+  if not found then
+    raise exception '시간을 찾을 수 없습니다';
+  end if;
+  if slot.coach_id <> uid then
+    raise exception '본인이 연 시간만 취소할 수 있습니다';
+  end if;
+  label := public._slot_label(slot.start_time);
+  for rec in
+    select * from public.reservations
+    where schedule_id = slot.id and status in ('confirmed', 'waiting')
+    for update
+  loop
+    perform public._booking_notice(
+      'member', slot.coach_id, rec.client_id, rec.member_share, slot.id, rec.id,
+      'cancelled', '수업 오픈이 취소되었습니다',
+      label || ' 수업이 오픈 전 상태로 되돌려져 예약이 취소되었습니다.'
+    );
+  end loop;
+  update public.booking_notices set schedule_id = null where schedule_id = slot.id;
+  delete from public.schedules where id = slot.id;
+  return jsonb_build_object('id', p_schedule_id, 'deleted', true);
+end;
+$mig$;
+
+revoke all on function public.delete_schedule(uuid) from public, anon;
+grant execute on function public.delete_schedule(uuid) to authenticated;
 grant execute on function public.book_slot(text, uuid) to anon, authenticated;
 grant execute on function public.cancel_reservation(text, uuid) to anon, authenticated;
 grant execute on function public.booking_board(text) to anon, authenticated;

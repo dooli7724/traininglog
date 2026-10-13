@@ -325,8 +325,31 @@
       font-size: .72rem; font-weight: 800; color: var(--muted);
     }
     .book-legend span { display: inline-flex; align-items: center; gap: 5px; }
-    .book-slot-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-    .book-slot-actions .btn { margin-top: 0; }
+    .book-slot-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; }
+    .book-slot-actions .btn { margin-top: 0; min-height: 40px; padding: 0 4px; font-size: .75rem; }
+    .book-slot.on { box-shadow: 0 0 0 2px var(--accent); }
+    .book-week { --hour: 46px; --gutter: 32px; }
+    .book-week-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; }
+    .book-week .tl-head button {
+      border: 0; background: transparent; padding: 8px 2px; text-align: center;
+      font-size: .68rem; font-weight: 800; color: var(--muted);
+    }
+    .book-week .tl-head button b { display: block; font-size: .9rem; color: var(--text); }
+    .book-week .tl-head button.today, .book-week .tl-head button.today b { color: var(--accent); }
+    .book-week .tl-head button.sun, .book-week .tl-head button.sun b { color: var(--danger); }
+    .book-block {
+      position: absolute; left: 2px; right: 2px; z-index: 2; overflow: hidden;
+      border: 0; border-radius: 6px; padding: 2px 3px; color: #fff; text-align: left;
+    }
+    .book-block small, .book-block b { display: block; line-height: 1.15; font-weight: 800; }
+    .book-block small { font-size: .58rem; }
+    .book-block b { font-size: .62rem; }
+    .book-block.open { background: #0055FF; }
+    .book-block.full { background: #00C853; }
+    .book-block.wait { background: #FF8A00; }
+    .book-block.closed { background: #8E8E93; }
+    .book-dots i.closed, .book-legend i.closed { background: #8E8E93; }
+    .book-cell.on .book-dots i.closed, .home-day.on .book-dots i.closed { background: #E6E6E6; }
     .book-edit { margin-top: 8px; }
     #bookDaySlots { margin-top: 12px; }
     #bookDayBg { z-index: 46; align-items: flex-end; }
@@ -1068,7 +1091,7 @@
             <button class="btn wide" id="bookOpen" type="button">이 시간 오픈</button>
             <div id="bookDaySlots"></div>
             <button class="btn danger wide" id="bookExClose" type="button" style="margin-top:8px">이 날 휴무</button>
-            <p class="hint" style="margin:8px 0 0">마감하면 그 칸의 확정·대기가 취소됩니다. 시간 수정은 예약을 유지한 채 시각만 옮깁니다.</p>
+            <p class="hint" style="margin:8px 0 0">시간 수정은 예약을 유지합니다. 마감은 예약을 취소하고 칸을 닫아 둡니다. 오픈 취소는 칸을 지워서 오픈 전으로 되돌립니다.</p>
           </div>
           <div id="bookRepeat" class="hidden">
             <label class="cap">기간</label>
@@ -1972,7 +1995,7 @@
     function bookingErr(err) {
       let msg = (err && (err.message || err.details || err.error_description)) || "예약 처리에 실패했습니다.";
       msg = String(msg).replace(/^[\w.]+:\s*/, "");
-      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule|move_schedule/i.test(msg)) {
+      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule|move_schedule|delete_schedule/i.test(msg)) {
         return "예약 기능이 아직 데이터베이스에 없습니다. Supabase SQL Editor에서 reservation_migration.sql 만 실행해 주세요.";
       }
       return msg;
@@ -2023,24 +2046,29 @@
       waiting.forEach((w) => {
         rows.push(`<div class="book-person"><b>대기 ${w.waiting_order}</b><span>${esc(w.name || "회원")}</span><button class="btn danger" type="button" data-book-cancel="${esc(w.id)}">취소</button></div>`);
       });
-      if (!rows.length) rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
-      const st = slot.status === "booked" ? "예약됨" : "비어 있음";
+      if (!rows.length && slot.status !== "closed") rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
+      if (slot.status === "closed") rows.push('<p class="hint" style="margin:6px 0 0">마감된 칸입니다. 오픈 취소를 누르면 기록이 삭제되고 오픈 전으로 돌아갑니다.</p>');
+      const st = slot.status === "closed" ? "마감" : (slot.status === "booked" ? "예약됨" : "비어 있음");
       const start = slotClockValue(slot.start_time);
       const end = slotClockValue(slot.end_time);
-      return `<div class="card book-slot">
+      const actions = slot.status === "closed"
+        ? `<button class="btn danger wide" type="button" data-book-drop="${esc(slot.id)}">오픈 취소</button>`
+        : `<div class="book-slot-actions">
+            <button class="btn soft" type="button" data-book-edit="${esc(slot.id)}">시간 수정</button>
+            <button class="btn soft" type="button" data-book-close="${esc(slot.id)}">마감</button>
+            <button class="btn danger" type="button" data-book-drop="${esc(slot.id)}">오픈 취소</button>
+          </div>
+          <div class="book-edit hidden" data-book-edit-form="${esc(slot.id)}">
+            <div class="grid2">
+              <input class="field" type="time" data-edit-start="${esc(slot.id)}" value="${esc(start)}" aria-label="시작 수정" />
+              <input class="field" type="time" data-edit-end="${esc(slot.id)}" value="${esc(end)}" aria-label="종료 수정" />
+            </div>
+            <button class="btn wide" type="button" data-book-save="${esc(slot.id)}">이 시간으로 저장</button>
+          </div>`;
+      return `<div class="card book-slot" data-book-slot-card="${esc(slot.id)}">
         <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag">${st}</span></div>
         ${rows.join("")}
-        <div class="book-slot-actions">
-          <button class="btn soft" type="button" data-book-edit="${esc(slot.id)}">시간 수정</button>
-          <button class="btn danger" type="button" data-book-close="${esc(slot.id)}">마감</button>
-        </div>
-        <div class="book-edit hidden" data-book-edit-form="${esc(slot.id)}">
-          <div class="grid2">
-            <input class="field" type="time" data-edit-start="${esc(slot.id)}" value="${esc(start)}" aria-label="시작 수정" />
-            <input class="field" type="time" data-edit-end="${esc(slot.id)}" value="${esc(end)}" aria-label="종료 수정" />
-          </div>
-          <button class="btn wide" type="button" data-book-save="${esc(slot.id)}">이 시간으로 저장</button>
-        </div>
+        ${actions}
       </div>`;
     }
     function slotClockValue(iso) {
@@ -2063,33 +2091,96 @@
       return [...groups.entries()];
     }
     let bookCal = { mode: "month", cursor: "", day: "" };
+    let bookFocusSlot = "";
     function slotBookFlags(slot, member) {
+      if (slot.status === "closed") return { open: false, full: false, wait: false, closed: true };
       if (member) {
         const mine = slot.mine && slot.mine.status;
         const wait = Number(slot.wait_count) > 0 || mine === "waiting";
         const full = !!slot.has_confirmed || mine === "confirmed";
-        return { open: !full && mine !== "waiting", full, wait };
+        return { open: !full && mine !== "waiting", full, wait, closed: false };
       }
       const people = (slot.reservations || []).filter((r) => r.status !== "cancelled");
       const full = people.some((r) => r.status === "confirmed") || slot.status === "booked";
       const wait = people.some((r) => r.status === "waiting");
-      return { open: !full, full, wait };
+      return { open: !full, full, wait, closed: false };
     }
     function dayBookFlags(list, member) {
-      const flags = { open: false, full: false, wait: false };
+      const flags = { open: false, full: false, wait: false, closed: false };
       (list || []).forEach((slot) => {
         const f = slotBookFlags(slot, member);
         if (f.open) flags.open = true;
         if (f.full) flags.full = true;
         if (f.wait) flags.wait = true;
+        if (f.closed) flags.closed = true;
       });
       return flags;
     }
+    function slotTone(slot, member) {
+      if (slot.status === "closed") return "closed";
+      const flags = slotBookFlags(slot, member);
+      if (flags.wait) return "wait";
+      if (flags.full) return "full";
+      return "open";
+    }
+    function slotToneLabel(tone) {
+      return { open: "빈", full: "예약", wait: "대기", closed: "마감" }[tone] || "";
+    }
     function bookDotsHtml(flags) {
-      return `<span class="book-dots">${flags.open ? '<i class="open"></i>' : ""}${flags.full ? '<i class="full"></i>' : ""}${flags.wait ? '<i class="wait"></i>' : ""}</span>`;
+      return `<span class="book-dots">${flags.open ? '<i class="open"></i>' : ""}${flags.full ? '<i class="full"></i>' : ""}${flags.wait ? '<i class="wait"></i>' : ""}${flags.closed ? '<i class="closed"></i>' : ""}</span>`;
     }
     function bookLegendHtml() {
-      return `<div class="book-legend"><span><i class="open"></i>빈 시간</span><span><i class="full"></i>예약됨</span><span><i class="wait"></i>대기</span></div>`;
+      return `<div class="book-legend"><span><i class="open"></i>빈 시간</span><span><i class="full"></i>예약됨</span><span><i class="wait"></i>대기</span><span><i class="closed"></i>마감</span></div>`;
+    }
+    function bookWeekGridHtml(slots, days, member) {
+      const inWeek = (slots || []).filter((slot) => {
+        const key = slotDayKey(slot.start_time);
+        return key >= days[0] && key <= days[6];
+      });
+      let fromH = 9;
+      let toH = 21;
+      inWeek.forEach((slot) => {
+        const a = new Date(slot.start_time);
+        const b = new Date(slot.end_time);
+        if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return;
+        fromH = Math.min(fromH, a.getHours());
+        const endH = b.getHours() + (b.getMinutes() ? 1 : 0);
+        toH = Math.max(toH, endH);
+      });
+      fromH = Math.max(0, fromH);
+      toH = Math.min(24, Math.max(toH, fromH + 6));
+      const hours = toH - fromH;
+      let gutter = "";
+      for (let h = fromH; h < toH; h++) gutter += "<i>" + String(h).padStart(2, "0") + "</i>";
+      const head = days.map((iso) => {
+        const hol = holidayName(iso);
+        const cls = [];
+        if (iso === today()) cls.push("today");
+        if (isSunday(iso) || hol) cls.push("sun");
+        return `<button class="${cls.join(" ")}" type="button" data-book-cal-day="${iso}"><b>${Number(iso.slice(8))}</b>${weekdayName(iso)}</button>`;
+      }).join("");
+      const cols = days.map((iso) => {
+        const blocks = inWeek.filter((slot) => slotDayKey(slot.start_time) === iso).map((slot) => {
+          const a = new Date(slot.start_time);
+          const b = new Date(slot.end_time);
+          const startMin = a.getHours() * 60 + a.getMinutes();
+          let endMin = b.getHours() * 60 + b.getMinutes();
+          if (endMin <= startMin) endMin += 24 * 60;
+          const tone = slotTone(slot, member);
+          const top = "calc((" + (startMin - fromH * 60) + " / 60) * var(--hour))";
+          const height = "calc((" + Math.max(18, endMin - startMin) + " / 60) * var(--hour) - 3px)";
+          const hm = String(a.getHours()).padStart(2, "0") + ":" + String(a.getMinutes()).padStart(2, "0");
+          return `<button class="book-block ${tone}" type="button" data-book-slot="${esc(slot.id)}" style="top:${top};height:${height}"><small>${hm}</small><b>${slotToneLabel(tone)}</b></button>`;
+        }).join("");
+        return `<div class="tl-col" data-book-cal-day="${iso}">${blocks}</div>`;
+      }).join("");
+      return `<div class="book-week-scroll"><div class="tl week book-week">
+        <div class="tl-head"><span></span>${head}</div>
+        <div class="tl-grid" style="min-height:calc(${hours} * var(--hour))">
+          <div class="tl-time">${gutter}</div>
+          ${cols}
+        </div>
+      </div></div>`;
     }
     function bookSlotsOn(slots, day) {
       const hit = groupSlotsByDay(slots).find(([key]) => key === day);
@@ -2124,19 +2215,7 @@
         const start = weekStart(state.cursor);
         const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
         label = days[0].slice(5).replace("-", "/") + " – " + days[6].slice(5).replace("-", "/");
-        grid = `<div class="home-week-days">${days.map((iso) => {
-          const flags = dayBookFlags(byDay.get(iso) || [], member);
-          const cls = ["home-day"];
-          if (iso === state.day) cls.push("on");
-          if (iso === today()) cls.push("today");
-          if (isSunday(iso)) cls.push("sun");
-          if (holidayName(iso)) cls.push("holiday");
-          return `<button class="${cls.join(" ")}" type="button" data-book-cal-day="${iso}">
-            <span class="wd">${weekdayName(iso)}</span>
-            <span class="dn">${Number(iso.slice(8))}</span>
-            ${bookDotsHtml(flags)}
-          </button>`;
-        }).join("")}</div>`;
+        grid = bookWeekGridHtml(slots, days, member);
       } else {
         const dt = dateFromIso(state.cursor);
         const yyyy = dt.getFullYear();
@@ -2173,7 +2252,7 @@
         </div>
         ${grid}
         ${bookLegendHtml()}
-        ${member ? "" : `<p class="hint" style="margin:8px 0 0">날짜를 누르면 그 날 시간을 열고, 마감하고, 수정할 수 있습니다.</p><button class="btn soft wide" type="button" id="bookOpenRepeat">반복으로 여러 날 열기</button>`}
+        ${member ? "" : `<p class="hint" style="margin:8px 0 0">${mode === "week" ? "주간의 시간 칸을 누르면 그 칸을 수정·마감·오픈 취소할 수 있습니다. 빈 칸을 누르면 그 날을 엽니다." : "날짜를 누르면 그 날 시간을 열고, 마감하고, 오픈을 취소할 수 있습니다."}</p><button class="btn soft wide" type="button" id="bookOpenRepeat">반복으로 여러 날 열기</button>`}
       </div>`;
     }
     function bookDaySummary(list, member) {
@@ -2311,6 +2390,16 @@
       }
       const closeDay = $("bookExClose");
       if (closeDay) closeDay.classList.toggle("hidden", !list.length);
+      if (bookFocusSlot) {
+        const card = document.querySelector('[data-book-slot-card="' + bookFocusSlot + '"]');
+        if (card) {
+          card.classList.add("on");
+          const form = card.querySelector(".book-edit");
+          if (form) form.classList.remove("hidden");
+          card.scrollIntoView({ block: "nearest" });
+        }
+        bookFocusSlot = "";
+      }
     }
     function openBookDay(repeat) {
       if (!bookCal.day) bookCal.day = today();
@@ -2327,11 +2416,15 @@
       if (bg) bg.classList.add("hidden");
       document.body.style.overflow = "";
     }
+    function bookSlotById(slots, id) {
+      return (slots || []).find((slot) => slot.id === id) || null;
+    }
     function applyBookCalClick(e, kind) {
+      const slotBtn = e.target.closest("[data-book-slot]");
       const modeBtn = e.target.closest("[data-book-cal]");
       const navBtn = e.target.closest("[data-book-cal-nav]");
       const dayBtn = e.target.closest("[data-book-cal-day]");
-      if (!modeBtn && !navBtn && !dayBtn) return false;
+      if (!slotBtn && !modeBtn && !navBtn && !dayBtn) return false;
       if (kind === "member") {
         if (!shareCtx.bookBoard) return true;
         const state = {
@@ -2339,9 +2432,16 @@
           cursor: shareCtx.bookCursor || today(),
           day: shareCtx.bookDay || today()
         };
+        if (slotBtn) {
+          const slot = bookSlotById(shareCtx.bookBoard.slots, slotBtn.dataset.bookSlot);
+          if (slot) {
+            state.day = slotDayKey(slot.start_time);
+            state.cursor = state.day;
+          }
+        }
         if (modeBtn) state.mode = modeBtn.dataset.bookCal === "week" ? "week" : "month";
         if (navBtn) shiftBookCal(state, Number(navBtn.dataset.bookCalNav));
-        if (dayBtn) {
+        if (dayBtn && !slotBtn) {
           state.day = dayBtn.dataset.bookCalDay;
           state.cursor = state.day;
         }
@@ -2352,6 +2452,15 @@
         return true;
       }
       if (!bookBoard) return true;
+      if (slotBtn) {
+        const slot = bookSlotById(bookBoard.slots, slotBtn.dataset.bookSlot);
+        if (!slot) return true;
+        bookFocusSlot = slot.id;
+        focusBookDay(slotDayKey(slot.start_time));
+        paintBook(bookBoard);
+        openBookDay(false);
+        return true;
+      }
       if (modeBtn) bookCal.mode = modeBtn.dataset.bookCal === "week" ? "week" : "month";
       if (navBtn) shiftBookCal(bookCal, Number(navBtn.dataset.bookCalNav));
       if (dayBtn) focusBookDay(dayBtn.dataset.bookCalDay);
@@ -4683,10 +4792,11 @@
       const exClose = e.target.closest("#bookExClose");
       const dayClose = e.target.closest("[data-book-day-close]");
       const closeBtn = e.target.closest("[data-book-close]");
+      const dropBtn = e.target.closest("[data-book-drop]");
       const saveBtn = e.target.closest("[data-book-save]");
       const cancelBtn = e.target.closest("[data-book-cancel]");
       const readBtn = e.target.closest("#bookRead");
-      const btn = openBtn || repeatBtn || exClose || dayClose || closeBtn || saveBtn || cancelBtn || readBtn;
+      const btn = openBtn || repeatBtn || exClose || dayClose || closeBtn || dropBtn || saveBtn || cancelBtn || readBtn;
       if (!btn) return;
       btn.disabled = true;
       try {
@@ -4757,8 +4867,20 @@
           return;
         }
         if (closeBtn) {
-          if (!confirm("이 시간을 마감하면 확정·대기 예약이 모두 취소됩니다.")) return;
+          if (!confirm("이 시간을 마감하면 확정·대기 예약이 취소되고, 칸은 마감 상태로 남습니다.")) return;
           await Cloud.closeSchedule(closeBtn.dataset.bookClose);
+          await renderBook();
+          return;
+        }
+        if (dropBtn) {
+          const id = dropBtn.dataset.bookDrop;
+          const slot = bookSlotById(bookBoard && bookBoard.slots, id);
+          const booked = ((slot && slot.reservations) || []).filter((r) => r.status !== "cancelled").length;
+          const msg = booked
+            ? "오픈을 취소하면 예약 " + booked + "건도 함께 사라지고, 이 시간은 오픈 전 상태로 돌아갑니다."
+            : "이 시간 오픈을 취소하고 삭제할까요? 캘린더에서 사라지고 오픈 전 상태로 돌아갑니다.";
+          if (!confirm(msg)) return;
+          await Cloud.deleteSchedule(id);
           await renderBook();
           return;
         }
