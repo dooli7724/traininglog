@@ -340,6 +340,9 @@
     .book-cal .tl-head button.tl-dayhead b { display: block; color: inherit; font-size: .92rem; }
     .book-cal .tl-head button.tl-dayhead .hol { display: block; font-size: .58rem; font-weight: 800; color: var(--danger); line-height: 1.2; }
     .book-cal .tl-head button.tl-dayhead.today { color: var(--accent); }
+    .book-cal .tl-head button.tl-dayhead.on { background: var(--accent); color: #fff; }
+    .book-cal .tl-head button.tl-dayhead.on b,
+    .book-cal .tl-head button.tl-dayhead.on .hol { color: #fff; }
     .book-cal .tl-head button.tl-dayhead.sun,
     .book-cal .tl-head button.tl-dayhead.holiday,
     .book-cal .tl-head button.tl-dayhead.sun b,
@@ -350,7 +353,7 @@
     .book-cal .tl-block.wait { background: #FF8A00; }
     .book-cal .tl-block.closed { background: #8E8E93; }
     .book-cal .tl-col.on { box-shadow: inset 0 0 0 2px var(--accent); }
-    .book-reset-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .book-reset-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .book-reset-row .btn { min-height: 40px; padding: 0 4px; font-size: .74rem; }
     .book-dots i.closed, .book-legend i.closed { background: #8E8E93; }
     .book-cell.on .book-dots i.closed, .home-day.on .book-dots i.closed { background: #E6E6E6; }
@@ -1094,8 +1097,9 @@
             </div>
             <button class="btn wide" id="bookOpen" type="button">이 시간 오픈</button>
             <div id="bookDaySlots"></div>
-            <button class="btn danger wide" id="bookExClose" type="button" style="margin-top:8px">이 날 휴무</button>
-            <p class="hint" style="margin:8px 0 0">시간 수정은 예약을 유지합니다. 마감은 예약을 취소하고 칸을 닫아 둡니다. 오픈 취소는 칸을 지워서 오픈 전으로 되돌립니다.</p>
+            <button class="btn danger wide" id="bookDayReset" type="button" data-book-reset="day" style="margin-top:8px">이날 오픈 취소</button>
+            <button class="btn soft wide" id="bookExClose" type="button" style="margin-top:8px">이 날 휴무</button>
+            <p class="hint" style="margin:8px 0 0">이날 오픈 취소는 선택한 날의 칸을 모두 지워 오픈 전으로 되돌립니다. 예약이 있으면 확인 후에만 진행합니다. 휴무는 칸을 마감 상태로 남겨 둡니다.</p>
           </div>
           <div id="bookRepeat" class="hidden">
             <label class="cap">기간</label>
@@ -2150,7 +2154,7 @@
       const hours = TL_TO - TL_FROM;
       const head = days.map((iso) => {
         const hol = holidayName(iso);
-        return `<button class="tl-dayhead ${dayHeadClass(iso)}" type="button" data-book-cal-day="${iso}"><b>${Number(iso.slice(8))}</b>${weekdayName(iso)}${hol ? `<span class="hol">${esc(hol)}</span>` : ""}</button>`;
+        return `<button class="tl-dayhead ${dayHeadClass(iso)}${iso === selected ? " on" : ""}" type="button" data-book-cal-day="${iso}"><b>${Number(iso.slice(8))}</b>${weekdayName(iso)}${hol ? `<span class="hol">${esc(hol)}</span>` : ""}</button>`;
       }).join("");
       const cols = days.map((iso) => {
         const events = layoutLanes((slots || []).filter((slot) => slotDayKey(slot.start_time) === iso).map((slot) => {
@@ -2252,13 +2256,13 @@
         </div>
         ${grid}
         ${bookLegendHtml()}
-        ${member ? "" : `<p class="hint" style="margin:8px 0 0">${mode === "week" ? "시간 칸을 누르면 그 칸을 수정·마감·오픈 취소할 수 있습니다. 빈 칸을 누르면 그 날을 엽니다." : "날짜를 누르면 그 날 시간을 열고, 마감하고, 오픈을 취소할 수 있습니다."}</p>
+        ${member ? "" : `<p class="hint" style="margin:8px 0 0">${mode === "week" ? "날짜를 고른 뒤 이날 오픈 취소를 누르면 그 날 시간을 한 번에 지웁니다. 시간 칸은 그 칸만 수정합니다." : "날짜를 고른 뒤 이날 오픈 취소를 누르면 그 날 시간을 한 번에 지웁니다."}</p>
           <div class="book-reset">
-            <p class="hint" style="margin:4px 0 6px">선택 기간 슬롯 일괄 초기화. 해당 기간의 열린 시간을 지우고 오픈 전으로 되돌립니다.</p>
+            <button class="btn danger wide" type="button" data-book-reset="day" style="margin-top:8px">이날 오픈 취소 · ${esc(prettyDate(state.day || today()))}</button>
+            <p class="hint" style="margin:6px 0">선택한 날의 열린 시간을 모두 삭제합니다. 예약이 있으면 안내 후, 전부 취소하거나 빈 칸만 지울 수 있습니다.</p>
             <div class="book-reset-row">
-              <button class="btn danger" type="button" data-book-reset="day">${Number((state.day || today()).slice(8))}일 초기화</button>
-              <button class="btn danger" type="button" data-book-reset="week">이 주 초기화</button>
-              <button class="btn danger" type="button" data-book-reset="month">${dateFromIso(state.cursor || state.day || today()).getMonth() + 1}월 초기화</button>
+              <button class="btn soft" type="button" data-book-reset="week">이 주 초기화</button>
+              <button class="btn soft" type="button" data-book-reset="month">${dateFromIso(state.cursor || state.day || today()).getMonth() + 1}월 초기화</button>
             </div>
           </div>
           <button class="btn soft wide" type="button" id="bookOpenRepeat" style="margin-top:8px">반복으로 여러 날 열기</button>`}
@@ -2420,7 +2424,9 @@
           : '<div class="empty" style="padding:16px 8px">이 날은 열린 시간이 없습니다.</div>';
       }
       const closeDay = $("bookExClose");
+      const resetDay = $("bookDayReset");
       if (closeDay) closeDay.classList.toggle("hidden", !list.length);
+      if (resetDay) resetDay.classList.toggle("hidden", !list.length);
       if (bookFocusSlot) {
         const card = document.querySelector('[data-book-slot-card="' + bookFocusSlot + '"]');
         if (card) {
@@ -4901,12 +4907,28 @@
         if (resetBtn) {
           const range = bookResetRange(resetBtn.dataset.bookReset);
           const list = slotsInBookRange(range.from, range.to);
-          if (!list.length) { alert(range.label + "에 초기화할 열린 시간이 없습니다."); return; }
-          const booked = list.reduce((n, slot) => n + ((slot.reservations || []).filter((r) => r.status !== "cancelled").length), 0);
-          const extra = booked ? " 예약 " + booked + "건도 함께 취소됩니다." : "";
-          if (!confirm(range.label + "의 슬롯 " + list.length + "개를 모두 삭제하고 오픈 전으로 되돌릴까요?" + extra)) return;
-          const res = await Cloud.deleteSchedulesBetween(range.from, range.to);
-          alert((Number(res && res.deleted) || list.length) + "개 시간을 초기화했습니다.");
+          if (!list.length) { alert(range.label + "에는 초기화할 열린 시간이 없습니다."); return; }
+          const activeCount = (slot) => ((slot.reservations || []).filter((r) => r.status !== "cancelled").length);
+          const bookedSlots = list.filter((slot) => activeCount(slot) > 0);
+          const emptySlots = list.filter((slot) => activeCount(slot) === 0);
+          const booked = bookedSlots.reduce((n, slot) => n + activeCount(slot), 0);
+          if (!booked) {
+            if (!confirm(range.label + " 열린 시간 " + list.length + "개를 모두 삭제하고 오픈 전으로 되돌릴까요?")) return;
+            const res = await Cloud.deleteSchedulesBetween(range.from, range.to);
+            alert((Number(res && res.deleted) || list.length) + "개 시간을 초기화했습니다.");
+          } else {
+            const wipe = confirm(range.label + " 열린 시간 " + list.length + "개 중 예약 " + booked + "건이 있습니다. 확인을 누르면 예약까지 취소하고 회원에게 알린 뒤 전부 삭제합니다.");
+            if (wipe) {
+              const res = await Cloud.deleteSchedulesBetween(range.from, range.to);
+              alert((Number(res && res.deleted) || list.length) + "개 시간을 초기화했습니다. 예약 " + booked + "건을 취소했습니다.");
+            } else if (!emptySlots.length) {
+              alert("예약이 없는 칸이 없어 그대로 뒀습니다.");
+              return;
+            } else if (confirm("예약이 없는 " + emptySlots.length + "개만 삭제하고, 예약된 " + bookedSlots.length + "칸은 남길까요?")) {
+              for (const slot of emptySlots) await Cloud.deleteSchedule(slot.id);
+              alert(emptySlots.length + "개 시간을 오픈 전으로 되돌렸습니다. 예약된 칸은 그대로 뒀습니다.");
+            } else return;
+          }
           await renderBook();
           return;
         }
