@@ -299,6 +299,32 @@
     .book-slot .btn { margin-top: 8px; }
     .book-day { margin: 14px 0; }
     .book-day h3 { margin: 0; font-size: .92rem; }
+    .book-cal { margin-bottom: 4px; }
+    .book-cal-mode { grid-template-columns: 1fr 1fr; }
+    .book-cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .book-cal-nav h3 { flex: 1; margin: 0; text-align: center; font-size: .92rem; font-weight: 800; min-width: 0; }
+    .book-cal-nav .btn { min-height: 40px; min-width: 40px; padding: 0 10px; }
+    .book-cal .cal-grid { margin-bottom: 4px; }
+    .book-cal .home-week-days { margin-bottom: 4px; }
+    .book-cell { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+    .book-cell.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .book-cell.on b, .book-cell.on .hol { color: #fff; }
+    .book-cell.on.sun b, .book-cell.on.holiday b { color: #FFE8E8; }
+    .book-dots { display: flex; justify-content: center; align-items: center; gap: 3px; min-height: 8px; margin-top: 3px; }
+    .book-dots i, .book-legend i {
+      width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+    }
+    .book-dots i.open, .book-legend i.open { background: #0055FF; }
+    .book-dots i.full, .book-legend i.full { background: #00C853; }
+    .book-dots i.wait, .book-legend i.wait { background: #FF8A00; }
+    .book-cell.on .book-dots i.open, .home-day.on .book-dots i.open { background: #fff; }
+    .book-cell.on .book-dots i.full, .home-day.on .book-dots i.full { background: #B8FFD0; }
+    .book-cell.on .book-dots i.wait, .home-day.on .book-dots i.wait { background: #FFE0A3; }
+    .book-legend {
+      display: flex; justify-content: center; gap: 14px; margin: 8px 0 0;
+      font-size: .72rem; font-weight: 800; color: var(--muted);
+    }
+    .book-legend span { display: inline-flex; align-items: center; gap: 5px; }
     #bookDays { flex-wrap: wrap; }
     #bookDays button { flex: 1 1 36px; min-width: 36px; padding: 0 4px; }
     .day-combo { margin-bottom: 12px; }
@@ -1009,6 +1035,9 @@
     <section id="pageShare" class="page hidden"><div id="shareBody"></div></section>
 
     <section id="pageBook" class="page hidden">
+      <div id="bookNotices"></div>
+      <div class="label">예약 캘린더</div>
+      <div id="bookSlots"></div>
       <div class="seg" id="bookMode" style="grid-template-columns:1fr 1fr">
         <button type="button" data-book-mode="one" class="on">하루 오픈</button>
         <button type="button" data-book-mode="repeat">반복 오픈</button>
@@ -1093,9 +1122,6 @@
         <button class="btn soft wide" id="bookExApply" type="button" style="margin-top:8px">이 날만 시간 변경</button>
         <p class="hint" style="margin:8px 0 0">휴무는 그 날 앞으로 남은 시간을 마감합니다. 시간 변경은 새 범위에 없는 빈 시간을 닫고, 부족한 칸을 새로 엽니다. 예약이 있으면 확인 후에만 취소됩니다.</p>
       </div>
-      <div id="bookNotices"></div>
-      <div class="label">열린 시간</div>
-      <div id="bookSlots"></div>
     </section>
   </main>
 
@@ -1956,7 +1982,7 @@
       let msg = (err && (err.message || err.details || err.error_description)) || "예약 처리에 실패했습니다.";
       msg = String(msg).replace(/^[\w.]+:\s*/, "");
       if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule/i.test(msg)) {
-        return "예약 기능이 아직 데이터베이스에 없습니다. Supabase SQL Editor에서 schema.sql을 실행해 주세요.";
+        return "예약 기능이 아직 데이터베이스에 없습니다. Supabase SQL Editor에서 reservation_migration.sql 만 실행해 주세요.";
       }
       return msg;
     }
@@ -1967,6 +1993,13 @@
       const date = s.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
       const hm = (d) => d.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
       return date + " " + hm(s) + " – " + hm(e);
+    }
+    function fmtSlotClock(start, end) {
+      const s = new Date(start);
+      const e = new Date(end);
+      if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return "";
+      const hm = (d) => d.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+      return hm(s) + " – " + hm(e);
     }
     function canMemberCancel(slot) {
       const start = new Date(slot.start_time).getTime();
@@ -2002,7 +2035,7 @@
       if (!rows.length) rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
       const st = slot.status === "booked" ? "예약됨" : "비어 있음";
       return `<div class="card book-slot">
-        <div class="row"><b style="flex:1">${esc(fmtSlotRange(slot.start_time, slot.end_time))}</b><span class="tag">${st}</span></div>
+        <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag">${st}</span></div>
         ${rows.join("")}
         <button class="btn soft wide" type="button" data-book-close="${esc(slot.id)}">이 시간 마감</button>
       </div>`;
@@ -2020,6 +2053,128 @@
         groups.get(key).push(slot);
       });
       return [...groups.entries()];
+    }
+    let bookCal = { mode: "month", cursor: "", day: "" };
+    function slotBookFlags(slot, member) {
+      if (member) {
+        const mine = slot.mine && slot.mine.status;
+        const wait = Number(slot.wait_count) > 0 || mine === "waiting";
+        const full = !!slot.has_confirmed || mine === "confirmed";
+        return { open: !full && mine !== "waiting", full, wait };
+      }
+      const people = (slot.reservations || []).filter((r) => r.status !== "cancelled");
+      const full = people.some((r) => r.status === "confirmed") || slot.status === "booked";
+      const wait = people.some((r) => r.status === "waiting");
+      return { open: !full, full, wait };
+    }
+    function dayBookFlags(list, member) {
+      const flags = { open: false, full: false, wait: false };
+      (list || []).forEach((slot) => {
+        const f = slotBookFlags(slot, member);
+        if (f.open) flags.open = true;
+        if (f.full) flags.full = true;
+        if (f.wait) flags.wait = true;
+      });
+      return flags;
+    }
+    function bookDotsHtml(flags) {
+      return `<span class="book-dots">${flags.open ? '<i class="open"></i>' : ""}${flags.full ? '<i class="full"></i>' : ""}${flags.wait ? '<i class="wait"></i>' : ""}</span>`;
+    }
+    function bookLegendHtml() {
+      return `<div class="book-legend"><span><i class="open"></i>빈 시간</span><span><i class="full"></i>예약됨</span><span><i class="wait"></i>대기</span></div>`;
+    }
+    function bookSlotsOn(slots, day) {
+      const hit = groupSlotsByDay(slots).find(([key]) => key === day);
+      return hit ? hit[1] : [];
+    }
+    function shiftBookCal(state, delta) {
+      if (state.mode === "week") {
+        const start = addDays(weekStart(state.cursor || today()), delta * 7);
+        state.cursor = start;
+        const end = addDays(start, 6);
+        if (!state.day || state.day < start || state.day > end) state.day = start;
+        return;
+      }
+      const dt = dateFromIso(state.cursor || today());
+      const next = new Date(dt.getFullYear(), dt.getMonth() + delta, 1);
+      state.cursor = isoFromDate(next);
+      const sel = dateFromIso(state.day || today());
+      if (sel.getFullYear() !== next.getFullYear() || sel.getMonth() !== next.getMonth()) {
+        const t = dateFromIso(today());
+        state.day = (t.getFullYear() === next.getFullYear() && t.getMonth() === next.getMonth()) ? today() : state.cursor;
+      }
+    }
+    function bookCalendarHtml(slots, state, member) {
+      if (!state.cursor) state.cursor = today();
+      if (!state.day) state.day = today();
+      if (state.mode !== "week" && state.mode !== "month") state.mode = "month";
+      const byDay = new Map(groupSlotsByDay(slots));
+      const mode = state.mode;
+      let label = "";
+      let grid = "";
+      if (mode === "week") {
+        const start = weekStart(state.cursor);
+        const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+        label = days[0].slice(5).replace("-", "/") + " – " + days[6].slice(5).replace("-", "/");
+        grid = `<div class="home-week-days">${days.map((iso) => {
+          const flags = dayBookFlags(byDay.get(iso) || [], member);
+          const cls = ["home-day"];
+          if (iso === state.day) cls.push("on");
+          if (iso === today()) cls.push("today");
+          if (isSunday(iso)) cls.push("sun");
+          if (holidayName(iso)) cls.push("holiday");
+          return `<button class="${cls.join(" ")}" type="button" data-book-cal-day="${iso}">
+            <span class="wd">${weekdayName(iso)}</span>
+            <span class="dn">${Number(iso.slice(8))}</span>
+            ${bookDotsHtml(flags)}
+          </button>`;
+        }).join("")}</div>`;
+      } else {
+        const dt = dateFromIso(state.cursor);
+        const yyyy = dt.getFullYear();
+        const mo = dt.getMonth();
+        label = yyyy + "년 " + (mo + 1) + "월";
+        const first = new Date(yyyy, mo, 1);
+        const pad = (first.getDay() + 6) % 7;
+        const last = new Date(yyyy, mo + 1, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < pad; i++) cells.push("");
+        for (let d = 1; d <= last; d++) cells.push(isoFromDate(new Date(yyyy, mo, d)));
+        while (cells.length % 7) cells.push("");
+        const head = `<div class="cal-weekdays">${["월", "화", "수", "목", "금", "토", "일"].map((w, i) => `<span${i === 6 ? ' class="sun"' : ""}>${w}</span>`).join("")}</div>`;
+        grid = head + `<div class="cal-grid">${cells.map((iso) => {
+          if (!iso) return "<div></div>";
+          const flags = dayBookFlags(byDay.get(iso) || [], member);
+          const hol = holidayName(iso);
+          const cls = ["cal-cell", "book-cell"];
+          if (iso === state.day) cls.push("on");
+          if (isSunday(iso)) cls.push("sun");
+          if (hol) cls.push("holiday");
+          return `<button class="${cls.join(" ")}" type="button" data-book-cal-day="${iso}"><b>${Number(iso.slice(8))}</b>${hol ? `<span class="hol">${esc(hol)}</span>` : ""}${bookDotsHtml(flags)}</button>`;
+        }).join("")}</div>`;
+      }
+      return `<div class="card book-cal">
+        <div class="seg book-cal-mode">
+          <button type="button" data-book-cal="week"${mode === "week" ? ' class="on"' : ""}>주간</button>
+          <button type="button" data-book-cal="month"${mode === "month" ? ' class="on"' : ""}>월간</button>
+        </div>
+        <div class="book-cal-nav">
+          <button class="btn soft" type="button" data-book-cal-nav="-1" aria-label="이전">‹</button>
+          <h3>${esc(label)}</h3>
+          <button class="btn soft" type="button" data-book-cal-nav="1" aria-label="다음">›</button>
+        </div>
+        ${grid}
+        ${bookLegendHtml()}
+      </div>`;
+    }
+    function bookDaySummary(list, member) {
+      if (!list.length) return "열린 시간 없음";
+      const flags = dayBookFlags(list, member);
+      const bits = [list.length + "칸"];
+      if (flags.open) bits.push("빈 시간");
+      if (flags.full) bits.push("예약");
+      if (flags.wait) bits.push("대기");
+      return bits.join(" · ");
     }
     function monthBounds(offset) {
       const now = new Date();
@@ -2102,28 +2257,76 @@
         return await Cloud.overrideScheduleDay(Object.assign({}, override, { cancelBooked: true }));
       }
     }
+    let bookBoard = null;
+    function bookDayDetailHtml(slots, day, member) {
+      const list = bookSlotsOn(slots, day);
+      const hol = holidayName(day);
+      const title = prettyDate(day) + " · " + weekdayName(day) + (hol ? " · " + hol : "");
+      const headBtn = !member && list.length
+        ? `<button class="btn soft hdr-btn" type="button" data-book-day-close="${esc(day)}">이 날 휴무</button>`
+        : "";
+      const body = list.length
+        ? list.map((slot) => member ? memberSlotHtml(slot) : coachSlotHtml(slot)).join("")
+        : '<div class="empty" style="padding:18px 8px">이 날은 열린 시간이 없습니다.</div>';
+      return `<div class="book-day">
+        <div class="row" style="margin-bottom:6px"><h3 style="flex:1">${esc(title)}</h3>${headBtn}</div>
+        <p class="hint" style="margin-top:0">${esc(bookDaySummary(list, member))}</p>
+        ${body}
+      </div>`;
+    }
+    function focusBookDay(day) {
+      bookCal.day = day;
+      bookCal.cursor = day;
+      if ($("bookDate")) $("bookDate").value = day;
+      if ($("bookExDate")) $("bookExDate").value = day;
+    }
+    function applyBookCalClick(e, kind) {
+      const modeBtn = e.target.closest("[data-book-cal]");
+      const navBtn = e.target.closest("[data-book-cal-nav]");
+      const dayBtn = e.target.closest("[data-book-cal-day]");
+      if (!modeBtn && !navBtn && !dayBtn) return false;
+      if (kind === "member") {
+        if (!shareCtx.bookBoard) return true;
+        const state = {
+          mode: shareCtx.bookMode || "month",
+          cursor: shareCtx.bookCursor || today(),
+          day: shareCtx.bookDay || today()
+        };
+        if (modeBtn) state.mode = modeBtn.dataset.bookCal === "week" ? "week" : "month";
+        if (navBtn) shiftBookCal(state, Number(navBtn.dataset.bookCalNav));
+        if (dayBtn) {
+          state.day = dayBtn.dataset.bookCalDay;
+          state.cursor = state.day;
+        }
+        shareCtx.bookMode = state.mode;
+        shareCtx.bookCursor = state.cursor;
+        shareCtx.bookDay = state.day;
+        repaintMemberBook();
+        return true;
+      }
+      if (!bookBoard) return true;
+      if (modeBtn) bookCal.mode = modeBtn.dataset.bookCal === "week" ? "week" : "month";
+      if (navBtn) shiftBookCal(bookCal, Number(navBtn.dataset.bookCalNav));
+      if (dayBtn) focusBookDay(dayBtn.dataset.bookCalDay);
+      paintBook(bookBoard);
+      return true;
+    }
     function paintBook(board) {
-      paintBookBadge("bookBadge", board && board.unread);
-      const notes = ((board && board.notices) || []).filter((x) => !x.read_at).slice(0, 5);
+      bookBoard = board || { slots: [], notices: [], unread: 0 };
+      paintBookBadge("bookBadge", bookBoard.unread);
+      const notes = (bookBoard.notices || []).filter((x) => !x.read_at).slice(0, 5);
       const noteBox = $("bookNotices");
       if (noteBox) {
         noteBox.innerHTML = notes.length
           ? `<div class="card book-notes">${notes.map((x) => `<p><b>${esc(x.title)}</b><span class="hint">${esc(x.body)}</span></p>`).join("")}<button class="btn soft wide" type="button" id="bookRead">알림 확인</button></div>`
           : "";
       }
-      const slots = (board && board.slots) || [];
       const box = $("bookSlots");
       if (!box) return;
-      const groups = groupSlotsByDay(slots);
-      box.innerHTML = groups.length
-        ? groups.map(([day, list]) => `<div class="book-day">
-            <div class="row" style="margin-bottom:6px">
-              <h3 style="flex:1">${esc(prettyDate(day))} · ${esc(day)}</h3>
-              <button class="btn soft hdr-btn" type="button" data-book-day-close="${esc(day)}">이 날 휴무</button>
-            </div>
-            ${list.map(coachSlotHtml).join("")}
-          </div>`).join("")
-        : '<div class="empty">열린 시간이 없습니다. 위에서 날짜와 시간을 열어 주세요.</div>';
+      const slots = bookBoard.slots || [];
+      if (!bookCal.cursor) bookCal.cursor = today();
+      if (!bookCal.day) bookCal.day = today();
+      box.innerHTML = bookCalendarHtml(slots, bookCal, false) + bookDayDetailHtml(slots, bookCal.day, false);
     }
     async function renderBook() {
       const box = $("bookSlots");
@@ -2148,48 +2351,61 @@
         box.innerHTML = `<div class="empty">${esc(bookingErr(err))}</div>`;
       }
     }
+    function memberSlotHtml(slot) {
+      const mine = slot.mine;
+      let action = "";
+      if (mine && mine.status === "confirmed") {
+        action = canMemberCancel(slot)
+          ? `<button class="btn danger wide" type="button" data-slot-cancel="${esc(mine.id)}">예약 취소</button>`
+          : `<p class="hint" style="margin-bottom:0">확정된 예약입니다. 시작 ${Number(slot.cancel_hours) || 6}시간 전이 지나 취소할 수 없습니다.</p>`;
+      } else if (mine && mine.status === "waiting") {
+        action = `<p class="hint">대기 ${mine.waiting_order}순위입니다. 앞 순번이 취소되면 자동으로 확정됩니다.</p><button class="btn danger wide" type="button" data-slot-cancel="${esc(mine.id)}">대기 취소</button>`;
+      } else if (slot.has_confirmed) {
+        const next = Number(slot.wait_count || 0) + 1;
+        action = `<button class="btn wide" type="button" data-slot-book="${esc(slot.id)}">대기 신청 · ${next}순위</button>`;
+      } else {
+        action = `<button class="btn wide" type="button" data-slot-book="${esc(slot.id)}">예약하기</button>`;
+      }
+      const stateLabel = mine && mine.status === "confirmed"
+        ? "내 예약 확정"
+        : mine && mine.status === "waiting"
+          ? "내 대기 " + mine.waiting_order
+          : (slot.has_confirmed ? "마감 · 대기 가능" : "예약 가능");
+      return `<div class="card book-slot">
+        <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag">${esc(stateLabel)}</span></div>
+        ${action}
+      </div>`;
+    }
+    function memberBookBody(board) {
+      if (!shareCtx.bookMode) shareCtx.bookMode = "month";
+      if (!shareCtx.bookCursor) shareCtx.bookCursor = today();
+      if (!shareCtx.bookDay) shareCtx.bookDay = today();
+      const notes = ((board && board.notices) || []).filter((x) => !x.read_at).slice(0, 5);
+      const noteHtml = notes.length
+        ? `<div class="card book-notes">${notes.map((x) => `<p><b>${esc(x.title)}</b><span class="hint">${esc(x.body)}</span></p>`).join("")}<button class="btn soft wide" type="button" data-member-book-read="1">알림 확인</button></div>`
+        : "";
+      const slots = (board && board.slots) || [];
+      const state = { mode: shareCtx.bookMode, cursor: shareCtx.bookCursor, day: shareCtx.bookDay };
+      const html = noteHtml + bookCalendarHtml(slots, state, true) + bookDayDetailHtml(slots, state.day, true);
+      shareCtx.bookMode = state.mode;
+      shareCtx.bookCursor = state.cursor;
+      shareCtx.bookDay = state.day;
+      return html;
+    }
+    function repaintMemberBook() {
+      const mount = $("memberBook");
+      if (!mount || !shareCtx.bookBoard) return;
+      mount.innerHTML = memberBookBody(shareCtx.bookBoard);
+    }
     async function memberBookingHtml(share) {
       if (!share) return '<div class="empty">회원 링크가 없습니다.</div>';
       if (!(window.Cloud && Cloud.bookingBoard)) return '<div class="empty">클라우드에 연결되어야 예약할 수 있습니다.</div>';
       let board;
       try { board = await Cloud.bookingBoard(share); }
       catch (err) { return `<div class="empty">${esc(bookingErr(err))}</div>`; }
+      shareCtx.bookBoard = board;
       paintBookBadge("clientBookBadge", board && board.unread);
-      const notes = ((board && board.notices) || []).filter((x) => !x.read_at).slice(0, 5);
-      const noteHtml = notes.length
-        ? `<div class="card book-notes">${notes.map((x) => `<p><b>${esc(x.title)}</b><span class="hint">${esc(x.body)}</span></p>`).join("")}<button class="btn soft wide" type="button" data-member-book-read="1">알림 확인</button></div>`
-        : "";
-      const slots = (board && board.slots) || [];
-      if (!slots.length) return noteHtml + '<div class="empty">지금 신청할 수 있는 시간이 없습니다.</div>';
-      const cards = groupSlotsByDay(slots).map(([day, list]) => {
-        const body = list.map((slot) => {
-        const mine = slot.mine;
-        let action = "";
-        if (mine && mine.status === "confirmed") {
-          action = canMemberCancel(slot)
-            ? `<button class="btn danger wide" type="button" data-slot-cancel="${esc(mine.id)}">예약 취소</button>`
-            : `<p class="hint" style="margin-bottom:0">확정된 예약입니다. 시작 ${Number(slot.cancel_hours) || 6}시간 전이 지나 취소할 수 없습니다.</p>`;
-        } else if (mine && mine.status === "waiting") {
-          action = `<p class="hint">대기 ${mine.waiting_order}순위입니다. 앞 순번이 취소되면 자동으로 확정됩니다.</p><button class="btn danger wide" type="button" data-slot-cancel="${esc(mine.id)}">대기 취소</button>`;
-        } else if (slot.has_confirmed) {
-          const next = Number(slot.wait_count || 0) + 1;
-          action = `<button class="btn wide" type="button" data-slot-book="${esc(slot.id)}">대기 신청 · ${next}순위</button>`;
-        } else {
-          action = `<button class="btn wide" type="button" data-slot-book="${esc(slot.id)}">예약하기</button>`;
-        }
-        const stateLabel = mine && mine.status === "confirmed"
-          ? "내 예약 확정"
-          : mine && mine.status === "waiting"
-            ? "내 대기 " + mine.waiting_order
-            : (slot.has_confirmed ? "마감 · 대기 가능" : "예약 가능");
-        return `<div class="card book-slot">
-          <div class="row"><b style="flex:1">${esc(fmtSlotRange(slot.start_time, slot.end_time))}</b><span class="tag">${esc(stateLabel)}</span></div>
-          ${action}
-        </div>`;
-        }).join("");
-        return `<div class="book-day"><h3>${esc(prettyDate(day))}</h3>${body}</div>`;
-      }).join("");
-      return noteHtml + cards;
+      return `<div id="memberBook">${memberBookBody(board)}</div>`;
     }
     function renderHome() {
       refreshBookBadge();
@@ -3169,6 +3385,10 @@
         shareCtx.histMonth = ymOf(today());
         shareCtx.writeDate = today();
         shareCtx.attendWeek = weekStart(today());
+        shareCtx.bookMode = "month";
+        shareCtx.bookCursor = today();
+        shareCtx.bookDay = today();
+        shareCtx.bookBoard = null;
       }
       shareCtx.prevCode = shareCtx.code;
       if (!shareCtx.histDate) shareCtx.histDate = today();
@@ -4372,6 +4592,7 @@
     $("pageBook").addEventListener("input", () => updateBookPreview());
     $("pageBook").addEventListener("change", () => updateBookPreview());
     $("pageBook").addEventListener("click", async (e) => {
+      if (applyBookCalClick(e, "coach")) return;
       const modeBtn = e.target.closest("[data-book-mode]");
       if (modeBtn) {
         document.querySelectorAll("#bookMode button").forEach((b) => b.classList.toggle("on", b === modeBtn));
@@ -4425,6 +4646,7 @@
           }
           await Cloud.openSchedule(startAt.toISOString(), endAt.toISOString());
           alert("시간을 열었습니다. 회원이 공유 링크의 예약 탭에서 신청할 수 있습니다.");
+          focusBookDay(date);
           await renderBook();
           return;
         }
@@ -4441,6 +4663,7 @@
             minutes: Number($("bookMins").value)
           });
           alert(batchSummary(res));
+          focusBookDay(from < today() ? today() : from);
           await renderBook();
           return;
         }
@@ -4448,6 +4671,7 @@
           const date = dayClose ? dayClose.dataset.bookDayClose : $("bookExDate").value;
           if (!date) { alert("날짜를 선택해 주세요."); return; }
           if (!confirm(prettyDate(date) + " 열린 시간을 모두 휴무로 마감할까요?")) return;
+          focusBookDay(date);
           const res = await runDayOverride({ date, mode: "closed", minutes: 60 });
           if (res) {
             alert(res.closed + "개 시간을 마감했습니다.");
@@ -4460,6 +4684,7 @@
           const start = $("bookExStart").value;
           const end = $("bookExEnd").value;
           if (!date || !start || !end || end <= start) { alert("예외 날짜와 시간을 확인해 주세요."); return; }
+          focusBookDay(date);
           const res = await runDayOverride({
             date, mode: "hours", start, end, minutes: Number($("bookExMins").value)
           });
@@ -4537,6 +4762,7 @@
       if (e.target && e.target.id === "shareWriteDate") await refreshShareWritePreview();
     });
     $("pageShare").addEventListener("click", async (e) => {
+      if (applyBookCalClick(e, "member")) return;
       const slotBook = e.target.closest("[data-slot-book]");
       const slotCancel = e.target.closest("[data-slot-cancel]");
       const memberRead = e.target.closest("[data-member-book-read]");
