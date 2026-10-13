@@ -854,6 +854,38 @@
     return data;
   };
 
+  Cloud.publicBookingBoard = async function (tokens) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.rpc("public_booking_board", { p_tokens: tokens || [] });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.publicBookSlot = async function (scheduleId, name, contact) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.rpc("public_book_slot", {
+      p_schedule_id: scheduleId,
+      p_name: name,
+      p_contact: contact
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.publicClaimBookings = async function (name, contact) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.rpc("public_claim_bookings", { p_name: name, p_contact: contact });
+    if (error) throw error;
+    return data;
+  };
+
+  Cloud.publicCancelReservation = async function (token) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    const { data, error } = await Cloud.sb.rpc("public_cancel_reservation", { p_token: token });
+    if (error) throw error;
+    return data;
+  };
+
   Cloud.cancelReservation = async function (share, reservationId) {
     if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
     const { data, error } = await Cloud.sb.rpc("cancel_reservation", {

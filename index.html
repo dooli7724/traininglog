@@ -13,6 +13,9 @@
       if (/client-view=|#share\/|#sync\/|#reserve\//.test(q) || /\/client-view/.test(location.pathname)) {
         document.documentElement.dataset.client = "1";
       }
+      if (/[?&]reserve=1/.test(location.search) || /\/reserve\/?$/.test(location.pathname)) {
+        document.documentElement.dataset.reserve = "1";
+      }
     })();
   </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
@@ -347,7 +350,25 @@
     .book-cal .tl-head button.tl-dayhead.holiday,
     .book-cal .tl-head button.tl-dayhead.sun b,
     .book-cal .tl-head button.tl-dayhead.holiday b { color: var(--danger); }
+    .book-cal .tl-block, .book-cal .tl-dayhead, .book-cal .book-cell, .reserve-slot, .reserve-day {
+      touch-action: manipulation; cursor: pointer;
+    }
     .book-cal .tl-block { cursor: pointer; }
+    .reserve-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 8px 0; }
+    .reserve-day {
+      min-height: 52px; border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+      font-weight: 800; font-size: .78rem; padding: 6px 2px;
+    }
+    .reserve-day.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .reserve-day small { display: block; font-size: .62rem; font-weight: 800; opacity: .8; }
+    .reserve-slot { width: 100%; }
+    .reserve-mobile { display: none; }
+    @media (max-width: 859px) {
+      .reserve-cal .book-week-scroll { display: none; }
+      .reserve-mobile { display: block; }
+    }
+    body.reserve-public { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+    body.reserve-public .tabbar, body.reserve-public .client-nav { display: none !important; }
     .book-cal .tl-block.open { background: #0055FF; }
     .book-cal .tl-block.full { background: #00C853; }
     .book-cal .tl-block.wait { background: #FF8A00; }
@@ -844,6 +865,10 @@
       <h1>수업 예약</h1>
       <p>시간을 열면 회원이 확정 또는 대기로 신청합니다</p>
     </div>
+    <div id="barReserve" class="hidden">
+      <h1>PT 수업 예약</h1>
+      <p>로그인 없이 빈 시간을 눌러 이름과 연락처로 예약합니다</p>
+    </div>
   </header>
 
   <main>
@@ -919,8 +944,8 @@
           <button class="btn" id="logClientLinkWide" type="button">공유</button>
           <button class="btn soft" id="logShareWide" type="button">이 날 일지 공유</button>
         </div>
-        <button class="btn soft wide" id="logReserveWide" type="button">예약 링크</button>
-        <p class="hint">공유는 회원 기록 페이지입니다. 예약 링크는 로그인 없이 수업 예약·대기만 하는 화면입니다.</p>
+        <button class="btn soft wide" id="logReserveWide" type="button">공통 예약 링크</button>
+        <p class="hint">공유는 이 회원 기록 페이지입니다. 공통 예약 링크는 모든 회원이 이름과 연락처로 예약하는 화면입니다.</p>
       </div>
     </section>
 
@@ -1049,8 +1074,8 @@
         <button class="acc-h" type="button">수업 운동 기록 <span class="arr">▾</span></button>
         <div class="acc-b">
           <button class="btn wide" id="shareMember" type="button" style="margin-bottom:8px">공유</button>
-          <button class="btn soft wide" id="shareReserve" type="button" style="margin-bottom:10px">예약 링크</button>
-          <p class="hint" style="margin-top:0">공유는 기록 페이지, 예약 링크는 로그인 없이 수업만 신청하는 화면입니다.</p>
+          <button class="btn soft wide" id="shareReserve" type="button" style="margin-bottom:10px">공통 예약 링크</button>
+          <p class="hint" style="margin-top:0">공유는 이 회원 기록 페이지입니다. 예약은 회원 구분 없이 같은 예약 링크로 받습니다.</p>
           <div id="workoutList"></div>
         </div>
       </div>
@@ -1073,6 +1098,10 @@
     </section>
 
     <section id="pageShare" class="page hidden"><div id="shareBody"></div></section>
+
+    <section id="pageReserve" class="page hidden">
+      <div id="reserveRoot"></div>
+    </section>
 
     <section id="pageBook" class="page hidden">
       <div id="bookNotices"></div>
@@ -1155,6 +1184,16 @@
     <button type="button" data-client-tab="write"><span class="ico">✎</span>기록 작성</button>
     <button type="button" data-client-tab="book"><span class="ico">◷</span>예약<span class="nav-badge hidden" id="clientBookBadge"></span></button>
   </nav>
+
+  <div id="reserveSheetBg" class="modal-bg hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reserveSheetTitle">
+      <div class="row">
+        <h2 id="reserveSheetTitle" style="flex:1;margin:0">시간</h2>
+        <button class="btn soft hdr-btn" id="reserveSheetClose" type="button">닫기</button>
+      </div>
+      <div id="reserveSheetBody"></div>
+    </div>
+  </div>
 
   <nav class="tabbar">
     <button type="button" data-tab="home" class="on"><span class="ico">⌂</span>홈</button>
@@ -1935,6 +1974,8 @@
       show("pageDetail", next === "detail"); show("barDetail", next === "detail");
       show("pageShare", next === "share"); show("barShare", next === "share");
       show("pageBook", next === "book"); show("barBook", next === "book");
+      show("pageReserve", false); show("barReserve", false);
+      document.body.classList.remove("reserve-public");
       document.querySelectorAll(".tabbar button").forEach((b) => {
         b.classList.toggle("on", b.dataset.tab === (next === "detail" ? "members" : next));
       });
@@ -2005,7 +2046,7 @@
     function bookingErr(err) {
       let msg = (err && (err.message || err.details || err.error_description)) || "예약 처리에 실패했습니다.";
       msg = String(msg).replace(/^[\w.]+:\s*/, "");
-      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule|move_schedule|delete_schedule/i.test(msg)) {
+      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule|move_schedule|delete_schedule|public_book_slot|public_booking_board|public_claim_bookings|public_cancel_reservation/i.test(msg)) {
         return "예약 기능이 아직 데이터베이스에 없습니다. Supabase SQL Editor에서 reservation_migration.sql 만 실행해 주세요.";
       }
       return msg;
@@ -2051,10 +2092,10 @@
       const waiting = people.filter((r) => r.status === "waiting").sort((a, b) => a.waiting_order - b.waiting_order);
       const rows = [];
       if (confirmed) {
-        rows.push(`<div class="book-person"><b>확정</b><span>${esc(confirmed.name || "회원")}</span><button class="btn danger" type="button" data-book-cancel="${esc(confirmed.id)}">취소</button></div>`);
+        rows.push(`<div class="book-person"><b>확정</b><span>${esc(confirmed.name || "회원")}${confirmed.contact ? " · " + esc(confirmed.contact) : ""}</span><button class="btn danger" type="button" data-book-cancel="${esc(confirmed.id)}">취소</button></div>`);
       }
       waiting.forEach((w) => {
-        rows.push(`<div class="book-person"><b>대기 ${w.waiting_order}</b><span>${esc(w.name || "회원")}</span><button class="btn danger" type="button" data-book-cancel="${esc(w.id)}">취소</button></div>`);
+        rows.push(`<div class="book-person"><b>대기 ${w.waiting_order}</b><span>${esc(w.name || "회원")}${w.contact ? " · " + esc(w.contact) : ""}</span><button class="btn danger" type="button" data-book-cancel="${esc(w.id)}">취소</button></div>`);
       });
       if (!rows.length && slot.status !== "closed") rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
       if (slot.status === "closed") rows.push('<p class="hint" style="margin:6px 0 0">마감된 칸입니다. 오픈 취소를 누르면 기록이 삭제되고 오픈 전으로 돌아갑니다.</p>');
@@ -2165,11 +2206,12 @@
     function bookLegendHtml() {
       return `<div class="book-legend"><span><i class="open"></i>빈 시간</span><span><i class="full"></i>예약됨</span><span><i class="wait"></i>대기</span><span><i class="closed"></i>마감</span></div>`;
     }
-    function bookWeekGridHtml(slots, days, member, selected) {
+    function bookWeekGridHtml(slots, days, member, selected, ns) {
       const hours = TL_TO - TL_FROM;
       const head = days.map((iso) => {
         const hol = holidayName(iso);
-        return `<button class="tl-dayhead ${dayHeadClass(iso)}${iso === selected ? " on" : ""}" type="button" data-book-cal-day="${iso}"><b>${Number(iso.slice(8))}</b>${weekdayName(iso)}${hol ? `<span class="hol">${esc(hol)}</span>` : ""}</button>`;
+        const dayAttr = ns ? `data-${ns}-day` : "data-book-cal-day";
+        return `<button class="tl-dayhead ${dayHeadClass(iso)}${iso === selected ? " on" : ""}" type="button" ${dayAttr}="${iso}"><b>${Number(iso.slice(8))}</b>${weekdayName(iso)}${hol ? `<span class="hol">${esc(hol)}</span>` : ""}</button>`;
       }).join("");
       const cols = days.map((iso) => {
         const events = layoutLanes((slots || []).filter((slot) => slotDayKey(slot.start_time) === iso).map((slot) => {
@@ -2192,9 +2234,11 @@
           const clock = new Date(ev.slot.start_time);
           const hm = koClock(String(clock.getHours()).padStart(2, "0") + ":" + String(clock.getMinutes()).padStart(2, "0"));
           const title = member ? memberBlockTitle(ev.slot) : bookBlockTitle(ev.slot);
-          return `<button class="tl-block ${tone}" type="button" data-book-slot="${esc(ev.slot.id)}" style="top:${top};height:${height};left:${left};width:${width}"><small>${esc(hm)}</small><b>${esc(title)}</b></button>`;
+          const slotAttr = ns ? `data-${ns}-slot` : "data-book-slot";
+          return `<button class="tl-block ${tone}" type="button" ${slotAttr}="${esc(ev.slot.id)}" style="top:${top};height:${height};left:${left};width:${width}"><small>${esc(hm)}</small><b>${esc(title)}</b></button>`;
         }).join("");
-        return `<div class="tl-col${iso === selected ? " on" : ""}" data-book-cal-day="${iso}" style="height:calc(${hours} * var(--hour))">${blocks}${nowLineHtml(iso)}</div>`;
+        const colAttr = ns ? `data-${ns}-day` : "data-book-cal-day";
+        return `<div class="tl-col${iso === selected ? " on" : ""}" ${colAttr}="${iso}" style="height:calc(${hours} * var(--hour))">${blocks}${nowLineHtml(iso)}</div>`;
       }).join("");
       return `<div class="book-week-scroll"><div class="tl week">
         <div class="tl-head"><span></span>${head}</div>
@@ -2222,7 +2266,7 @@
         state.day = (t.getFullYear() === next.getFullYear() && t.getMonth() === next.getMonth()) ? today() : state.cursor;
       }
     }
-    function bookCalendarHtml(slots, state, member) {
+    function bookCalendarHtml(slots, state, member, ns) {
       if (!state.cursor) state.cursor = today();
       if (!state.day) state.day = today();
       if (state.mode !== "week" && state.mode !== "month") state.mode = "month";
@@ -2234,7 +2278,7 @@
         const start = weekStart(state.cursor);
         const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
         label = days[0].slice(5).replace("-", "/") + " – " + days[6].slice(5).replace("-", "/");
-        grid = bookWeekGridHtml(slots, days, member, state.day);
+        grid = bookWeekGridHtml(slots, days, member, state.day, ns);
       } else {
         const dt = dateFromIso(state.cursor);
         const yyyy = dt.getFullYear();
@@ -2256,18 +2300,19 @@
           if (iso === state.day) cls.push("on");
           if (isSunday(iso)) cls.push("sun");
           if (hol) cls.push("holiday");
-          return `<button class="${cls.join(" ")}" type="button" data-book-cal-day="${iso}"><b>${Number(iso.slice(8))}</b>${hol ? `<span class="hol">${esc(hol)}</span>` : ""}${bookDotsHtml(flags)}</button>`;
+          const dayAttr = ns ? `data-${ns}-day` : "data-book-cal-day";
+          return `<button class="${cls.join(" ")}" type="button" ${dayAttr}="${iso}"><b>${Number(iso.slice(8))}</b>${hol ? `<span class="hol">${esc(hol)}</span>` : ""}${bookDotsHtml(flags)}</button>`;
         }).join("")}</div>`;
       }
       return `<div class="card book-cal">
         <div class="seg book-cal-mode">
-          <button type="button" data-book-cal="week"${mode === "week" ? ' class="on"' : ""}>주간</button>
-          <button type="button" data-book-cal="month"${mode === "month" ? ' class="on"' : ""}>월간</button>
+          <button type="button" ${ns ? `data-${ns}-cal` : "data-book-cal"}="week"${mode === "week" ? ' class="on"' : ""}>주간</button>
+          <button type="button" ${ns ? `data-${ns}-cal` : "data-book-cal"}="month"${mode === "month" ? ' class="on"' : ""}>월간</button>
         </div>
         <div class="book-cal-nav">
-          <button class="btn soft" type="button" data-book-cal-nav="-1" aria-label="이전">‹</button>
+          <button class="btn soft" type="button" ${ns ? `data-${ns}-nav` : "data-book-cal-nav"}="-1" aria-label="이전">‹</button>
           <h3>${esc(label)}</h3>
-          <button class="btn soft" type="button" data-book-cal-nav="1" aria-label="다음">›</button>
+          <button class="btn soft" type="button" ${ns ? `data-${ns}-nav` : "data-book-cal-nav"}="1" aria-label="다음">›</button>
         </div>
         ${grid}
         ${bookLegendHtml()}
@@ -2280,6 +2325,7 @@
               <button class="btn soft" type="button" data-book-reset="month">${dateFromIso(state.cursor || state.day || today()).getMonth() + 1}월 초기화</button>
             </div>
           </div>
+          <button class="btn soft wide" type="button" id="bookCopyReserve" style="margin-top:8px">공통 예약 링크 복사</button>
           <button class="btn soft wide" type="button" id="bookOpenRepeat" style="margin-top:8px">반복으로 여러 날 열기</button>`}
       </div>`;
     }
@@ -2477,6 +2523,7 @@
       const navBtn = e.target.closest("[data-book-cal-nav]");
       const dayBtn = e.target.closest("[data-book-cal-day]");
       if (!slotBtn && !modeBtn && !navBtn && !dayBtn) return false;
+      if (!takeTap()) return true;
       if (kind === "member") {
         if (!shareCtx.bookBoard) return true;
         const state = {
@@ -2538,7 +2585,8 @@
       box.innerHTML = bookCalendarHtml(slots, bookCal, false);
       if ($("bookDayBg") && !$("bookDayBg").classList.contains("hidden")) renderBookDayModal();
     }
-    async function renderBook() {
+    async function renderBook(opts) {
+      const quiet = !!(opts && opts.quiet);
       const box = $("bookSlots");
       if (!box) return;
       if ($("bookFrom") && !$("bookFrom").value) {
@@ -2551,11 +2599,11 @@
         box.innerHTML = '<div class="empty">클라우드에 연결되어야 예약을 열 수 있습니다.</div>';
         return;
       }
-      box.innerHTML = '<p class="hint">불러오는 중…</p>';
+      if (!quiet) box.innerHTML = '<p class="hint">불러오는 중…</p>';
       try {
         paintBook(await Cloud.bookingBoard(null));
       } catch (err) {
-        box.innerHTML = `<div class="empty">${esc(bookingErr(err))}</div>`;
+        if (!quiet) box.innerHTML = `<div class="empty">${esc(bookingErr(err))}</div>`;
       }
     }
     function memberSlotHtml(slot) {
@@ -2592,8 +2640,14 @@
         cancel_hours: Number(slot.cancel_hours) || 6,
         has_confirmed: !!slot.has_confirmed,
         wait_count: Number(slot.wait_count) || 0,
-        mine: slot.mine && slot.mine.id
-          ? { id: slot.mine.id, status: slot.mine.status, waiting_order: Number(slot.mine.waiting_order) || 0 }
+        mine: slot.mine && (slot.mine.id || slot.mine.token)
+          ? {
+              id: slot.mine.id || "",
+              status: slot.mine.status,
+              waiting_order: Number(slot.mine.waiting_order) || 0,
+              token: slot.mine.token || "",
+              name: slot.mine.name || ""
+            }
           : null
       }));
     }
@@ -2661,6 +2715,180 @@
       shareCtx.bookBoard = board;
       paintBookBadge("clientBookBadge", board && board.unread);
       return `<div id="memberBook">${memberBookBody(board)}</div>`;
+    }
+    let reserveCal = { mode: "week", cursor: "", day: "" };
+    let reserveBoard = { slots: [] };
+    let reserveMountEl = null;
+    let tapGuard = 0;
+    function takeTap() {
+      if (Date.now() - tapGuard < 350) return false;
+      tapGuard = Date.now();
+      return true;
+    }
+    function reserveTokenRows() {
+      try {
+        const rows = JSON.parse(localStorage.getItem("pt-reserve-tokens") || "[]");
+        return Array.isArray(rows) ? rows.filter((row) => row && row.token) : [];
+      } catch (_) { return []; }
+    }
+    function reserveProfile() {
+      try { return JSON.parse(localStorage.getItem("pt-reserve-profile") || "{}") || {}; }
+      catch (_) { return {}; }
+    }
+    function rememberReserve(row) {
+      if (!row || !row.token) return;
+      const rows = reserveTokenRows().filter((x) => x.token !== row.token);
+      rows.unshift({ token: row.token, name: row.name || "", contact: row.contact || "" });
+      localStorage.setItem("pt-reserve-tokens", JSON.stringify(rows.slice(0, 40)));
+      if (row.name) localStorage.setItem("pt-reserve-profile", JSON.stringify({ name: row.name, contact: row.contact || "" }));
+    }
+    function forgetReserve(token) {
+      localStorage.setItem("pt-reserve-tokens", JSON.stringify(reserveTokenRows().filter((x) => x.token !== token)));
+    }
+    function reserveSlotList() {
+      return memberSafeSlots((reserveBoard && reserveBoard.slots) || []);
+    }
+    function reserveMineCards(slots) {
+      const mine = slots.filter((slot) => slot.mine && slot.mine.token);
+      if (!mine.length) return '<p class="hint">이 휴대폰에 저장된 예약이 없습니다. 이름과 연락처로 불러올 수 있습니다.</p>';
+      return mine.map((slot) => {
+        const waiting = slot.mine.status === "waiting";
+        const day = slotDayKey(slot.start_time);
+        const when = prettyDate(day) + " · " + weekdayName(day) + " · " + fmtSlotClock(slot.start_time, slot.end_time);
+        const tag = waiting ? "대기 " + (slot.mine.waiting_order || "") + "순위" : "예약 확정";
+        const hours = Number(slot.cancel_hours) || 6;
+        const action = (waiting || canMemberCancel(slot))
+          ? `<button class="btn danger wide" type="button" data-reserve-cancel="${esc(slot.mine.token)}">${waiting ? "대기 취소" : "예약 취소"}</button>`
+          : `<p class="hint" style="margin-bottom:0">수업 시작 ${hours}시간 전이 지나 취소할 수 없습니다.</p>`;
+        return `<div class="card book-slot"><div class="row"><b style="flex:1">${esc(when)}</b><span class="tag">${esc(tag)}</span></div>${action}</div>`;
+      }).join("");
+    }
+    function reserveDayButtons(slots, day) {
+      const list = bookSlotsOn(slots, day);
+      if (!list.length) return '<div class="empty" style="padding:18px 8px">이 날은 열린 시간이 없습니다.</div>';
+      return list.map((slot) => `<button class="tile reserve-slot" type="button" data-reserve-slot="${esc(slot.id)}"><span><b>${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><small>${esc(memberBlockTitle(slot))}</small></span><span class="chev">›</span></button>`).join("");
+    }
+    function reserveMobileStrip(day) {
+      const start = weekStart(reserveCal.cursor || day || today());
+      const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+      return `<div class="reserve-days">${days.map((iso) => `<button class="reserve-day${iso === day ? " on" : ""}" type="button" data-reserve-day="${iso}"><b>${Number(iso.slice(8))}</b><small>${weekdayName(iso)}</small></button>`).join("")}</div>`;
+    }
+    function reserveFindCard() {
+      const profile = reserveProfile();
+      return `<div class="card">
+        <p class="hint" style="margin-top:0">다른 휴대폰이라면 예약할 때 넣은 이름과 연락처로 내 예약을 불러옵니다.</p>
+        <div class="grid2">
+          <input class="field" id="reserveFindName" placeholder="이름" value="${esc(profile.name || "")}" autocomplete="name" />
+          <input class="field" id="reserveFindContact" placeholder="연락처" value="${esc(profile.contact || "")}" inputmode="tel" autocomplete="tel" />
+        </div>
+        <button class="btn soft wide" type="button" data-reserve-find="1" style="margin-top:8px">내 예약 찾기</button>
+      </div>`;
+    }
+    function paintReserve(mount) {
+      if (!mount) return;
+      const slots = reserveSlotList();
+      if (!reserveCal.cursor) reserveCal.cursor = today();
+      if (!reserveCal.day) reserveCal.day = today();
+      const hours = (slots[0] && slots[0].cancel_hours) || 6;
+      mount.innerHTML = `<div class="card" style="margin-bottom:12px">
+          <p class="hint" style="margin:0">시간을 누르면 이름과 연락처만으로 예약됩니다. 이미 찬 시간은 대기로 신청됩니다.</p>
+          <p class="hint" style="margin:6px 0 0">확정 예약은 수업 시작 ${hours}시간 전까지만 취소할 수 있고, 취소되면 대기 1순위가 자동으로 확정됩니다.</p>
+        </div>
+        <div class="label">내 예약</div>
+        ${reserveMineCards(slots)}
+        ${reserveFindCard()}
+        <div class="label">예약 가능한 시간</div>
+        <div class="reserve-cal">${bookCalendarHtml(slots, reserveCal, true, "reserve")}</div>
+        <div class="reserve-mobile">${reserveCal.mode === "week" ? reserveMobileStrip(reserveCal.day) : ""}</div>
+        <div class="label">${esc(prettyDate(reserveCal.day))} 시간</div>
+        ${reserveDayButtons(slots, reserveCal.day)}`;
+    }
+    async function renderPublicReserve(mount, quiet) {
+      reserveMountEl = mount || reserveMountEl || $("reserveRoot");
+      if (!reserveMountEl) return;
+      if (quiet && $("reserveSheetBg") && !$("reserveSheetBg").classList.contains("hidden")) return;
+      if (quiet && reserveMountEl) {
+        const active = document.activeElement;
+        if (active && reserveMountEl.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName)) return;
+      }
+      if (window.Cloud && !Cloud.sb && Cloud.initClient) await Cloud.initClient();
+      if (!(window.Cloud && Cloud.sb && Cloud.publicBookingBoard)) {
+        reserveMountEl.innerHTML = '<div class="empty">클라우드에 연결되어야 예약할 수 있습니다.</div>';
+        return;
+      }
+      try {
+        reserveBoard = await Cloud.publicBookingBoard(reserveTokenRows().map((row) => row.token)) || { slots: [] };
+        paintReserve(reserveMountEl);
+      } catch (err) {
+        if (!quiet) reserveMountEl.innerHTML = `<div class="empty">${esc(bookingErr(err))}</div>`;
+      }
+    }
+    function closeReserveSheet() {
+      const bg = $("reserveSheetBg");
+      if (bg) bg.classList.add("hidden");
+      document.body.style.overflow = "";
+    }
+    function openReserveSheet(slot) {
+      const bg = $("reserveSheetBg");
+      const title = $("reserveSheetTitle");
+      const body = $("reserveSheetBody");
+      if (!bg || !body || !slot) return;
+      const day = slotDayKey(slot.start_time);
+      const hours = Number(slot.cancel_hours) || 6;
+      if (title) title.textContent = prettyDate(day) + " · " + weekdayName(day) + " " + fmtSlotClock(slot.start_time, slot.end_time);
+      const profile = reserveProfile();
+      const mine = slot.mine;
+      let inner = "";
+      if (mine && mine.token && mine.status === "waiting") {
+        inner = `<p class="hint">대기 ${mine.waiting_order || ""}순위입니다. 앞 순번이 취소되면 자동으로 확정됩니다.</p><button class="btn danger wide" type="button" data-reserve-cancel="${esc(mine.token)}">대기 취소</button>`;
+      } else if (mine && mine.token && mine.status === "confirmed") {
+        inner = canMemberCancel(slot)
+          ? `<p class="hint">예약이 확정되어 있습니다. 수업 시작 ${hours}시간 전까지 취소할 수 있고, 취소하면 대기 1순위가 확정됩니다.</p><button class="btn danger wide" type="button" data-reserve-cancel="${esc(mine.token)}">예약 취소</button>`
+          : `<p class="hint">수업 시작 ${hours}시간 전이 지나 취소할 수 없습니다.</p>`;
+      } else {
+        const wait = !!slot.has_confirmed;
+        const next = Number(slot.wait_count || 0) + 1;
+        inner = `<p class="hint">${wait ? "이미 예약된 시간입니다. 대기 " + next + "순위로 신청합니다." : "비어 있는 시간입니다. 예약하면 바로 확정됩니다."}</p>
+          <label class="cap">이름</label>
+          <input class="field" id="reserveName" placeholder="이름" value="${esc(profile.name || "")}" autocomplete="name" />
+          <label class="cap">연락처</label>
+          <input class="field" id="reserveContact" placeholder="전화번호" value="${esc(profile.contact || "")}" inputmode="tel" autocomplete="tel" />
+          <button class="btn wide" type="button" data-reserve-submit="${esc(slot.id)}" style="margin-top:8px">${wait ? "대기 신청 · " + next + "순위" : "예약 완료"}</button>`;
+      }
+      body.innerHTML = inner;
+      bg.classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+      const name = $("reserveName");
+      if (name) name.focus();
+    }
+    function reserveHandle(el) {
+      if (!el) return;
+      const slotId = el.getAttribute("data-reserve-slot");
+      const day = el.getAttribute("data-reserve-day");
+      const mode = el.getAttribute("data-reserve-cal");
+      const nav = el.getAttribute("data-reserve-nav");
+      if (slotId) {
+        const slot = reserveSlotList().find((s) => s.id === slotId);
+        if (!slot) return;
+        reserveCal.day = slotDayKey(slot.start_time);
+        openReserveSheet(slot);
+        return;
+      }
+      if (day) {
+        reserveCal.day = day;
+        if (reserveCal.mode !== "week") reserveCal.cursor = day;
+        paintReserve(reserveMountEl);
+        return;
+      }
+      if (mode) {
+        reserveCal.mode = mode === "month" ? "month" : "week";
+        paintReserve(reserveMountEl);
+        return;
+      }
+      if (nav) {
+        shiftBookCal(reserveCal, Number(nav));
+        paintReserve(reserveMountEl);
+      }
     }
     function renderHome() {
       refreshBookBadge();
@@ -3291,8 +3519,8 @@
     function clientViewUrl(m) {
       return appBase() + "client-view/?id=" + encodeURIComponent(m.id) + "#share/" + encodeURIComponent(m.share);
     }
-    function reserveUrl(m) {
-      return appBase() + "client-view/?id=" + encodeURIComponent(m.id) + "#reserve/" + encodeURIComponent(m.share);
+    function publicReserveUrl() {
+      return appBase() + "reserve/";
     }
     function logShareUrl(m) {
       return clientViewUrl(m);
@@ -3324,10 +3552,9 @@
       try { await navigator.clipboard.writeText(url); alert("공유 링크를 복사했습니다.\n카톡으로 보내면 회원이 전용 화면으로 접속할 수 있습니다."); }
       catch { prompt("이 링크를 복사하세요", url); }
     }
-    async function copyReserveLink(m) {
-      if (!m) return;
-      const url = reserveUrl(m);
-      try { await navigator.clipboard.writeText(url); alert("예약 링크를 복사했습니다.\n회원이 로그인 없이 수업 예약과 대기를 할 수 있습니다."); }
+    async function copyReserveLink() {
+      const url = publicReserveUrl();
+      try { await navigator.clipboard.writeText(url); alert("공통 예약 링크를 복사했습니다.\n모든 회원이 로그인 없이 이 주소에서 예약할 수 있습니다.\n" + url); }
       catch { prompt("이 링크를 복사하세요", url); }
     }
     let shareCtx = { code: "", meal: "점심", view: "today", histMonth: "", histDate: "", writeDate: "", attendWeek: "" };
@@ -3693,7 +3920,6 @@
           : shareCtx.view === "write" ? "기록 작성하기"
           : "오늘 종합 기록";
       }
-      const bookingHtml = await memberBookingHtml(shareCtx.code);
       const goal = profile.goal ? `<div class="share-goal"><span>목표</span><b>${esc(profile.goal)}</b></div>` : "";
       const chart = body.length
         ? `<div class="legend">
@@ -3786,9 +4012,10 @@
         </div>
 
         <div class="share-panel${shareCtx.view === "book" ? " on" : ""}" data-panel="book">
-          ${bookingHtml}
+          <div id="memberReserve"></div>
         </div>`;
       bindDietPreview("shareDietFile", "shareDietPreview");
+      if ($("memberReserve")) await renderPublicReserve($("memberReserve"));
     }
     function openModal(id) {
       editingId = id || null;
@@ -4875,6 +5102,10 @@
         closeBookDay();
         return;
       }
+      if (e.target.closest("#bookCopyReserve")) {
+        copyReserveLink();
+        return;
+      }
       if (e.target.closest("#bookOpenRepeat")) {
         if (!bookCal.day) bookCal.day = today();
         openBookDay(true);
@@ -5541,6 +5772,33 @@
       }
       const opened = await openShare();
       if (!opened) setTab(tab && tab !== "share" ? tab : "home");
+      watchCoachBookings();
+    }
+    function watchCoachBookings() {
+      if (!window.Cloud || !Cloud.sb || !Cloud.user || Cloud._bookChannel) return;
+      Cloud._bookChannel = Cloud.sb.channel("pt-book-" + Cloud.user.id)
+        .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => {
+          if (tab === "book") renderBook({ quiet: true });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "schedules" }, () => {
+          if (tab === "book") renderBook({ quiet: true });
+        })
+        .subscribe();
+    }
+    function isPublicReserve() {
+      return document.documentElement.dataset.reserve === "1"
+        || new URLSearchParams(location.search).get("reserve") === "1"
+        || /\/reserve\/?$/.test(location.pathname || "");
+    }
+    async function openPublicReserve() {
+      document.body.classList.add("reserve-public");
+      document.body.classList.remove("share", "portal", "client");
+      showAuthGate(false);
+      ["pageHome", "pageLog", "pageMembers", "pageDetail", "pageShare", "pageBook"].forEach((id) => show(id, false));
+      ["barHome", "barLog", "barMembers", "barDetail", "barShare", "barBook"].forEach((id) => show(id, false));
+      show("pageReserve", true);
+      show("barReserve", true);
+      await renderPublicReserve($("reserveRoot"));
     }
     if (window.Cloud) Cloud.attach({
       getState: () => state,
@@ -5563,7 +5821,91 @@
       shares: () => (state.members || []).map((m) => m.share),
       onRecovery: () => showNewPassForm()
     });
+    let reservePointer = null;
+    document.addEventListener("pointerdown", (e) => {
+      const el = e.target.closest("[data-reserve-slot], [data-reserve-day], [data-reserve-cal], [data-reserve-nav], [data-book-slot], [data-book-cal-day], [data-book-cal], [data-book-cal-nav]");
+      reservePointer = el ? { id: e.pointerId, x: e.clientX, y: e.clientY, el } : null;
+    });
+    document.addEventListener("pointerup", (e) => {
+      if (!reservePointer || reservePointer.id !== e.pointerId) return;
+      const start = reservePointer;
+      reservePointer = null;
+      if (Math.abs(e.clientX - start.x) > 14 || Math.abs(e.clientY - start.y) > 14) return;
+      if (start.el.closest("[data-reserve-slot], [data-reserve-day], [data-reserve-cal], [data-reserve-nav]")) {
+        if (takeTap()) reserveHandle(start.el);
+        return;
+      }
+      if (start.el.closest("#pageBook")) applyBookCalClick({ target: start.el }, "coach");
+      else if (start.el.closest("#pageShare")) applyBookCalClick({ target: start.el }, "member");
+    });
+    document.addEventListener("click", async (e) => {
+      if (e.target.id === "reserveSheetBg" || e.target.closest("#reserveSheetClose")) {
+        closeReserveSheet();
+        return;
+      }
+      const navEl = e.target.closest("[data-reserve-slot], [data-reserve-day], [data-reserve-cal], [data-reserve-nav]");
+      if (navEl) {
+        if (takeTap()) reserveHandle(navEl);
+        return;
+      }
+      const findBtn = e.target.closest("[data-reserve-find]");
+      const submit = e.target.closest("[data-reserve-submit]");
+      const cancel = e.target.closest("[data-reserve-cancel]");
+      const btn = findBtn || submit || cancel;
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        if (findBtn) {
+          const name = ($("reserveFindName") && $("reserveFindName").value || "").trim();
+          const contact = ($("reserveFindContact") && $("reserveFindContact").value || "").trim();
+          const rows = await Cloud.publicClaimBookings(name, contact);
+          const list = Array.isArray(rows) ? rows : [];
+          if (!list.length) { alert("일치하는 예약이 없습니다."); return; }
+          list.forEach((row) => rememberReserve(row));
+          alert(list.length + "건의 예약을 불러왔습니다.");
+          closeReserveSheet();
+          await renderPublicReserve(reserveMountEl);
+          return;
+        }
+        if (submit) {
+          const name = ($("reserveName") && $("reserveName").value || "").trim();
+          const contact = ($("reserveContact") && $("reserveContact").value || "").trim();
+          if (!name || contact.replace(/[\s-]/g, "").length < 4) { alert("이름과 연락처를 입력해 주세요."); return; }
+          const res = await Cloud.publicBookSlot(submit.dataset.reserveSubmit, name, contact);
+          rememberReserve(res);
+          alert(res && res.status === "waiting"
+            ? "대기 " + res.waiting_order + "순위로 신청했습니다. 앞 순번이 취소되면 자동으로 확정됩니다."
+            : "예약이 완료되었습니다.");
+          closeReserveSheet();
+          await renderPublicReserve(reserveMountEl);
+          return;
+        }
+        const waiting = (cancel.textContent || "").indexOf("대기") >= 0;
+        if (!confirm(waiting ? "대기를 취소할까요?" : "예약을 취소할까요? 확정 예약이면 대기 1순위가 자동으로 확정됩니다.")) return;
+        await Cloud.publicCancelReservation(cancel.dataset.reserveCancel);
+        forgetReserve(cancel.dataset.reserveCancel);
+        alert("취소했습니다.");
+        closeReserveSheet();
+        await renderPublicReserve(reserveMountEl);
+      } catch (err) {
+        alert(bookingErr(err));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    setInterval(() => {
+      if (document.hidden) return;
+      const memberBook = $("memberReserve") && !$("pageShare").classList.contains("hidden") && shareCtx.view === "book";
+      if (document.body.classList.contains("reserve-public") || memberBook) {
+        renderPublicReserve(reserveMountEl, true);
+      }
+      if (tab === "book") renderBook({ quiet: true });
+    }, 12000);
     window.addEventListener("hashchange", async () => {
+      if (isPublicReserve()) {
+        await openPublicReserve();
+        return;
+      }
       if (isMemberLink()) {
         await openMemberDashboard();
         return;
@@ -5577,6 +5919,11 @@
       if (tab === "share") setTab("home");
     });
     (async () => {
+      if (isPublicReserve()) {
+        if (window.Cloud) await Cloud.init();
+        await openPublicReserve();
+        return;
+      }
       if (isMemberLink()) {
         if (window.Cloud) await Cloud.init();
         await openMemberDashboard();

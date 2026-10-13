@@ -6,6 +6,8 @@
   "outputDirectory": ".",
   "rewrites": [
     { "source": "/client-view", "destination": "/client-view/index.html" },
-    { "source": "/client-view/", "destination": "/client-view/index.html" }
+    { "source": "/client-view/", "destination": "/client-view/index.html" },
+    { "source": "/reserve", "destination": "/reserve/index.html" },
+    { "source": "/reserve/", "destination": "/reserve/index.html" }
   ]
 }

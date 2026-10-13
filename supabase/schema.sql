@@ -694,6 +694,8 @@ create table if not exists public.reservations (
   client_id text not null,
   member_share text not null default '',
   member_name text not null default '',
+  contact text not null default '',
+  cancel_token text,
   status text not null check (status in ('confirmed', 'waiting', 'cancelled')),
   waiting_order int not null default 0,
   created_at timestamptz not null default timezone('utc'::text, now()),
@@ -702,6 +704,8 @@ create table if not exists public.reservations (
 
 alter table public.reservations add column if not exists member_share text not null default '';
 alter table public.reservations add column if not exists member_name text not null default '';
+alter table public.reservations add column if not exists contact text not null default '';
+alter table public.reservations add column if not exists cancel_token text;
 alter table public.reservations add column if not exists cancelled_at timestamptz;
 
 create table if not exists public.booking_notices (
@@ -725,6 +729,9 @@ create unique index if not exists reservations_one_active_per_client
   on public.reservations (schedule_id, client_id)
   where status in ('confirmed', 'waiting');
 create index if not exists booking_notices_coach_idx on public.booking_notices (coach_id, created_at desc);
+create unique index if not exists reservations_cancel_token_idx
+  on public.reservations (cancel_token)
+  where cancel_token is not null;
 create index if not exists booking_notices_member_idx on public.booking_notices (member_share, created_at desc);
 
 alter table public.schedules enable row level security;
@@ -1516,6 +1523,7 @@ begin
             ''id'', r.id,
             ''client_id'', r.client_id,
             ''name'', r.member_name,
+            ''contact'', r.contact,
             ''status'', r.status,
             ''waiting_order'', r.waiting_order
           ) order by case r.status when ''confirmed'' then 0 when ''waiting'' then 1 else 2 end, r.waiting_order, r.created_at)
@@ -1756,9 +1764,275 @@ begin
 end;
 ';
 
+create or replace function public.public_booking_board(p_tokens text[])
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as '
+declare
+  tokens text[] := coalesce(p_tokens, array[]::text[]);
+  slots jsonb;
+begin
+  if cardinality(tokens) > 40 then
+    tokens := tokens[1:40];
+  end if;
+  select coalesce(jsonb_agg(x.slot order by x.start_time), ''[]''::jsonb)
+    into slots
+  from (
+    select s.start_time,
+      jsonb_build_object(
+        ''id'', s.id,
+        ''start_time'', s.start_time,
+        ''end_time'', s.end_time,
+        ''status'', s.status,
+        ''cancel_hours'', s.cancel_hours,
+        ''has_confirmed'', exists (
+          select 1 from public.reservations r
+          where r.schedule_id = s.id and r.status = ''confirmed''
+        ),
+        ''wait_count'', (
+          select count(*) from public.reservations r
+          where r.schedule_id = s.id and r.status = ''waiting''
+        ),
+        ''mine'', (
+          select jsonb_build_object(
+            ''id'', r.id,
+            ''status'', r.status,
+            ''waiting_order'', r.waiting_order,
+            ''token'', r.cancel_token,
+            ''name'', r.member_name
+          )
+          from public.reservations r
+          where r.schedule_id = s.id
+            and r.cancel_token = any (tokens)
+            and r.status in (''confirmed'', ''waiting'')
+          limit 1
+        )
+      ) as slot
+    from public.schedules s
+    where s.status <> ''closed''
+      and s.end_time > now()
+  ) x;
+  return jsonb_build_object(''role'', ''public'', ''slots'', slots);
+end;
+';
+
+create or replace function public.public_book_slot(p_schedule_id uuid, p_name text, p_contact text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as '
+declare
+  slot public.schedules%rowtype;
+  guest_name text := btrim(coalesce(p_name, ''''));
+  guest_contact text := regexp_replace(btrim(coalesce(p_contact, '''')), ''[[:space:]-]'', '''', ''g'');
+  guest_id text;
+  token text;
+  has_confirmed boolean;
+  next_order int;
+  rid uuid;
+  new_status text;
+  label text;
+begin
+  if char_length(guest_name) < 1 or char_length(guest_name) > 30 then
+    raise exception ''이름을 입력해 주세요'';
+  end if;
+  if char_length(guest_contact) < 4 or char_length(guest_contact) > 40 then
+    raise exception ''연락처를 입력해 주세요'';
+  end if;
+  guest_id := ''guest:'' || md5(lower(guest_name) || ''|'' || guest_contact);
+  token := replace(gen_random_uuid()::text || gen_random_uuid()::text, ''-'', '''');
+  select * into slot from public.schedules where id = p_schedule_id for update;
+  if not found then
+    raise exception ''시간을 찾을 수 없습니다'';
+  end if;
+  if slot.status = ''closed'' then
+    raise exception ''마감된 시간입니다'';
+  end if;
+  if slot.start_time <= now() then
+    raise exception ''이미 시작된 수업은 예약할 수 없습니다'';
+  end if;
+  if exists (
+    select 1 from public.reservations r
+    where r.schedule_id = slot.id
+      and r.client_id = guest_id
+      and r.status in (''confirmed'', ''waiting'')
+  ) then
+    raise exception ''이미 이 시간을 예약했거나 대기 중입니다'';
+  end if;
+  select exists (
+    select 1 from public.reservations r
+    where r.schedule_id = slot.id and r.status = ''confirmed''
+  ) into has_confirmed;
+  label := public._slot_label(slot.start_time);
+  if not has_confirmed then
+    new_status := ''confirmed'';
+    next_order := 0;
+    update public.schedules set status = ''booked'' where id = slot.id;
+  else
+    new_status := ''waiting'';
+    select coalesce(max(r.waiting_order), 0) + 1 into next_order
+    from public.reservations r
+    where r.schedule_id = slot.id and r.status = ''waiting'';
+  end if;
+  insert into public.reservations (
+    schedule_id, client_id, member_share, member_name, contact, cancel_token, status, waiting_order
+  ) values (
+    slot.id, guest_id, '''', guest_name, guest_contact, token, new_status, next_order
+  ) returning id into rid;
+  if new_status = ''confirmed'' then
+    perform public._booking_notice(
+      ''coach'', slot.coach_id, guest_id, '''', slot.id, rid,
+      ''booked'', guest_name || '' 님 예약'',
+      label || '' '' || guest_name || '' · '' || guest_contact
+    );
+  else
+    perform public._booking_notice(
+      ''coach'', slot.coach_id, guest_id, '''', slot.id, rid,
+      ''waiting'', guest_name || '' 님 대기 '' || next_order || ''순위'',
+      label || '' '' || guest_name || '' · '' || guest_contact
+    );
+  end if;
+  return jsonb_build_object(
+    ''id'', rid,
+    ''status'', new_status,
+    ''waiting_order'', next_order,
+    ''token'', token,
+    ''name'', guest_name,
+    ''contact'', guest_contact
+  );
+end;
+';
+
+create or replace function public.public_claim_bookings(p_name text, p_contact text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as '
+declare
+  guest_name text := lower(btrim(coalesce(p_name, '''')));
+  guest_contact text := regexp_replace(btrim(coalesce(p_contact, '''')), ''[[:space:]-]'', '''', ''g'');
+  rows jsonb;
+begin
+  if char_length(guest_name) < 1 or char_length(guest_contact) < 4 then
+    raise exception ''이름과 연락처를 입력해 주세요'';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    ''token'', r.cancel_token,
+    ''name'', r.member_name,
+    ''contact'', r.contact,
+    ''status'', r.status,
+    ''waiting_order'', r.waiting_order,
+    ''start_time'', s.start_time,
+    ''end_time'', s.end_time
+  ) order by s.start_time), ''[]''::jsonb)
+    into rows
+  from public.reservations r
+  join public.schedules s on s.id = r.schedule_id
+  where r.status in (''confirmed'', ''waiting'')
+    and r.cancel_token is not null
+    and s.end_time > now()
+    and lower(btrim(r.member_name)) = guest_name
+    and regexp_replace(r.contact, ''[[:space:]-]'', '''', ''g'') = guest_contact;
+  return rows;
+end;
+';
+
+create or replace function public.public_cancel_reservation(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as '
+declare
+  slot public.schedules%rowtype;
+  res public.reservations%rowtype;
+  sid uuid;
+  promoted_id uuid;
+  promoted_name text;
+  promoted_share text;
+  promoted_member text;
+  label text;
+begin
+  if p_token is null or char_length(btrim(p_token)) < 16 then
+    raise exception ''예약 확인 정보가 없습니다'';
+  end if;
+  select r.schedule_id into sid
+  from public.reservations r
+  where r.cancel_token = btrim(p_token);
+  if sid is null then
+    raise exception ''예약을 찾을 수 없습니다'';
+  end if;
+  select * into slot from public.schedules where id = sid for update;
+  if not found then
+    raise exception ''시간을 찾을 수 없습니다'';
+  end if;
+  select * into res
+  from public.reservations
+  where cancel_token = btrim(p_token)
+  for update;
+  if not found or res.status = ''cancelled'' then
+    raise exception ''예약을 찾을 수 없습니다'';
+  end if;
+  if slot.start_time <= now() then
+    raise exception ''이미 시작된 수업은 취소할 수 없습니다'';
+  end if;
+  if res.status = ''confirmed''
+     and slot.start_time - make_interval(hours => coalesce(slot.cancel_hours, 6)) <= now() then
+    raise exception ''%'', format(''수업 시작 %s시간 전까지만 취소할 수 있습니다'', coalesce(slot.cancel_hours, 6));
+  end if;
+  update public.reservations
+  set status = ''cancelled'', waiting_order = 0, cancelled_at = now()
+  where id = res.id;
+  label := public._slot_label(slot.start_time);
+  if res.status = ''confirmed'' and slot.status <> ''closed'' and slot.start_time > now() then
+    select r.id, r.member_name, r.member_share, r.client_id
+      into promoted_id, promoted_name, promoted_share, promoted_member
+    from public.reservations r
+    where r.schedule_id = slot.id
+      and r.status = ''waiting''
+    order by r.waiting_order asc, r.created_at asc
+    limit 1
+    for update;
+    if promoted_id is not null then
+      update public.reservations
+      set status = ''confirmed'', waiting_order = 0
+      where id = promoted_id;
+      perform public._booking_notice(
+        ''coach'', slot.coach_id, promoted_member, promoted_share, slot.id, promoted_id,
+        ''promoted'', promoted_name || '' 님 자동 확정'',
+        label || '' 빈자리로 '' || promoted_name || '' 님이 확정되었습니다.''
+      );
+    end if;
+  end if;
+  perform public._renumber_waitlist(slot.id);
+  if not exists (
+    select 1 from public.reservations r
+    where r.schedule_id = slot.id and r.status = ''confirmed''
+  ) and slot.status = ''booked'' then
+    update public.schedules set status = ''available'' where id = slot.id;
+  end if;
+  perform public._booking_notice(
+    ''coach'', slot.coach_id, res.client_id, res.member_share, slot.id, res.id,
+    ''cancelled'', res.member_name || '' 님 취소'',
+    label || '' 예약이 취소되었습니다.''
+  );
+  return jsonb_build_object(''cancelled_id'', res.id, ''promoted'', promoted_id is not null);
+end;
+';
+
 revoke all on function public.delete_schedules_between(date, date) from public, anon;
 grant execute on function public.delete_schedules_between(date, date) to authenticated;
 grant execute on function public.book_slot(text, uuid) to anon, authenticated;
+grant execute on function public.public_booking_board(text[]) to anon, authenticated;
+grant execute on function public.public_book_slot(uuid, text, text) to anon, authenticated;
+grant execute on function public.public_claim_bookings(text, text) to anon, authenticated;
+grant execute on function public.public_cancel_reservation(text) to anon, authenticated;
 grant execute on function public.cancel_reservation(text, uuid) to anon, authenticated;
 grant execute on function public.booking_board(text) to anon, authenticated;
 grant execute on function public.read_booking_notices(text) to anon, authenticated;
