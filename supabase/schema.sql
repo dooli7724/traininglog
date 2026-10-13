@@ -870,6 +870,12 @@ as '
 declare
   uid uuid := auth.uid();
   sid uuid;
+  local_start timestamp;
+  local_end timestamp;
+  piece record;
+  created int := 0;
+  skipped_past int := 0;
+  skipped_overlap int := 0;
 begin
   if uid is null then
     raise exception ''로그인이 필요합니다'';
@@ -880,89 +886,61 @@ begin
   if p_end - p_start < interval ''15 minutes'' then
     raise exception ''수업은 15분 이상이어야 합니다'';
   end if;
-  if p_start <= now() then
-    raise exception ''이미 지난 시간은 오픈할 수 없습니다'';
+  if p_end - p_start <= interval ''90 minutes'' then
+    if p_start <= now() then
+      raise exception ''이미 지난 시간은 오픈할 수 없습니다'';
+    end if;
+    if exists (
+      select 1 from public.schedules s
+      where s.coach_id = uid
+        and s.status <> ''closed''
+        and s.start_time < p_end
+        and s.end_time > p_start
+    ) then
+      raise exception ''이미 겹치는 오픈 시간이 있습니다'';
+    end if;
+    insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
+    values (uid, p_start, p_end, ''available'', 6)
+    returning id into sid;
+    return jsonb_build_object(''id'', sid, ''status'', ''available'', ''created'', 1);
   end if;
-  if exists (
-    select 1 from public.schedules s
-    where s.coach_id = uid
-      and s.status <> ''closed''
-      and s.start_time < p_end
-      and s.end_time > p_start
-  ) then
-    raise exception ''이미 겹치는 오픈 시간이 있습니다'';
-  end if;
-  insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
-  values (uid, p_start, p_end, ''available'', 6)
-  returning id into sid;
-  return jsonb_build_object(''id'', sid, ''status'', ''available'');
-end;
-';
 
-create or replace function public._close_coach_slot(p_schedule_id uuid, p_quiet boolean default false)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as '
-declare
-  uid uuid := auth.uid();
-  slot public.schedules%rowtype;
-  rec record;
-  n int := 0;
-begin
-  if uid is null then
-    raise exception ''로그인이 필요합니다'';
+  local_start := p_start at time zone ''Asia/Seoul'';
+  local_end := p_end at time zone ''Asia/Seoul'';
+  if local_start::date <> local_end::date then
+    raise exception ''하루 안에서만 열 수 있습니다'';
   end if;
-  select * into slot from public.schedules where id = p_schedule_id for update;
-  if not found then
-    raise exception ''시간을 찾을 수 없습니다'';
-  end if;
-  if slot.coach_id <> uid then
-    raise exception ''본인이 연 시간만 마감할 수 있습니다'';
-  end if;
-  if slot.status = ''closed'' then
-    return;
-  end if;
-  update public.schedules set status = ''closed'' where id = slot.id;
-  for rec in
-    select * from public.reservations
-    where schedule_id = slot.id and status in (''confirmed'', ''waiting'')
-    for update
+  for piece in
+    select * from public._slot_grid(local_start::date, local_start::time, local_end::time, 60)
   loop
-    n := n + 1;
-    update public.reservations
-    set status = ''cancelled'', waiting_order = 0, cancelled_at = now()
-    where id = rec.id;
-    perform public._booking_notice(
-      ''member'', slot.coach_id, rec.client_id, rec.member_share, slot.id, rec.id,
-      ''closed'', ''수업 시간이 마감되었습니다'',
-      public._slot_label(slot.start_time) || '' 수업이 마감되어 예약이 취소되었습니다.''
-    );
+    if piece.is_past then
+      skipped_past := skipped_past + 1;
+    elsif exists (
+      select 1 from public.schedules s
+      where s.coach_id = uid
+        and s.status <> ''closed''
+        and s.start_time < piece.slot_end
+        and s.end_time > piece.slot_start
+    ) then
+      skipped_overlap := skipped_overlap + 1;
+    else
+      insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
+      values (uid, piece.slot_start, piece.slot_end, ''available'', 6);
+      created := created + 1;
+    end if;
   end loop;
-  if n > 0 or not coalesce(p_quiet, false) then
-    perform public._booking_notice(
-      ''coach'', slot.coach_id, null, null, slot.id, null,
-      ''closed'', ''시간을 마감했습니다'',
-      public._slot_label(slot.start_time) || '' 시간을 마감했습니다.''
-    );
+  if created = 0 then
+    raise exception ''나눌 수 있는 시간이 없습니다'';
   end if;
+  return jsonb_build_object(
+    ''created'', created,
+    ''skipped_past'', skipped_past,
+    ''skipped_overlap'', skipped_overlap,
+    ''status'', ''available''
+  );
 end;
 ';
 
-create or replace function public.close_schedule(p_schedule_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as '
-begin
-  perform public._close_coach_slot(p_schedule_id, false);
-  return jsonb_build_object(''id'', p_schedule_id, ''status'', ''closed'');
-end;
-';
-
--- 한국 시간 기준. 수업 길이만큼 잘라 미래 슬롯만 후보로 돌려줍니다.
 create or replace function public._slot_grid(p_date date, p_start time, p_end time, p_minutes int)
 returns table(slot_start timestamptz, slot_end timestamptz, is_past boolean)
 language plpgsql
@@ -974,6 +952,8 @@ declare
   day_end timestamp;
   s timestamptz;
   e timestamptz;
+  lesson_minutes int;
+  step_minutes int;
 begin
   if p_minutes not in (30, 50, 60, 90) then
     raise exception ''수업 길이는 30, 50, 60, 90분 중에서 고르세요'';
@@ -981,19 +961,21 @@ begin
   if p_start is null or p_end is null or p_end <= p_start then
     raise exception ''종료 시간은 시작 시간보다 뒤여야 합니다'';
   end if;
-  if (p_end - p_start) < make_interval(mins => p_minutes) then
+  lesson_minutes := p_minutes;
+  step_minutes := case when p_minutes = 50 then 60 else p_minutes end;
+  if (p_end - p_start) < make_interval(mins => lesson_minutes) then
     raise exception ''시간 범위가 수업 길이보다 짧습니다'';
   end if;
   cursor_ts := p_date + p_start;
   day_end := p_date + p_end;
-  while cursor_ts + make_interval(mins => p_minutes) <= day_end loop
+  while cursor_ts + make_interval(mins => lesson_minutes) <= day_end loop
     s := cursor_ts at time zone ''Asia/Seoul'';
-    e := (cursor_ts + make_interval(mins => p_minutes)) at time zone ''Asia/Seoul'';
+    e := (cursor_ts + make_interval(mins => lesson_minutes)) at time zone ''Asia/Seoul'';
     slot_start := s;
     slot_end := e;
     is_past := s <= now();
     return next;
-    cursor_ts := cursor_ts + make_interval(mins => p_minutes);
+    cursor_ts := cursor_ts + make_interval(mins => step_minutes);
   end loop;
 end;
 ';
@@ -1625,6 +1607,9 @@ begin
   if p_end - p_start < interval ''15 minutes'' then
     raise exception ''수업은 15분 이상이어야 합니다'';
   end if;
+  if p_end - p_start > interval ''90 minutes'' then
+    raise exception ''한 칸은 90분을 넘길 수 없습니다. 긴 시간은 나누어 열어 주세요'';
+  end if;
   if p_start <= now() then
     raise exception ''이미 지난 시간으로는 옮길 수 없습니다'';
   end if;
@@ -2059,5 +2044,97 @@ do ' begin
   alter publication supabase_realtime add table public.booking_notices;
 exception when duplicate_object then null;
 end ';
+
+create or replace function public.split_long_schedules()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as '
+declare
+  slot public.schedules%rowtype;
+  piece record;
+  rec record;
+  local_start timestamp;
+  local_end timestamp;
+  first_id uuid;
+  new_id uuid;
+  split_n int := 0;
+  moved_n int := 0;
+  n int := 0;
+begin
+  for slot in
+    select * from public.schedules
+    where status <> ''closed''
+      and end_time > now()
+      and end_time - start_time > interval ''90 minutes''
+    order by start_time
+    for update
+  loop
+    local_start := slot.start_time at time zone ''Asia/Seoul'';
+    local_end := slot.end_time at time zone ''Asia/Seoul'';
+    if local_start::date <> local_end::date then
+      continue;
+    end if;
+    first_id := null;
+    for piece in
+      select * from public._slot_grid(local_start::date, local_start::time, local_end::time, 60)
+    loop
+      if piece.is_past then
+        continue;
+      end if;
+      if exists (
+        select 1 from public.schedules s
+        where s.coach_id = slot.coach_id
+          and s.id <> slot.id
+          and s.status <> ''closed''
+          and s.start_time < piece.slot_end
+          and s.end_time > piece.slot_start
+      ) then
+        continue;
+      end if;
+      insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
+      values (slot.coach_id, piece.slot_start, piece.slot_end, ''available'', slot.cancel_hours)
+      returning id into new_id;
+      if first_id is null then
+        first_id := new_id;
+      end if;
+    end loop;
+    if first_id is null then
+      continue;
+    end if;
+    update public.reservations
+    set schedule_id = first_id
+    where schedule_id = slot.id
+      and status in (''confirmed'', ''waiting'');
+    get diagnostics n = row_count;
+    moved_n := moved_n + n;
+    if exists (
+      select 1 from public.reservations r
+      where r.schedule_id = first_id and r.status = ''confirmed''
+    ) then
+      update public.schedules set status = ''booked'' where id = first_id;
+    end if;
+    for rec in
+      select * from public.reservations
+      where schedule_id = first_id and status in (''confirmed'', ''waiting'')
+    loop
+      perform public._booking_notice(
+        ''member'', slot.coach_id, rec.client_id, rec.member_share, first_id, rec.id,
+        ''closed'', ''예약 시간이 1시간으로 정리되었습니다'',
+        public._slot_label(slot.start_time) || '' 부터 이어지던 시간이 나뉘어 '' || public._slot_label((select start_time from public.schedules where id = first_id)) || '' 수업만 예약으로 남았습니다.''
+      );
+    end loop;
+    update public.booking_notices set schedule_id = first_id where schedule_id = slot.id;
+    delete from public.schedules where id = slot.id;
+    split_n := split_n + 1;
+  end loop;
+  return jsonb_build_object(''split'', split_n, ''moved_bookings'', moved_n);
+end;
+';
+
+revoke all on function public.split_long_schedules() from public, anon, authenticated;
+
+select public.split_long_schedules();
 
 notify pgrst, 'reload schema';

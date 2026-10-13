@@ -1126,7 +1126,15 @@
                 <input class="field" id="bookEnd" type="time" value="11:00" aria-label="종료" />
               </div>
             </div>
-            <button class="btn wide" id="bookOpen" type="button">이 시간 오픈</button>
+            <label class="cap">수업 길이</label>
+            <select class="field" id="bookOneMins">
+              <option value="30">30분</option>
+              <option value="50">50분 · 10분 휴식</option>
+              <option value="60" selected>60분</option>
+              <option value="90">90분</option>
+            </select>
+            <p class="hint" id="bookOnePreview" style="margin-top:8px"></p>
+            <button class="btn wide" id="bookOpen" type="button">이 시간대 나누어 열기</button>
             <div id="bookDaySlots"></div>
             <button class="btn danger wide" id="bookDayReset" type="button" data-book-reset="day" style="margin-top:8px">이날 오픈 취소</button>
             <button class="btn soft wide" id="bookExClose" type="button" style="margin-top:8px">이 날 휴무</button>
@@ -1165,7 +1173,7 @@
             <label class="cap">수업 길이</label>
             <select class="field" id="bookMins">
               <option value="30">30분</option>
-              <option value="50">50분</option>
+              <option value="50">50분 · 10분 휴식</option>
               <option value="60" selected>60분</option>
               <option value="90">90분</option>
             </select>
@@ -2409,7 +2417,8 @@
       for (let i = 0; i <= span; i++) {
         const dt = new Date(fy, fm - 1, fd + i);
         if (!dows.includes(dt.getDay())) continue;
-        for (let t = startMin; t + minutes <= endMin; t += minutes) {
+        const step = minutes === 50 ? 60 : minutes;
+        for (let t = startMin; t + minutes <= endMin; t += step) {
           const slot = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), Math.floor(t / 60), t % 60);
           if (slot.getTime() > Date.now()) created += 1;
         }
@@ -2417,8 +2426,27 @@
       const names = ["일", "월", "화", "수", "목", "금", "토"];
       const label = dows.slice().sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b)).map((d) => names[d]).join("·");
       el.textContent = created
-        ? label + " " + start + "–" + end + ", " + minutes + "분 · 앞으로 " + created + "칸"
+        ? label + " " + start + "–" + end + ", " + (minutes === 50 ? "50분 수업 · 정시마다" : minutes + "분") + " · 앞으로 " + created + "칸"
         : "선택한 기간에 앞으로 열 시간이 없습니다.";
+    }
+    function updateOneOpenPreview() {
+      const el = $("bookOnePreview");
+      if (!el) return;
+      const start = $("bookStart") && $("bookStart").value;
+      const end = $("bookEnd") && $("bookEnd").value;
+      const minutes = Number($("bookOneMins") && $("bookOneMins").value) || 60;
+      const step = minutes === 50 ? 60 : minutes;
+      if (!start || !end) { el.textContent = "시작과 종료 시간을 입력해 주세요."; return; }
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      if (endMin - startMin < minutes) { el.textContent = "종료 시간이 수업 길이보다 짧습니다."; return; }
+      let created = 0;
+      for (let t = startMin; t + minutes <= endMin; t += step) created += 1;
+      el.textContent = minutes === 50
+        ? start + "–" + end + "을 정시마다 50분 수업으로 " + created + "칸 엽니다. 칸 사이 10분은 비웁니다."
+        : start + "–" + end + "을 " + minutes + "분씩 " + created + "칸으로 나눕니다. 한 칸만 예약되고 나머지는 그대로 열립니다.";
     }
     function batchSummary(res) {
       const created = Number(res && res.created) || 0;
@@ -2595,6 +2623,7 @@
         $("bookTo").value = month.to;
       }
       updateBookPreview();
+      updateOneOpenPreview();
       if (!(window.Cloud && Cloud.bookingBoard)) {
         box.innerHTML = '<div class="empty">클라우드에 연결되어야 예약을 열 수 있습니다.</div>';
         return;
@@ -5095,8 +5124,8 @@
     $("shareMember").onclick = () => copyClientLink(currentMember());
     $("shareReserve").onclick = () => copyReserveLink(currentMember());
     $("logReserveWide").onclick = () => copyReserveLink(currentMember());
-    $("pageBook").addEventListener("input", () => updateBookPreview());
-    $("pageBook").addEventListener("change", () => updateBookPreview());
+    $("pageBook").addEventListener("input", () => { updateBookPreview(); updateOneOpenPreview(); });
+    $("pageBook").addEventListener("change", () => { updateBookPreview(); updateOneOpenPreview(); });
     $("pageBook").addEventListener("click", async (e) => {
       if (e.target.id === "bookDayBg" || e.target.closest("#bookDayDismiss")) {
         closeBookDay();
@@ -5161,13 +5190,22 @@
           const start = $("bookStart").value;
           const end = $("bookEnd").value;
           if (!date || !start || !end) { alert("날짜와 시간을 입력해 주세요."); return; }
-          const startAt = new Date(date + "T" + start);
-          const endAt = new Date(date + "T" + end);
-          if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
+          const [sh, sm] = start.split(":").map(Number);
+          const [eh, em] = end.split(":").map(Number);
+          if (eh * 60 + em <= sh * 60 + sm) {
             alert("종료 시간은 시작 시간보다 뒤여야 합니다.");
             return;
           }
-          await Cloud.openSchedule(startAt.toISOString(), endAt.toISOString());
+          const minutes = Number($("bookOneMins") && $("bookOneMins").value) || 60;
+          const res = await Cloud.openScheduleRange({
+            from: date,
+            to: date,
+            weekdays: [dateFromIso(date).getDay()],
+            start,
+            end,
+            minutes
+          });
+          alert(batchSummary(res));
           focusBookDay(date);
           await renderBook();
           return;
