@@ -1,5 +1,6 @@
 -- PT Logger multi-tenant schema + RLS
 -- Supabase Dashboard → SQL Editor 에 이 파일 전체를 붙여넣고 Run 하세요.
+-- 함수 본문은 $body$ 로 감쌉니다. $$ 를 쓰면 SQL Editor 가 본문 중간에서 끊어집니다.
 -- 여러 번 실행해도 안전합니다.
 --
 -- 회원·스케줄·수업 일지·체성분은 gym_state.data JSON 안에 들어 있고,
@@ -34,7 +35,7 @@ alter table public.member_logs add column if not exists user_id uuid references 
 alter table public.member_logs add column if not exists member_id text;
 alter table public.member_logs add column if not exists video_url text;
 
-do $$
+do $body$
 declare r record;
 begin
   for r in
@@ -48,7 +49,7 @@ begin
   loop
     execute format('alter table public.member_logs drop constraint %I', r.conname);
   end loop;
-end $$;
+end $body$;
 
 alter table public.member_logs
   add constraint member_logs_kind_check
@@ -89,22 +90,22 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $body$
   select exists (
     select 1 from public.gyms g
     where g.id = p_gym_id and g.owner_id = auth.uid()
   );
-$$;
+$body$;
 
 create or replace function public.own_user(p_user_id uuid)
 returns boolean
 language sql
 stable
-as $$
+as $body$
   select p_user_id is not null and p_user_id = auth.uid();
-$$;
+$body$;
 
-do $$
+do $body$
 declare pol record;
 begin
   for pol in
@@ -115,7 +116,7 @@ begin
   loop
     execute format('drop policy if exists %I on public.%I', pol.policyname, pol.tablename);
   end loop;
-end $$;
+end $body$;
 
 create policy gyms_select on public.gyms
   for select to authenticated
@@ -135,14 +136,14 @@ create policy gyms_delete on public.gyms
 create or replace function public.fill_row_user_id()
 returns trigger
 language plpgsql
-as $$
+as $body$
 begin
   if NEW.user_id is null then
     NEW.user_id := auth.uid();
   end if;
   return NEW;
 end;
-$$;
+$body$;
 
 drop trigger if exists gym_state_fill_user_id on public.gym_state;
 create trigger gym_state_fill_user_id
@@ -187,7 +188,7 @@ returns table (gym_id uuid, data jsonb, rev bigint)
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   gid uuid;
   uid uuid;
@@ -212,14 +213,14 @@ begin
     from public.gym_state s
     where s.gym_id = gid;
 end;
-$$;
+$body$;
 
 create or replace function public.load_trainer_state()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid;
   gid uuid;
@@ -263,14 +264,14 @@ begin
     'logs', coalesce(logs, '[]'::jsonb)
   );
 end;
-$$;
+$body$;
 
 create or replace function public.push_gym_state(p_data jsonb)
 returns bigint
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   gid uuid;
   uid uuid;
@@ -294,14 +295,14 @@ begin
     returning rev into new_rev;
   return coalesce(new_rev, 1);
 end;
-$$;
+$body$;
 
 create or replace function public.upsert_member_logs(p_rows jsonb)
 returns int
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid;
   gid uuid;
@@ -353,14 +354,14 @@ begin
   end loop;
   return n;
 end;
-$$;
+$body$;
 
 create or replace function public.member_public(p_ref text)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   mem jsonb;
   p_share text;
@@ -414,14 +415,14 @@ begin
     'ownerId', oid
   );
 end;
-$$;
+$body$;
 
 create or replace function public.member_upsert_log(p_share text, p_kind text, p_row jsonb)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   gid uuid;
   uid uuid;
@@ -469,14 +470,14 @@ begin
        or public.member_logs.member_id = excluded.member_id;
   return p_row || jsonb_build_object('member_id', mem_id, 'video_url', coalesce(vurl, ''));
 end;
-$$;
+$body$;
 
 create or replace function public.member_delete_log(p_share text, p_id text)
 returns boolean
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   n int;
 begin
@@ -488,7 +489,7 @@ begin
   get diagnostics n = row_count;
   return n > 0;
 end;
-$$;
+$body$;
 
 create or replace view public.member_journal
 with (security_invoker = true) as
@@ -512,13 +513,13 @@ language sql
 stable
 security invoker
 set search_path = public
-as $$
+as $body$
   select l.*
   from public.member_logs l
   where l.member_id = p_member_id
     and auth.uid() is not null
     and (public.own_user(l.user_id) or public.owns_gym(l.gym_id));
-$$;
+$body$;
 
 grant usage on schema public to anon, authenticated, service_role;
 revoke all on public.gyms from anon, public;
@@ -660,15 +661,15 @@ create policy "workout videos auth delete own"
     and split_part(name, '/', 2) = auth.uid()::text
   );
 
-do $$ begin
+do $body$ begin
   alter publication supabase_realtime add table public.gym_state;
 exception when duplicate_object then null;
-end $$;
+end $body$;
 
-do $$ begin
+do $body$ begin
   alter publication supabase_realtime add table public.member_logs;
 exception when duplicate_object then null;
-end $$;
+end $body$;
 
 -- 1:1 수업 오픈 · 예약 · 대기
 -- 회원은 로그인 계정이 없고 공유 링크로 들어오므로 client_id 는 auth.users 가 아니라 회원 id(text) 입니다.
@@ -730,7 +731,7 @@ alter table public.schedules enable row level security;
 alter table public.reservations enable row level security;
 alter table public.booking_notices enable row level security;
 
-do $$
+do $body$
 declare pol record;
 begin
   for pol in
@@ -741,7 +742,7 @@ begin
   loop
     execute format('drop policy if exists %I on public.%I', pol.policyname, pol.tablename);
   end loop;
-end $$;
+end $body$;
 
 create policy schedules_coach_select on public.schedules
   for select to authenticated
@@ -786,7 +787,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $body$
   select
     e->>'id',
     coalesce(nullif(e->>'name', ''), '회원'),
@@ -800,7 +801,7 @@ as $$
     and coalesce(e->>'id', '') <> ''
     and coalesce(e->>'share', '') <> ''
   limit 1;
-$$;
+$body$;
 
 create or replace function public._booking_notice(
   p_audience text,
@@ -817,20 +818,20 @@ returns void
 language sql
 security definer
 set search_path = public
-as $$
+as $body$
   insert into public.booking_notices (
     audience, coach_id, member_id, member_share, schedule_id, reservation_id, kind, title, body
   ) values (
     p_audience, p_coach, p_member_id, p_share, p_schedule, p_reservation, p_kind, p_title, coalesce(p_body, '')
   );
-$$;
+$body$;
 
 create or replace function public._renumber_waitlist(p_schedule uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 begin
   with ranked as (
     select id, row_number() over (order by waiting_order, created_at) as n
@@ -843,22 +844,22 @@ begin
   where r.id = ranked.id
     and r.waiting_order is distinct from ranked.n;
 end;
-$$;
+$body$;
 
 create or replace function public._slot_label(p_start timestamptz)
 returns text
 language sql
 stable
-as $$
+as $body$
   select to_char(p_start at time zone 'Asia/Seoul', 'FMMM/FMDD HH24:MI');
-$$;
+$body$;
 
 create or replace function public.open_schedule(p_start timestamptz, p_end timestamptz)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid := auth.uid();
   sid uuid;
@@ -889,14 +890,14 @@ begin
   returning id into sid;
   return jsonb_build_object('id', sid, 'status', 'available');
 end;
-$$;
+$body$;
 
 create or replace function public._close_coach_slot(p_schedule_id uuid, p_quiet boolean default false)
 returns void
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid := auth.uid();
   slot public.schedules%rowtype;
@@ -940,19 +941,19 @@ begin
     );
   end if;
 end;
-$$;
+$body$;
 
 create or replace function public.close_schedule(p_schedule_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 begin
   perform public._close_coach_slot(p_schedule_id, false);
   return jsonb_build_object('id', p_schedule_id, 'status', 'closed');
 end;
-$$;
+$body$;
 
 -- 한국 시간 기준. 수업 길이만큼 잘라 미래 슬롯만 후보로 돌려줍니다.
 create or replace function public._slot_grid(p_date date, p_start time, p_end time, p_minutes int)
@@ -960,7 +961,7 @@ returns table(slot_start timestamptz, slot_end timestamptz, is_past boolean)
 language plpgsql
 stable
 set search_path = public
-as $$
+as $body$
 declare
   cursor_ts timestamp;
   day_end timestamp;
@@ -988,7 +989,7 @@ begin
     cursor_ts := cursor_ts + make_interval(mins => p_minutes);
   end loop;
 end;
-$$;
+$body$;
 
 create or replace function public.open_schedule_range(
   p_from date,
@@ -1002,7 +1003,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid := auth.uid();
   d date;
@@ -1068,7 +1069,7 @@ begin
     'skipped_overlap', skipped_overlap
   );
 end;
-$$;
+$body$;
 
 create or replace function public.override_schedule_day(
   p_date date,
@@ -1082,7 +1083,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid := auth.uid();
   booked_hit int := 0;
@@ -1208,14 +1209,14 @@ begin
     'cancelled_bookings', booked_hit
   );
 end;
-$$;
+$body$;
 
 create or replace function public.book_slot(p_share text, p_schedule_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   mem record;
   slot public.schedules%rowtype;
@@ -1298,14 +1299,14 @@ begin
 
   return jsonb_build_object('id', rid, 'status', new_status, 'waiting_order', next_order);
 end;
-$$;
+$body$;
 
 create or replace function public.cancel_reservation(p_share text, p_reservation_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid := auth.uid();
   mem record;
@@ -1416,7 +1417,7 @@ begin
     end
   );
 end;
-$$;
+$body$;
 
 create or replace function public.booking_board(p_share text)
 returns jsonb
@@ -1424,7 +1425,7 @@ language plpgsql
 stable
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid := auth.uid();
   mem record;
@@ -1546,14 +1547,14 @@ begin
 
   return jsonb_build_object('role', 'coach', 'unread', unread, 'notices', notes, 'slots', slots);
 end;
-$$;
+$body$;
 
 create or replace function public.read_booking_notices(p_share text)
 returns void
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   uid uuid := auth.uid();
   mem record;
@@ -1577,7 +1578,7 @@ begin
   set read_at = now()
   where audience = 'coach' and coach_id = uid and read_at is null;
 end;
-$$;
+$body$;
 
 revoke all on function public._booking_member(text) from public, anon, authenticated;
 revoke all on function public._booking_notice(text, uuid, text, text, uuid, uuid, text, text, text) from public, anon, authenticated;
@@ -1609,17 +1610,17 @@ grant all on public.schedules to service_role;
 grant all on public.reservations to service_role;
 grant all on public.booking_notices to service_role;
 
-do $$ begin
+do $body$ begin
   alter publication supabase_realtime add table public.schedules;
 exception when duplicate_object then null;
-end $$;
-do $$ begin
+end $body$;
+do $body$ begin
   alter publication supabase_realtime add table public.reservations;
 exception when duplicate_object then null;
-end $$;
-do $$ begin
+end $body$;
+do $body$ begin
   alter publication supabase_realtime add table public.booking_notices;
 exception when duplicate_object then null;
-end $$;
+end $body$;
 
 notify pgrst, 'reload schema';
