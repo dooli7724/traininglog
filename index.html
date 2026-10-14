@@ -254,6 +254,21 @@
     .set-row .field, .set-add .field { min-height: 44px; padding: 8px; text-align: center; font-weight: 700; font-size: 1rem; }
     .set-add { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
     .set-add-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .set-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+    .set-quick button { flex: 1 1 72px; min-height: 40px; padding: 0 6px; font-size: .78rem; }
+    .set-guide {
+      display: block; width: 100%; text-align: left; margin: 0 0 8px; padding: 10px 12px;
+      border: 0; border-radius: 12px; background: var(--accent-soft); color: var(--accent);
+      font-weight: 800; font-size: .84rem;
+    }
+    .sketch-pad { margin-top: 12px; }
+    .sketch-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .sketch-tools button { flex: 1 1 72px; min-height: 36px; padding: 0 8px; font-size: .75rem; }
+    .sketch-tools button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .sketch-canvas, .sketch-view {
+      width: 100%; height: 240px; display: block; border-radius: 12px;
+      border: 1px solid var(--line); background: #fff; touch-action: none; cursor: crosshair;
+    }
     .media { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
     .thumb { width: 76px; height: 76px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); background: var(--bg); position: relative; display: block; }
     .thumb.lg { width: 100%; height: 150px; }
@@ -1416,9 +1431,14 @@
     }
     function normalizeExercise(e) {
       e = e || {};
+      const sketch = e.sketch && typeof e.sketch === "object" ? e.sketch : {};
       return Object.assign({}, e, {
         feedback: e.feedback || "",
-        media: (e.media || []).map((x) => Object.assign({}, x))
+        media: (e.media || []).map((x) => Object.assign({}, x)),
+        sketch: {
+          template: ["blank", "body", "lift"].includes(sketch.template) ? sketch.template : "blank",
+          strokes: Array.isArray(sketch.strokes) ? sketch.strokes : []
+        }
       });
     }
     function normalizeSession(s) {
@@ -1820,13 +1840,28 @@
         video_url: videoUrl
       };
     }
+    function packSketch(sketch) {
+      if (!sketch || typeof sketch !== "object") return null;
+      const template = ["blank", "body", "lift"].includes(sketch.template) ? sketch.template : "blank";
+      const strokes = (Array.isArray(sketch.strokes) ? sketch.strokes : []).slice(0, 80).map((stroke) => {
+        return (stroke || []).slice(0, 500).map((p) => ({
+          x: Math.round(Number(p.x) * 1000) / 1000,
+          y: Math.round(Number(p.y) * 1000) / 1000,
+          p: Math.round((Number(p.p) || 0.5) * 100) / 100
+        })).filter((p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1);
+      }).filter((stroke) => stroke.length);
+      if (!strokes.length && template === "blank") return null;
+      return { template, strokes };
+    }
     function packEx(e) {
+      const sketch = packSketch(e.sketch);
       return {
         id: e.id || "",
         name: e.name,
         feedback: e.feedback || "",
         sets: (e.sets || []).map((st) => ({ id: st.id || "", weight: st.weight, reps: st.reps })),
-        media: (e.media || []).map(packMedia).filter(Boolean)
+        media: (e.media || []).map(packMedia).filter(Boolean),
+        sketch: sketch || undefined
       };
     }
     function packSession(s) {
@@ -2019,6 +2054,29 @@
     }
     function fmtSets(sets) {
       return (sets || []).map((s, i) => (i + 1) + "세트 " + s.weight + "kg × " + s.reps).join(" · ");
+    }
+    function fmtNum(n) {
+      const x = Number(n);
+      if (!Number.isFinite(x)) return "";
+      return String(Math.round(x * 10) / 10);
+    }
+    function lastWeekGuide(m, name, before) {
+      if (!m || !name) return null;
+      const end = before || logDate || today();
+      const start = addDays(end, -7);
+      const dates = Object.keys(m.sessions || {}).filter((d) => d >= start && d < end).sort();
+      for (let i = dates.length - 1; i >= 0; i--) {
+        const ex = ((m.sessions[dates[i]] || {}).exercises || []).find((e) => e.name === name);
+        const sets = (ex && ex.sets) || [];
+        if (sets.length) return { date: dates[i], last: sets[sets.length - 1] };
+      }
+      return null;
+    }
+    function ensureSketch(ex) {
+      if (!ex.sketch || typeof ex.sketch !== "object") ex.sketch = { template: "blank", strokes: [] };
+      if (!["blank", "body", "lift"].includes(ex.sketch.template)) ex.sketch.template = "blank";
+      if (!Array.isArray(ex.sketch.strokes)) ex.sketch.strokes = [];
+      return ex.sketch;
     }
     function show(id, on) { $(id).classList.toggle("hidden", !on); }
     function setTab(next, keep) {
@@ -3208,17 +3266,180 @@
       }
       return parts.join("");
     }
+    function sketchPoint(canvas, ev) {
+      const rect = canvas.getBoundingClientRect();
+      const x = rect.width ? (ev.clientX - rect.left) / rect.width : 0;
+      const y = rect.height ? (ev.clientY - rect.top) / rect.height : 0;
+      const pressure = ev.pressure > 0 && ev.pressure < 1 ? ev.pressure : 0.5;
+      return { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)), p: pressure };
+    }
+    function drawBodyGuide(ctx, w, h) {
+      const cx = w * 0.5;
+      ctx.strokeStyle = "#C5C9CE";
+      ctx.fillStyle = "#F4F6F8";
+      ctx.lineWidth = Math.max(2, w * 0.008);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(cx, h * 0.12, h * 0.055, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, h * 0.175);
+      ctx.lineTo(cx, h * 0.22);
+      ctx.moveTo(w * 0.28, h * 0.28);
+      ctx.quadraticCurveTo(cx, h * 0.22, w * 0.72, h * 0.28);
+      ctx.lineTo(w * 0.66, h * 0.52);
+      ctx.quadraticCurveTo(cx, h * 0.58, w * 0.34, h * 0.52);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(w * 0.3, h * 0.3);
+      ctx.quadraticCurveTo(w * 0.16, h * 0.42, w * 0.22, h * 0.58);
+      ctx.moveTo(w * 0.7, h * 0.3);
+      ctx.quadraticCurveTo(w * 0.84, h * 0.42, w * 0.78, h * 0.58);
+      ctx.moveTo(w * 0.4, h * 0.54);
+      ctx.quadraticCurveTo(w * 0.36, h * 0.74, w * 0.38, h * 0.9);
+      ctx.moveTo(w * 0.6, h * 0.54);
+      ctx.quadraticCurveTo(w * 0.64, h * 0.74, w * 0.62, h * 0.9);
+      ctx.stroke();
+    }
+    function drawLiftGuide(ctx, w, h) {
+      ctx.strokeStyle = "#C5C9CE";
+      ctx.fillStyle = "#F4F6F8";
+      ctx.lineWidth = Math.max(2, w * 0.008);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      const hip = [w * 0.46, h * 0.48];
+      const knee = [w * 0.58, h * 0.68];
+      const ankle = [w * 0.5, h * 0.88];
+      const shoulder = [w * 0.4, h * 0.32];
+      const head = [w * 0.36, h * 0.2];
+      ctx.beginPath();
+      ctx.moveTo(w * 0.22, h * 0.9);
+      ctx.lineTo(w * 0.78, h * 0.9);
+      ctx.moveTo(ankle[0], ankle[1]);
+      ctx.lineTo(knee[0], knee[1]);
+      ctx.lineTo(hip[0], hip[1]);
+      ctx.lineTo(shoulder[0], shoulder[1]);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(head[0], head[1], h * 0.055, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(shoulder[0], shoulder[1] - h * 0.02, w * 0.11, h * 0.028, -0.4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.save();
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(shoulder[0], h * 0.08);
+      ctx.lineTo(shoulder[0], shoulder[1] - h * 0.05);
+      ctx.stroke();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(knee[0], knee[1], h * 0.06, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    }
+    function drawSketch(canvas, sketch) {
+      const width = canvas.clientWidth || canvas.parentElement && canvas.parentElement.clientWidth || 320;
+      const height = canvas.clientHeight || 240;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.round(width * ratio));
+      canvas.height = Math.max(1, Math.round(height * ratio));
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, width, height);
+      if (sketch.template === "body") drawBodyGuide(ctx, width, height);
+      if (sketch.template === "lift") drawLiftGuide(ctx, width, height);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#1C1C1E";
+      ctx.fillStyle = "#1C1C1E";
+      (sketch.strokes || []).forEach((stroke) => {
+        if (stroke.length === 1) {
+          const p = stroke[0];
+          ctx.beginPath();
+          ctx.arc(p.x * width, p.y * height, 1.4 + (Number(p.p) || 0.5) * 1.6, 0, Math.PI * 2);
+          ctx.fill();
+          return;
+        }
+        for (let i = 1; i < stroke.length; i++) {
+          const a = stroke[i - 1];
+          const b = stroke[i];
+          ctx.beginPath();
+          ctx.lineWidth = 1.2 + (Number(b.p) || 0.5) * 3.2;
+          ctx.moveTo(a.x * width, a.y * height);
+          ctx.lineTo(b.x * width, b.y * height);
+          ctx.stroke();
+        }
+      });
+    }
+    function bindSketchPointer(canvas, sketch) {
+      let drawing = null;
+      function local(ev) { return sketchPoint(canvas, ev); }
+      canvas.addEventListener("pointerdown", (ev) => {
+        if (ev.button != null && ev.button !== 0) return;
+        ev.preventDefault();
+        canvas.setPointerCapture(ev.pointerId);
+        const stroke = [local(ev)];
+        sketch.strokes.push(stroke);
+        drawing = { id: ev.pointerId, stroke };
+        drawSketch(canvas, sketch);
+      });
+      canvas.addEventListener("pointermove", (ev) => {
+        if (!drawing || drawing.id !== ev.pointerId) return;
+        ev.preventDefault();
+        const pt = local(ev);
+        const prev = drawing.stroke[drawing.stroke.length - 1];
+        if (prev && Math.hypot(pt.x - prev.x, pt.y - prev.y) < 0.002) return;
+        drawing.stroke.push(pt);
+        drawSketch(canvas, sketch);
+      });
+      function end(ev) {
+        if (!drawing || (ev && drawing.id !== ev.pointerId)) return;
+        drawing = null;
+        if (sketch.strokes.length > 80) sketch.strokes.splice(0, sketch.strokes.length - 80);
+        saveData();
+      }
+      canvas.addEventListener("pointerup", end);
+      canvas.addEventListener("pointercancel", end);
+    }
+    function paintSketches(root) {
+      if (!root) return;
+      root.querySelectorAll("canvas.sketch-canvas, canvas.sketch-view").forEach((canvas) => {
+        const editable = canvas.classList.contains("sketch-canvas");
+        let sketch = null;
+        if (editable) {
+          const ex = findEx(canvas.dataset.sketchEx);
+          if (!ex) return;
+          sketch = ensureSketch(ex);
+        } else {
+          try { sketch = JSON.parse(decodeURIComponent(canvas.dataset.sketch || "")); }
+          catch (_) { return; }
+        }
+        drawSketch(canvas, sketch);
+        if ((canvas.clientWidth || 0) < 20) {
+          requestAnimationFrame(() => drawSketch(canvas, sketch));
+        }
+        if (editable && !canvas.dataset.bound) {
+          canvas.dataset.bound = "1";
+          bindSketchPointer(canvas, sketch);
+        }
+      });
+    }
     async function renderExercises() {
       const m = currentMember(); const s = sessionOf(m); const box = $("exercises");
       if (!s || !s.exercises.length) { box.innerHTML = '<div class="empty">종목을 추가한 뒤 세트를 기록하세요.</div>'; return; }
       const cards = [];
       for (const ex of s.exercises) {
         const prev = prevSets(m, ex.name);
-        const lw = lastWeekSession(m);
-        const lwEx = lw ? (lw.session.exercises || []).find((e) => e.name === ex.name) : null;
+        const guide = lastWeekGuide(m, ex.name, logDate);
         let ref = "";
-        if (prev && prev.sets.length) ref += `<p class="hint">직전(${prettyDate(prev.date)}): ${esc(fmtSets(prev.sets))}</p>`;
-        if (lwEx && lwEx.sets && lwEx.sets.length && (!prev || lw.date !== prev.date)) ref += `<p class="hint">지난주(${prettyDate(lw.date)}): ${esc(fmtSets(lwEx.sets))}</p>`;
+        if (guide) ref += `<button class="set-guide" type="button" data-use-guide="${esc(ex.id)}" data-guide-w="${esc(guide.last.weight)}" data-guide-r="${esc(guide.last.reps)}">지난주 ${esc(prettyDate(guide.date))} 마지막 ${esc(guide.last.weight)}kg × ${esc(guide.last.reps)}회 · 눌러서 입력</button>`;
+        if (prev && prev.sets.length && (!guide || guide.date !== prev.date)) ref += `<p class="hint">직전(${prettyDate(prev.date)}): ${esc(fmtSets(prev.sets))}</p>`;
         const rows = (ex.sets || []).map((st, i) => {
           const pset = prev && prev.sets[i];
           return `<div class="set-row"><div class="set-n">${i + 1}세트</div>
@@ -3228,6 +3449,10 @@
             ${pset ? `<p class="prev">직전 ${pset.weight}kg × ${pset.reps}회</p>` : ""}`;
         }).join("");
         const n = (ex.sets || []).length;
+        const seed = n ? ex.sets[n - 1] : null;
+        const seedW = seed ? fmtNum(seed.weight) : "";
+        const seedR = seed ? fmtNum(seed.reps) : "";
+        const sketch = ensureSketch(ex);
         const open = !logExCollapsed.has(ex.id);
         cards.push(`<article class="acc ex-acc${open ? " open" : ""}" data-ex-acc="${ex.id}">
           <div class="ex-top">
@@ -3242,10 +3467,29 @@
           ${rows || '<div class="empty" style="padding:8px">세트 없음</div>'}
           <div class="set-add">
             <div class="set-add-fields">
-              <input class="field" inputmode="decimal" data-new-w="${ex.id}" placeholder="중량(kg)" />
-              <input class="field" inputmode="numeric" data-new-r="${ex.id}" placeholder="횟수" />
+              <input class="field" inputmode="decimal" data-new-w="${ex.id}" value="${esc(seedW)}" placeholder="중량(kg)" />
+              <input class="field" inputmode="numeric" data-new-r="${ex.id}" value="${esc(seedR)}" placeholder="횟수" />
+            </div>
+            <div class="set-quick">
+              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:w:-2.5">−2.5kg</button>
+              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:w:2.5">+2.5kg</button>
+              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:w:5">+5kg</button>
+              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:r:-1">−1회</button>
+              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:r:1">+1회</button>
+              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:r:5">+5회</button>
             </div>
             <button class="btn wide" type="button" data-add-set="${ex.id}">세트 완료</button></div>
+          <div class="sketch-pad">
+            <div class="label">펜슬 메모</div>
+            <div class="sketch-tools">
+              <button class="btn soft${sketch.template === "blank" ? " on" : ""}" type="button" data-sketch-template="${esc(ex.id)}:blank">빈 노트</button>
+              <button class="btn soft${sketch.template === "body" ? " on" : ""}" type="button" data-sketch-template="${esc(ex.id)}:body">전신</button>
+              <button class="btn soft${sketch.template === "lift" ? " on" : ""}" type="button" data-sketch-template="${esc(ex.id)}:lift">리프팅</button>
+              <button class="btn soft" type="button" data-sketch-clear="${esc(ex.id)}">지우기</button>
+            </div>
+            <canvas class="sketch-canvas" data-sketch-ex="${esc(ex.id)}"></canvas>
+            <p class="hint">애플펜슬이나 손가락으로 통증 부위, 바벨 궤적, 관절 각도를 표시합니다.</p>
+          </div>
           <div class="label" style="margin-top:12px">사진 · 영상</div>
           <div class="media">${await mediaHtml(ex)}</div>
           <div class="add" style="margin:0;flex-wrap:wrap"><label class="btn soft file" style="flex:1">영상 촬영<input type="file" accept="video/*" capture="environment" data-files="${ex.id}" /></label><label class="btn soft file" style="flex:1">앨범에서 첨부<input type="file" accept="image/*,video/*" multiple data-files="${ex.id}" /></label></div>
@@ -3254,6 +3498,7 @@
           </div></article>`);
       }
       box.innerHTML = cards.join("");
+      paintSketches(box);
     }
     function findEx(id) { const s = sessionOf(); return s ? s.exercises.find((e) => e.id === id) : null; }
     let memberFilter = "active";
@@ -3883,7 +4128,10 @@
       const local = memberByShare(shareCtx.code) || memberBy(shareCtx.code);
       const pack = local ? snapshot(local) : (shareCtx.data || {});
       const box = $("shareWritePreview");
-      if (box) box.innerHTML = await dailyComboHtml(date, portal, pack, true);
+      if (box) {
+        box.innerHTML = await dailyComboHtml(date, portal, pack, true);
+        paintSketches(box);
+      }
       const lab = $("shareWritePreviewLabel");
       if (lab) lab.textContent = date === today() ? "오늘 작성분" : prettyDate(date) + " 작성분";
     }
@@ -3959,8 +4207,13 @@
         const sets = (ex.sets || []).map((st, i) => `<div class="set-line"><span>${i + 1}세트</span><b>${esc(st.weight)}kg × ${esc(st.reps)}회</b></div>`).join("");
         const fb = ex.feedback || "";
         const media = await mediaViewHtml(ex);
+        const packedSketch = packSketch(ex.sketch);
+        const sketch = packedSketch
+          ? `<canvas class="sketch-view" data-sketch="${esc(encodeURIComponent(JSON.stringify(packedSketch)))}"></canvas>`
+          : "";
         blocks.push(`<div class="log-ex"><h3>${esc(ex.name)}</h3>${sets || '<p class="hint">세트 없음</p>'}
           ${media}
+          ${sketch}
           ${fb ? `<p class="kv"><span>종목 피드백</span>${esc(fb)}</p>` : ""}</div>`);
       }
       const foot = [
@@ -4070,6 +4323,7 @@
       const pack = await shareViewPack();
       const portal = portalData(shareCtx.code);
       body.innerHTML = await dailyComboHtml(date, portal, pack, false);
+      paintSketches(body);
     }
     function closeDayLog() {
       const bg = $("dayLogBg");
@@ -4119,6 +4373,7 @@
           <p class="hint">프로그램 · 피드백 · 메모 · 종목 세트·피드백은 트레이너가 작성한 내용입니다.</p>
           <div class="label">개인 운동 · 식단</div>
           ${await dailyComboHtml(data.date || today(), portal, pack, false)}`;
+        paintSketches($("shareBody"));
         return;
       }
 
@@ -4227,6 +4482,7 @@
         </div>`;
       bindDietPreview("shareDietFile", "shareDietPreview");
       if ($("memberReserve")) await renderPublicReserve($("memberReserve"));
+      paintSketches($("shareBody"));
     }
     function openModal(id) {
       editingId = id || null;
@@ -4998,6 +5254,56 @@
         if (logExCollapsed.has(id)) logExCollapsed.delete(id); else logExCollapsed.add(id);
         const art = toggle.closest(".ex-acc");
         if (art) art.classList.toggle("open", !logExCollapsed.has(id));
+        if (!logExCollapsed.has(id)) {
+          const canvas = art && art.querySelector("canvas.sketch-canvas");
+          const ex = findEx(id);
+          if (canvas && ex) drawSketch(canvas, ensureSketch(ex));
+        }
+        return;
+      }
+      const bump = e.target.closest("[data-set-bump]");
+      if (bump) {
+        const parts = bump.dataset.setBump.split(":");
+        const exId = parts[0];
+        const kind = parts[1];
+        const delta = Number(parts[2]);
+        const input = document.querySelector(kind === "w" ? `[data-new-w="${exId}"]` : `[data-new-r="${exId}"]`);
+        if (!input || !Number.isFinite(delta)) return;
+        const cur = input.value === "" ? 0 : Number(input.value);
+        const base = Number.isFinite(cur) ? cur : 0;
+        const next = Math.max(0, Math.round((base + delta) * 10) / 10);
+        input.value = fmtNum(next);
+        return;
+      }
+      const guideBtn = e.target.closest("[data-use-guide]");
+      if (guideBtn) {
+        const exId = guideBtn.dataset.useGuide;
+        const w = document.querySelector(`[data-new-w="${exId}"]`);
+        const r = document.querySelector(`[data-new-r="${exId}"]`);
+        if (w) w.value = fmtNum(guideBtn.dataset.guideW);
+        if (r) r.value = fmtNum(guideBtn.dataset.guideR);
+        return;
+      }
+      const templateBtn = e.target.closest("[data-sketch-template]");
+      if (templateBtn) {
+        const splitAt = templateBtn.dataset.sketchTemplate.lastIndexOf(":");
+        const exId = templateBtn.dataset.sketchTemplate.slice(0, splitAt);
+        const template = templateBtn.dataset.sketchTemplate.slice(splitAt + 1);
+        const ex = findEx(exId);
+        if (!ex) return;
+        ensureSketch(ex).template = template;
+        saveData();
+        await renderExercises();
+        return;
+      }
+      const clearBtn = e.target.closest("[data-sketch-clear]");
+      if (clearBtn) {
+        const ex = findEx(clearBtn.dataset.sketchClear);
+        if (!ex) return;
+        ensureSketch(ex).strokes = [];
+        saveData();
+        const canvas = document.querySelector(`[data-sketch-ex="${ex.id}"]`);
+        if (canvas) drawSketch(canvas, ex.sketch);
         return;
       }
       const addSet = e.target.closest("[data-add-set]");
