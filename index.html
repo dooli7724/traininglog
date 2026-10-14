@@ -402,6 +402,20 @@
     .book-dots i.closed, .book-legend i.closed { background: #8E8E93; }
     .book-cell.on .book-dots i.closed, .home-day.on .book-dots i.closed { background: #E6E6E6; }
     .book-edit { margin-top: 8px; }
+    .assign-row { display: flex; gap: 8px; align-items: center; }
+    .assign-row .field { flex: 1; min-width: 0; }
+    .assign-row .btn { flex-shrink: 0; min-height: 48px; padding: 0 12px; font-size: .78rem; }
+    .assign-list {
+      margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+      max-height: 220px; overflow: auto;
+    }
+    .assign-list button {
+      width: 100%; display: block; text-align: left; border: 0; border-bottom: 1px solid var(--line);
+      background: #fff; padding: 10px 12px; min-height: 48px;
+    }
+    .assign-list button:last-child { border-bottom: 0; }
+    .assign-list b { display: block; font-weight: 800; }
+    .assign-list small { display: block; color: var(--muted); font-size: .75rem; font-weight: 600; }
     #bookDaySlots { margin-top: 12px; }
     #bookDayBg { z-index: 46; align-items: flex-end; }
     @media (min-width: 720px) {
@@ -1258,7 +1272,11 @@
           </div>
           <div id="bookSeries" class="hidden">
             <label class="cap">회원</label>
-            <input class="field" id="seriesName" placeholder="회원 이름" autocomplete="name" />
+            <div class="assign-row">
+              <input class="field" id="seriesName" placeholder="회원 이름" autocomplete="name" />
+              <button class="btn soft" id="seriesPick" type="button">회원 목록</button>
+            </div>
+            <div id="seriesPickList" class="assign-list hidden"></div>
             <input class="field" id="seriesContact" placeholder="전화번호" inputmode="tel" autocomplete="tel" style="margin-top:8px" />
             <label class="cap">시작일 · 종료일</label>
             <div class="grid2">
@@ -1332,6 +1350,8 @@
       <h2 id="modalTitle">회원 프로필</h2>
       <label class="cap">이름</label>
       <input class="field" id="pName" required placeholder="이름" />
+      <label class="cap">연락처</label>
+      <input class="field" id="pContact" inputmode="tel" placeholder="전화번호" autocomplete="tel" />
       <div class="grid2">
         <div>
           <label class="cap">총 회차</label>
@@ -1468,7 +1488,7 @@
       const d = new Date(); d.setDate(d.getDate() - 7);
       return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
     };
-    const emptyProfile = () => ({ gender: "", age: "", goal: "", history: "", experience: "", notes: "" });
+    const emptyProfile = () => ({ gender: "", age: "", goal: "", history: "", experience: "", notes: "", contact: "" });
     function isoDate(v) {
       if (!v) return "";
       const s = String(v).trim();
@@ -2026,7 +2046,10 @@
       const rows = items.map((it) => {
         const when = (it.date === today() ? "오늘" : "내일") + " " + koClock(it.start);
         if (trainer) {
-          return `<button class="remind-item" type="button" data-goto-log="${esc(it.id)}" data-log-date="${esc(it.date)}"><span><b>${esc(it.name)} 님</b></span><small>${when}</small></button>`;
+          const attrs = it.id
+            ? `data-goto-log="${esc(it.id)}" data-log-date="${esc(it.date)}"`
+            : `data-open-book-day="${esc(it.date)}" data-open-book-slot="${esc(it.slotId || "")}"`;
+          return `<button class="remind-item" type="button" ${attrs}><span><b>${esc(it.name)} 님</b></span><small>${when}</small></button>`;
         }
         return `<div class="remind-item"><span><b>${when} 수업</b></span><small>${it.minutes}분</small></div>`;
       }).join("");
@@ -2148,7 +2171,10 @@
         b.classList.toggle("on", b.dataset.tab === (next === "detail" ? "members" : next));
       });
       window.scrollTo(0, 0);
-      if (next === "home") renderHome();
+      if (next === "home") {
+        renderHome();
+        renderBook({ quiet: true });
+      }
       if (next === "log") renderLog();
       if (next === "members") renderMembers();
       if (next === "detail") renderDetail();
@@ -2156,6 +2182,68 @@
     }
     let homeWeekAnchor = null;
     let homeWeekDay = null;
+    function memberContact(m) {
+      const p = (m && m.profile) || {};
+      return String(p.contact || p.phone || "").trim();
+    }
+    function memberByBookingName(name) {
+      const key = String(name || "").replace(/\s+/g, "").toLowerCase();
+      if (!key) return null;
+      return state.members.find((m) => String(m.name || "").replace(/\s+/g, "").toLowerCase() === key) || null;
+    }
+    function homeSlotRow(slot, date) {
+      const person = slotConfirmedPerson(slot);
+      const member = person ? memberByBookingName(person.name) : null;
+      const label = slotToneLabel(slotTone(slot, false));
+      const when = fmtSlotClock(slot.start_time, slot.end_time);
+      const title = bookBlockTitle(slot);
+      const jump = `data-open-book-day="${esc(date)}" data-open-book-slot="${esc(slot.id)}"`;
+      const main = member
+        ? `<button class="tile" type="button" data-goto-log="${esc(member.id)}" data-log-date="${esc(date)}"><span><b>${esc(title)}</b><small>${esc(when)} · ${esc(label)}</small></span><span class="chev">›</span></button>`
+        : `<button class="tile" type="button" ${jump}><span><b>${esc(title)}</b><small>${esc(when)} · ${esc(label)}</small></span><span class="chev">›</span></button>`;
+      const side = member ? `<button class="tile side" type="button" ${jump}>예약</button>` : "";
+      return `<div class="split-tile">${main}${side}</div>`;
+    }
+    function memberPickListHtml(slotId) {
+      if (!state.members.length) return '<p class="hint" style="margin:8px 12px">등록된 회원이 없습니다. 이름과 연락처를 직접 입력하세요.</p>';
+      return state.members.map((m) => {
+        const contact = memberContact(m);
+        const slotAttr = slotId ? ` data-pick-slot="${esc(slotId)}"` : "";
+        return `<button type="button" data-pick-member="${esc(m.id)}"${slotAttr}><b>${esc(m.name)}</b><small>${contact ? esc(contact) : "연락처 없음 · 선택 후 입력"}</small></button>`;
+      }).join("");
+    }
+    function openCoachDay(date, slotId) {
+      focusBookDay(date || today());
+      if (slotId) bookFocusSlot = slotId;
+      if (tab !== "book") setTab("book");
+      else renderBook({ quiet: true });
+      openBookDay(false);
+    }
+    function upcomingReservations() {
+      if (!bookBoard) return [];
+      const t = today();
+      const tm = addDays(t, 1);
+      const items = [];
+      (bookBoard.slots || []).forEach((slot) => {
+        const day = slotDayKey(slot.start_time);
+        if (day !== t && day !== tm) return;
+        const person = slotConfirmedPerson(slot);
+        if (!person || slotIsPast(slot)) return;
+        const member = memberByBookingName(person.name);
+        const start = new Date(slot.start_time);
+        const end = new Date(slot.end_time);
+        items.push({
+          id: member ? member.id : "",
+          slotId: slot.id,
+          name: person.name || "회원",
+          date: day,
+          start: slotClockValue(slot.start_time),
+          minutes: Math.max(1, Math.round((end - start) / 60000))
+        });
+      });
+      items.sort((a, b) => a.date.localeCompare(b.date) || String(a.start).localeCompare(String(b.start)));
+      return items;
+    }
     function homeWeekHtml() {
       const anchor = homeWeekAnchor || today();
       const selected = homeWeekDay || today();
@@ -2163,7 +2251,8 @@
       const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
       const label = days[0].slice(5).replace("-", "/") + " – " + days[6].slice(5).replace("-", "/");
       const dayBtns = days.map((d) => {
-        const n = classesOn(d).length;
+        const slots = bookSlotsOn((bookBoard && bookBoard.slots) || [], d);
+        const n = slots.filter((slot) => slotConfirmedPerson(slot)).length;
         const hol = holidayName(d);
         const cls = ["home-day"];
         if (d === selected) cls.push("on");
@@ -2173,35 +2262,19 @@
         return `<button class="${cls.join(" ")}" type="button" data-home-day="${d}">
           <span class="wd">${weekdayName(d)}</span>
           <span class="dn">${Number(d.slice(8))}</span>
-          <span class="cnt">${n ? n + "수업" : ""}</span>
+          <span class="cnt">${n ? n + "예약" : (bookBoard && slots.length ? "오픈" : "")}</span>
         </button>`;
       }).join("");
-      const list = classesOn(selected);
+      const list = bookSlotsOn((bookBoard && bookBoard.slots) || [], selected);
       const hol = holidayName(selected);
       const dayTitle = prettyDate(selected) + " · " + weekdayName(selected) + (hol ? " · " + hol : "");
-      const items = list.length
-        ? list.map((m) => {
-            const s = m.sessions[selected] || {};
-            const st = dayStats(m, selected);
-            const startT = koClock(s.start || "16:00");
-            const mins = Number(s.minutes) > 0 ? Number(s.minutes) : 60;
-            const done = !!(s.attended || s.charged);
-            const sub = st.sets
-              ? startT + " · " + mins + "분 · " + st.exercises + "종목 " + st.sets + "세트"
-              : startT + " · " + mins + "분 · " + (done ? "출석" : "예약");
-            return `<div class="split-tile">
-              <button class="tile" type="button" data-goto-log="${m.id}" data-log-date="${selected}">
-                <span><b>${esc(m.name)} 님 PT</b><small><span class="home-chip"><i style="background:${colorOf(m.id)}"></i>${esc(sub)}</span></small></span>
-                <span class="chev">›</span>
-              </button>
-              ${done
-                ? `<button class="tile side" type="button" data-goto-log="${m.id}" data-log-date="${selected}">일지</button>`
-                : `<button class="tile side" type="button" data-home-attend="${m.id}" data-log-date="${selected}">출석</button>`}
-            </div>`;
-          }).join("")
-        : '<div class="empty" style="padding:16px 8px">이 날 예정된 수업이 없습니다.</div>';
-      const todayN = classesOn(today()).length;
-      const weekN = days.reduce((n, d) => n + classesOn(d).length, 0);
+      const items = !bookBoard
+        ? '<div class="empty" style="padding:16px 8px">예약 일정을 불러오는 중…</div>'
+        : (list.length
+        ? list.map((slot) => homeSlotRow(slot, selected)).join("")
+        : '<div class="empty" style="padding:16px 8px">이 날 열린 시간이 없습니다.</div>');
+      const todayN = bookSlotsOn((bookBoard && bookBoard.slots) || [], today()).filter((slot) => slotConfirmedPerson(slot)).length;
+      const weekN = days.reduce((n, d) => n + bookSlotsOn((bookBoard && bookBoard.slots) || [], d).filter((slot) => slotConfirmedPerson(slot)).length, 0);
       const weekWord = days.indexOf(today()) >= 0 ? "이번 주" : "이 주";
       return `
         <p class="home-count">오늘 예약 ${todayN}건 / ${weekWord} 총 예약 ${weekN}건</p>
@@ -2304,7 +2377,11 @@
       const assign = !frozen && slot.status !== "closed" && !confirmed
         ? `<div class="book-edit">
             <label class="cap">직접 예약</label>
-            <input class="field" data-assign-name="${esc(slot.id)}" placeholder="회원 이름" autocomplete="name" />
+            <div class="assign-row">
+              <input class="field" data-assign-name="${esc(slot.id)}" placeholder="회원 이름" autocomplete="name" />
+              <button class="btn soft" type="button" data-assign-pick="${esc(slot.id)}">회원 목록</button>
+            </div>
+            <div class="assign-list hidden" data-assign-list="${esc(slot.id)}"></div>
             <input class="field" data-assign-contact="${esc(slot.id)}" placeholder="전화번호" inputmode="tel" autocomplete="tel" style="margin-top:8px" />
             <button class="btn wide" type="button" data-book-assign="${esc(slot.id)}" style="margin-top:8px">이 시간 예약 확정</button>
           </div>`
@@ -2801,7 +2878,9 @@
       if (title) title.textContent = prettyDate(day) + " · " + weekdayName(day) + (hol ? " · " + hol : "");
       const list = bookSlotsOn((bookBoard && bookBoard.slots) || [], day);
       const box = $("bookDaySlots");
-      if (box) {
+      const typing = document.activeElement && box && box.contains(document.activeElement)
+        && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if (box && !typing) {
         box.innerHTML = list.length
           ? list.map(coachSlotHtml).join("")
           : '<div class="empty" style="padding:16px 8px">이 날은 열린 시간이 없습니다.</div>';
@@ -2926,6 +3005,8 @@
       if (!quiet) box.innerHTML = '<p class="hint">불러오는 중…</p>';
       try {
         paintBook(await Cloud.bookingBoard(null));
+        if ($("pageHome") && !$("pageHome").classList.contains("hidden")) renderHome();
+        if ($("calBg") && !$("calBg").classList.contains("hidden")) renderCal();
       } catch (err) {
         if (!quiet) box.innerHTML = `<div class="empty">${esc(bookingErr(err))}</div>`;
       }
@@ -3215,15 +3296,14 @@
       }
     }
     function renderHome() {
-      refreshBookBadge();
       const d = today();
       if (!homeWeekAnchor) homeWeekAnchor = d;
       if (!homeWeekDay) homeWeekDay = d;
       $("homeDate").textContent = prettyDate(d) + " · " + d;
       $("statMembers").textContent = state.members.length;
-      const todayList = state.members.filter((m) => hasClass(m, d));
-      $("statToday").textContent = todayList.length;
-      $("homeRemind").innerHTML = reminderBannerHtml(upcomingClasses(state.members), true);
+      const todaySlots = bookSlotsOn((bookBoard && bookBoard.slots) || [], d).filter((slot) => slotConfirmedPerson(slot));
+      $("statToday").textContent = todaySlots.length;
+      $("homeRemind").innerHTML = reminderBannerHtml(upcomingReservations(), true);
       $("homeWeek").innerHTML = homeWeekHtml();
       const recent = [];
       state.members.forEach((m) => Object.keys(m.sessions || {}).forEach((date) => {
@@ -3589,6 +3669,7 @@
       const edit = opts && opts.edit;
       return `<div class="card">
         <p class="kv"><span>이름</span>${esc(name)}</p>
+        <p class="kv"><span>연락처</span>${esc(p.contact || p.phone || "-")}</p>
         <p class="kv"><span>성별</span>${esc(p.gender || "-")}</p>
         <p class="kv"><span>연령</span>${esc(p.age ? p.age + "세" : "-")}</p>
         <p class="kv"><span>목표</span>${esc(p.goal || "-")}</p>
@@ -3705,11 +3786,11 @@
     function bookingCountHtml(anchor) {
       const start = weekStart(anchor || today());
       const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
-      const todayN = classesOn(today()).length;
-      const weekN = days.reduce((n, d) => n + classesOn(d).length, 0);
+      const todayN = bookSlotsOn((bookBoard && bookBoard.slots) || [], today()).filter((slot) => slotConfirmedPerson(slot)).length;
+      const weekN = days.reduce((n, d) => n + bookSlotsOn((bookBoard && bookBoard.slots) || [], d).filter((slot) => slotConfirmedPerson(slot)).length, 0);
       const weekWord = days.indexOf(today()) >= 0 ? "이번 주" : "이 주";
       const cells = days.map((d) => {
-        const n = classesOn(d).length;
+        const n = bookSlotsOn((bookBoard && bookBoard.slots) || [], d).filter((slot) => slotConfirmedPerson(slot)).length;
         return `<div class="book-count-day${d === today() ? " on" : ""}"><span>${weekdayName(d)}</span><b>${n}</b></div>`;
       }).join("");
       return `<div class="card volume-card">
@@ -4509,6 +4590,7 @@
       const pack = packOf(m);
       $("modalTitle").textContent = id ? "프로필 · 회차 수정" : "새 회원 등록";
       $("pName").value = m.name || "";
+      $("pContact").value = (m.profile && (m.profile.contact || m.profile.phone)) || "";
       $("pPackTotal").value = pack.total ? String(pack.total) : "";
       $("pPackLeft").value = id ? String(pack.left) : "";
       $("pPackEnd").value = pack.endDate || "";
@@ -4590,13 +4672,15 @@
       return sorted;
     }
     function classEvents(date) {
-      return layoutLanes(classesOn(date).map((m) => {
-        const s = m.sessions[date] || {};
-        const start = s.start || "16:00";
-        const dur = Number(s.minutes) > 0 ? Number(s.minutes) : 60;
-        const startMin = minsOf(start);
-        return { m, date, start, dur, startMin, endMin: startMin + dur };
-      }));
+      const raw = bookSlotsOn((bookBoard && bookBoard.slots) || [], date).map((slot) => {
+        const a = new Date(slot.start_time);
+        const b = new Date(slot.end_time);
+        const startMin = a.getHours() * 60 + a.getMinutes();
+        let endMin = b.getHours() * 60 + b.getMinutes();
+        if (endMin <= startMin) endMin += 24 * 60;
+        return { slot, date, startMin, endMin };
+      }).filter((ev) => Number.isFinite(ev.startMin) && ev.endMin > TL_FROM * 60 && ev.startMin < TL_TO * 60);
+      return layoutLanes(raw);
     }
     function timeGutterHtml() {
       let html = '<div class="tl-time">';
@@ -4615,11 +4699,17 @@
       return '<div class="now-line" style="top:calc((' + (mins - TL_FROM * 60) + ' / 60) * var(--hour))"></div>';
     }
     function blockHtml(ev) {
-      const top = "calc((" + (ev.startMin - TL_FROM * 60) + " / 60) * var(--hour))";
-      const height = "calc((" + ev.dur + " / 60) * var(--hour) - 4px)";
+      const startMin = Math.max(ev.startMin, TL_FROM * 60);
+      const endMin = Math.min(ev.endMin, TL_TO * 60);
+      const dur = Math.max(15, endMin - startMin);
+      const top = "calc((" + (startMin - TL_FROM * 60) + " / 60) * var(--hour))";
+      const height = "calc((" + dur + " / 60) * var(--hour) - 4px)";
       const left = "calc(3px + " + ev.lane + " * (100% - 6px) / " + ev.lanes + ")";
       const width = "calc((100% - 6px) / " + ev.lanes + " - 2px)";
-      return '<button class="tl-block" type="button" data-class-id="' + ev.m.id + '" data-class-date="' + ev.date + '" data-start-min="' + ev.startMin + '" data-dur="' + ev.dur + '" style="top:' + top + ";height:" + height + ";left:" + left + ";width:" + width + ";background:" + colorOf(ev.m.id) + '"><small>' + esc(koClock(ev.start)) + "</small><b>" + esc(ev.m.name) + "님 PT</b></button>";
+      const clock = new Date(ev.slot.start_time);
+      const hm = koClock(String(clock.getHours()).padStart(2, "0") + ":" + String(clock.getMinutes()).padStart(2, "0"));
+      const tone = slotTone(ev.slot, false);
+      return '<button class="tl-block ' + tone + '" type="button" data-book-slot="' + esc(ev.slot.id) + '" data-slot-day="' + esc(ev.date) + '" style="top:' + top + ";height:" + height + ";left:" + left + ";width:" + width + '"><small>' + esc(hm) + "</small><b>" + esc(bookBlockTitle(ev.slot)) + "</b></button>";
     }
     function dayHeadClass(date) {
       const cls = [];
@@ -4640,7 +4730,7 @@
         return '<span class="' + dayHeadClass(d) + '"><b>' + Number(d.slice(8)) + "</b>" + weekdayName(d) + (hol ? '<span class="hol">' + hol + "</span>" : "") + "</span>";
       }).join("") + "</div>";
       const cols = timeGutterHtml() + dates.map(dayColHtml).join("");
-      return '<div class="tl ' + kind + '">' + head + '<div class="tl-grid" style="min-height:calc(' + hours + " * var(--hour))\">" + cols + "</div></div>";
+      return '<div class="tl book-cal ' + kind + '">' + head + '<div class="tl-grid" style="min-height:calc(' + hours + " * var(--hour))\">" + cols + "</div></div>";
     }
     function renderCal() {
       if (calDragging) return;
@@ -4670,10 +4760,12 @@
         const head = '<div class="cal-weekdays">' + ["월","화","수","목","금","토","일"].map((w, i) => '<span' + (i === 6 ? ' class="sun"' : "") + ">" + w + "</span>").join("") + "</div>";
         const grid = cells.map((iso) => {
           if (!iso) return "<div></div>";
-          const n = classesOn(iso).length;
+          const daySlots = bookSlotsOn((bookBoard && bookBoard.slots) || [], iso);
+          const n = daySlots.filter((slot) => slotConfirmedPerson(slot)).length;
           const hol = holidayName(iso);
           const cls = "cal-cell" + (iso === calIso ? " on" : "") + (isSunday(iso) ? " sun" : "") + (hol ? " holiday" : "");
-          return '<button class="' + cls + '" type="button" data-cal-day="' + iso + '"><b>' + Number(iso.slice(8)) + "</b>" + (hol ? '<span class="hol">' + hol + "</span>" : "") + (n ? "<small>" + n + "수업</small>" : "<small></small>") + "</button>";
+          const mark = n ? "<small>" + n + "예약</small>" : (bookBoard && daySlots.length ? "<small>오픈</small>" : "<small></small>");
+          return '<button class="' + cls + '" type="button" data-cal-day="' + iso + '"><b>' + Number(iso.slice(8)) + "</b>" + (hol ? '<span class="hol">' + hol + "</span>" : "") + mark + "</button>";
         }).join("");
         $("calBody").innerHTML = head + '<div class="cal-grid">' + grid + "</div>";
       }
@@ -4767,6 +4859,7 @@
       $("calBg").classList.remove("hidden");
       document.body.style.overflow = "hidden";
       renderCal();
+      renderBook({ quiet: true });
       if (calTimer) clearInterval(calTimer);
       calTimer = setInterval(() => { if (!$("calBg").classList.contains("hidden")) renderCal(); }, 60000);
     }
@@ -4976,11 +5069,18 @@
         openCal();
         return;
       }
+      const bookJump = e.target.closest("[data-open-book-day]");
+      if (bookJump) {
+        openCoachDay(bookJump.dataset.openBookDay, bookJump.dataset.openBookSlot);
+        return;
+      }
       const log = e.target.closest("[data-goto-log]");
       if (log) openLog(log.dataset.gotoLog, log.dataset.logDate);
     });
     $("homeRecent").addEventListener("click", (e) => { const b = e.target.closest("[data-goto-log]"); if (b) openLog(b.dataset.gotoLog, b.dataset.logDate); });
     $("homeRemind").addEventListener("click", (e) => {
+      const jump = e.target.closest("[data-open-book-day]");
+      if (jump) { openCoachDay(jump.dataset.openBookDay, jump.dataset.openBookSlot); return; }
       const b = e.target.closest("[data-goto-log]");
       if (b) openLog(b.dataset.gotoLog, b.dataset.logDate);
     });
@@ -5054,7 +5154,7 @@
     }
     $("calBody").addEventListener("pointerdown", (e) => {
       const block = e.target.closest(".tl-block");
-      if (!block) return;
+      if (!block || block.dataset.bookSlot) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
       calDidDrag = false;
       calDragging = false;
@@ -5116,19 +5216,16 @@
       if (calDidDrag) { e.preventDefault(); e.stopPropagation(); calDidDrag = false; return; }
       const day = e.target.closest("[data-cal-day]");
       if (day) { calIso = day.dataset.calDay; calMode = "day"; renderCal(); return; }
-      const block = e.target.closest("[data-class-id]");
+      const block = e.target.closest("[data-book-slot]");
       if (block) {
-        fromCal = true;
         closeCal();
-        openLog(block.dataset.classId, block.dataset.classDate);
+        openCoachDay(block.dataset.slotDay || calIso, block.dataset.bookSlot);
         return;
       }
       const col = e.target.closest(".tl-col");
       if (col) {
-        const hourH = hourPx(col);
-        const y = e.clientY - col.getBoundingClientRect().top;
-        const startMin = snapMin(TL_FROM * 60 + (y / hourH) * 60, 60);
-        openClassPopup({ date: col.dataset.date, start: fmtHM(startMin), minutes: 60 });
+        closeCal();
+        openCoachDay(col.dataset.date);
       }
     });
     $("classCancel").onclick = closeClassPopup;
@@ -5209,7 +5306,8 @@
       const name = $("pName").value.trim(); if (!name) return;
       const profile = {
         gender: $("pGender").value, age: $("pAge").value.trim(), goal: $("pGoal").value.trim(),
-        history: $("pHistory").value.trim(), experience: $("pExp").value.trim(), notes: $("pNotes").value.trim()
+        history: $("pHistory").value.trim(), experience: $("pExp").value.trim(), notes: $("pNotes").value.trim(),
+        contact: ($("pContact").value || "").trim()
       };
       if (editingId) {
         const m = memberBy(editingId);
@@ -5641,6 +5739,47 @@
         return;
       }
       if (applyBookCalClick(e, "coach")) return;
+      const assignPick = e.target.closest("[data-assign-pick]");
+      if (assignPick) {
+        const id = assignPick.dataset.assignPick;
+        const list = document.querySelector('[data-assign-list="' + id + '"]');
+        if (!list) return;
+        const willOpen = list.classList.contains("hidden");
+        document.querySelectorAll(".assign-list").forEach((el) => el.classList.add("hidden"));
+        if (willOpen) {
+          list.innerHTML = memberPickListHtml(id);
+          list.classList.remove("hidden");
+        }
+        return;
+      }
+      if (e.target.closest("#seriesPick")) {
+        const list = $("seriesPickList");
+        if (!list) return;
+        const willOpen = list.classList.contains("hidden");
+        list.classList.toggle("hidden", !willOpen);
+        if (willOpen) list.innerHTML = memberPickListHtml("");
+        return;
+      }
+      const picked = e.target.closest("[data-pick-member]");
+      if (picked) {
+        const m = memberBy(picked.dataset.pickMember);
+        if (!m) return;
+        if (picked.dataset.pickSlot) {
+          const nameEl = document.querySelector('[data-assign-name="' + picked.dataset.pickSlot + '"]');
+          const contactEl = document.querySelector('[data-assign-contact="' + picked.dataset.pickSlot + '"]');
+          if (nameEl) nameEl.value = m.name || "";
+          if (contactEl) contactEl.value = memberContact(m);
+          const list = document.querySelector('[data-assign-list="' + picked.dataset.pickSlot + '"]');
+          if (list) list.classList.add("hidden");
+          if (contactEl && !contactEl.value) contactEl.focus();
+        } else {
+          if ($("seriesName")) $("seriesName").value = m.name || "";
+          if ($("seriesContact")) $("seriesContact").value = memberContact(m);
+          if ($("seriesPickList")) $("seriesPickList").classList.add("hidden");
+          if ($("seriesContact") && !$("seriesContact").value) $("seriesContact").focus();
+        }
+        return;
+      }
       const editBtn = e.target.closest("[data-book-edit]");
       if (editBtn) {
         const form = document.querySelector('[data-book-edit-form="' + editBtn.dataset.bookEdit + '"]');
@@ -6360,10 +6499,10 @@
       if (!window.Cloud || !Cloud.sb || !Cloud.user || Cloud._bookChannel) return;
       Cloud._bookChannel = Cloud.sb.channel("pt-book-" + Cloud.user.id)
         .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => {
-          if (tab === "book") renderBook({ quiet: true });
+          renderBook({ quiet: true });
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "schedules" }, () => {
-          if (tab === "book") renderBook({ quiet: true });
+          renderBook({ quiet: true });
         })
         .subscribe();
     }
@@ -6481,7 +6620,7 @@
       if (document.body.classList.contains("reserve-public") || memberBook) {
         renderPublicReserve(reserveMountEl, true);
       }
-      if (tab === "book") renderBook({ quiet: true });
+      if (tab === "book" || tab === "home" || ($("calBg") && !$("calBg").classList.contains("hidden"))) renderBook({ quiet: true });
     }, 12000);
     window.addEventListener("hashchange", async () => {
       if (isPublicReserve()) {
