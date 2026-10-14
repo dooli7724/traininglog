@@ -546,6 +546,16 @@
     .compare-col .cap { margin-top: 0; }
     .compare-delta { margin-top: 8px; font-size: .82rem; font-weight: 700; line-height: 1.45; }
     .log-attend { margin: 0 0 16px; }
+    .detail-hero {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px;
+    }
+    .detail-hero b {
+      display: block; font-size: 2.5rem; font-weight: 800; letter-spacing: -.04em; line-height: 1; color: var(--accent);
+    }
+    .detail-hero .cap { margin: 0 0 6px; }
+    .detail-hero p { margin: 6px 0 0; color: var(--muted); font-size: .8rem; font-weight: 600; }
+    .detail-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .detail-actions .btn { min-height: 44px; font-size: .78rem; padding: 8px 6px; }
     #logWork > #logDay {
       margin: 0 0 6px; font-size: 1.08rem; font-weight: 800; color: var(--text); letter-spacing: -.02em;
     }
@@ -985,22 +995,6 @@
       <div id="logWork" class="hidden">
         <p class="label" id="logDay"></p>
         <p class="hint" id="logPrevHint"></p>
-        <button class="btn wide log-attend" id="logAttend" type="button">출석 처리 · 1회 차감</button>
-        <div class="grid2" style="margin-bottom:10px">
-          <div>
-            <label class="cap">수업 시작</label>
-            <input class="field" id="logStart" type="time" />
-          </div>
-          <div>
-            <label class="cap">진행 시간</label>
-            <select class="field" id="logMins">
-              <option value="30">30분</option>
-              <option value="50">50분</option>
-              <option value="60">60분</option>
-              <option value="90">90분</option>
-            </select>
-          </div>
-        </div>
         <div class="acc open" data-log-acc="program">
           <button class="acc-h" type="button" data-log-toggle="program">오늘 프로그램 <span class="arr">▾</span></button>
           <div class="acc-b">
@@ -1047,50 +1041,40 @@
     </section>
 
     <section id="pageDetail" class="page hidden">
-      <div class="pack">
-        <label class="pack-cell">
-          <input class="field pack-in" id="packTotalIn" inputmode="numeric" placeholder="0" aria-label="총 회차" />
-          <span>총 회차</span>
-        </label>
-        <div class="card pack-cell">
-          <b id="packUsed">0</b>
-          <span>쓴 횟수</span>
+      <div class="card detail-hero">
+        <div>
+          <span class="cap">잔여 회차</span>
+          <b id="packLeftBig">0</b>
         </div>
-        <label class="pack-cell">
-          <input class="field pack-in" id="packLeftIn" inputmode="numeric" placeholder="0" aria-label="잔여 횟수" />
-          <span>잔여 횟수</span>
-        </label>
-      </div>
-      <div class="card" style="margin-bottom:12px">
-        <div class="row" style="justify-content:space-between;margin-bottom:8px">
-          <span class="cap" style="margin:0">회원 상태</span>
+        <div style="text-align:right">
           <span id="memberStatusBadge" class="status-badge active">진행 중</span>
+          <p id="memberStatusHint">총 0회</p>
         </div>
-        <p class="hint" id="memberStatusHint" style="margin:0 0 10px">잔여 횟수와 이용 종료일로 자동 분류됩니다.</p>
-        <label class="cap" style="margin-top:0">이용 종료일 (선택)</label>
-        <input class="field" id="packEndDate" type="date" />
-        <p class="hint" style="margin:6px 0 8px">총 회차·잔여 횟수는 위에서 바로 고칠 수 있습니다. 종료일이 지나면 만료 목록으로 이동합니다.</p>
-        <button class="btn wide" id="packSaveInfo" type="button">회차 정보 저장</button>
       </div>
-      <div id="detailVolume"></div>
-      <div class="act4">
+      <div class="detail-actions">
         <button class="btn" id="packUse" type="button">1회 차감</button>
         <button class="btn soft" id="packBuy" type="button">회차 구매</button>
-        <button class="btn" id="packLog" type="button">날짜별 일지</button>
-        <button class="btn soft" id="packCal" type="button">캘린더</button>
+        <button class="btn soft" id="editProfile" type="button">정보 수정</button>
       </div>
+      <div class="hidden" aria-hidden="true">
+        <input id="packTotalIn" />
+        <input id="packLeftIn" />
+        <input id="packEndDate" type="date" />
+        <b id="packUsed">0</b>
+        <button id="packSaveInfo" type="button">회차 정보 저장</button>
+        <button id="packCal" type="button">캘린더</button>
+      </div>
+      <div class="label">주요 정보</div>
+      <div class="card" id="profileCard" style="margin-bottom:14px"></div>
+      <div class="label">최근 수업 일지</div>
+      <div id="workoutList"></div>
       <div class="add">
-        <button class="btn" id="packTodayLog" type="button" style="flex:1">오늘 일지 작성</button>
-        <button class="btn" id="editProfile" type="button" style="flex:1">프로필 · 회차 수정</button>
+        <button class="btn" id="packTodayLog" type="button" style="flex:1">오늘 일지</button>
+        <button class="btn soft" id="packLog" type="button" style="flex:1">전체 일지</button>
       </div>
-      <div class="acc open" data-acc="profile">
-        <button class="acc-h" type="button">기본 프로필 <span class="arr">▾</span></button>
-        <div class="acc-b" id="profileCard"></div>
-      </div>
-
-      <div class="acc" data-acc="attend">
-        <button class="acc-h" type="button">출석 기록 <em id="attendCount"></em><span class="arr">▾</span></button>
-        <div class="acc-b" id="attendList"></div>
+      <div class="share-bar">
+        <button class="btn soft" id="shareMember" type="button">기록 공유</button>
+        <button class="btn soft" id="shareReserve" type="button">예약 링크</button>
       </div>
       <div class="acc" data-acc="injury">
         <button class="acc-h" type="button">특이사항 및 부상 이력 <span class="arr">▾</span></button>
@@ -1107,7 +1091,7 @@
         </div>
       </div>
 
-      <div class="acc open" data-acc="body">
+      <div class="acc" data-acc="body">
         <button class="acc-h" type="button">신체 정보 <span class="arr">▾</span></button>
         <div class="acc-b">
           <p class="hint" id="bodyTrend"></p>
@@ -1116,7 +1100,6 @@
             <span><i style="background:#00C853"></i>골격근량</span>
             <span><i style="background:#FF6B35"></i>체지방률</span>
           </div>
-          <p class="hint">항목마다 스케일이 달라, 세 선의 오르내림을 한눈에 비교할 수 있습니다.</p>
           <div class="chart-wrap" id="bodyChart"></div>
           <div class="chart-stats" id="bodyStats"></div>
           <div class="grid3" style="margin-top:10px">
@@ -1142,29 +1125,6 @@
           <div id="bodyCompare"></div>
           <div class="label">타임라인</div>
           <div id="bodyGallery"></div>
-          <div id="bodyList"></div>
-          <div class="ba" style="margin-top:12px">
-            <div>
-              <p class="cap" style="margin-top:0">Before</p>
-              <div id="beforeBox"></div>
-              <label class="btn soft file wide" style="margin-top:8px">사진 추가<input type="file" accept="image/*" id="beforeFile" /></label>
-            </div>
-            <div>
-              <p class="cap" style="margin-top:0">After</p>
-              <div id="afterBox"></div>
-              <label class="btn soft file wide" style="margin-top:8px">사진 추가<input type="file" accept="image/*" id="afterFile" /></label>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="acc open" data-acc="workouts">
-        <button class="acc-h" type="button">수업 운동 기록 <span class="arr">▾</span></button>
-        <div class="acc-b">
-          <button class="btn wide" id="shareMember" type="button" style="margin-bottom:8px">공유</button>
-          <button class="btn soft wide" id="shareReserve" type="button" style="margin-bottom:10px">공통 예약 링크</button>
-          <p class="hint" style="margin-top:0">공유는 이 회원 기록 페이지입니다. 예약은 회원 구분 없이 같은 예약 링크로 받습니다.</p>
-          <div id="workoutList"></div>
         </div>
       </div>
       <div class="acc" data-acc="self">
@@ -3372,16 +3332,9 @@
       if (lw && lw.date < logDate && (!prev || lw.date !== prev.date)) hint += (hint ? " · " : "") + "지난주 " + prettyDate(lw.date);
       $("logPrevHint").textContent = hint ? hint + " 기록이 종목 아래에 표시됩니다." : "이전 수업 기록이 없습니다.";
       const sess = sessionOf(m, logDate);
-      $("logStart").value = sess.start || "16:00";
-      $("logMins").value = String(sess.minutes || 60);
       $("logProgram").value = sess.program || "";
       $("logFeedback").value = sess.feedback || "";
       $("logMemo").value = sess.memo || "";
-      const attendBtn = $("logAttend");
-      if (attendBtn) {
-        attendBtn.textContent = attendBtnLabel(sess);
-        attendBtn.classList.toggle("soft", !!(sess.attended || sess.charged));
-      }
       ["program", "feedback", "memo"].forEach((key) => {
         const box = document.querySelector(`[data-log-acc="${key}"]`);
         if (box) box.classList.toggle("open", !logSessionCollapsed.has(key));
@@ -3851,15 +3804,28 @@
       }
       return parts.join("");
     }
+    function detailFactsHtml(m) {
+      const p = m.profile || {};
+      const who = [p.gender, p.age ? p.age + "세" : ""].filter(Boolean).join(" · ") || "-";
+      return `<p class="kv"><span>연락처</span>${esc(p.contact || p.phone || "-")}</p>
+        <p class="kv"><span>목표</span>${esc(p.goal || "-")}</p>
+        <p class="kv"><span>기본</span>${esc(who)}</p>`;
+    }
     function workoutHtml(m) {
-      const dates = Object.keys(m.sessions || {}).sort().reverse();
-      let html = "";
-      dates.forEach((d) => {
-        const s = m.sessions[d];
-        if (!(s.exercises || []).length && !(s.program || s.feedback || s.memo) && !s.booked) return;
-        html += `<button class="tile" type="button" data-open-log-date="${d}" style="margin-bottom:8px"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${esc((s.exercises || []).map((ex) => ex.name).join(" · ") || (s.booked ? koClock(s.start || "16:00") + " 예약" : "기록 없음"))}</small></span><span class="chev">›</span></button>`;
+      const dates = Object.keys(m.sessions || {}).sort().reverse().filter((d) => {
+        const s = m.sessions[d] || {};
+        return (s.exercises || []).length || s.program || s.feedback || s.memo;
       });
-      return html || '<div class="empty" style="padding:12px">아직 수업 일지가 없습니다.</div>';
+      const shown = dates.slice(0, 5);
+      if (!shown.length) return '<div class="empty" style="padding:12px">아직 수업 일지가 없습니다.</div>';
+      const rows = shown.map((d) => {
+        const s = m.sessions[d] || {};
+        const names = (s.exercises || []).map((ex) => ex.name).filter(Boolean).join(" · ");
+        const sub = names || (s.program ? "프로그램" : "피드백 · 메모");
+        return `<button class="tile" type="button" data-open-log-date="${d}" style="margin-bottom:8px"><span><b>${prettyDate(d)}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
+      }).join("");
+      const more = dates.length > shown.length ? `<p class="hint">최근 ${shown.length}건입니다. 나머지는 전체 일지에서 볼 수 있습니다.</p>` : "";
+      return rows + more;
     }
     function selfWorkoutHtml(list, opts) {
       const canDel = opts === true || (opts && opts.canDel);
@@ -3986,29 +3952,31 @@
       const m = currentMember();
       if (!m) { setTab("members"); return; }
       $("detailName").textContent = m.name;
-      $("profileCard").innerHTML = profileHtml(m.profile, m.name, { edit: true });
+      $("profileCard").innerHTML = detailFactsHtml(m);
       const pack = packOf(m);
       const totalIn = $("packTotalIn");
       const leftIn = $("packLeftIn");
       if (document.activeElement !== totalIn) totalIn.value = pack.total ? String(pack.total) : "";
       if (document.activeElement !== leftIn) leftIn.value = String(pack.left);
       $("packUsed").textContent = pack.used;
-      $("packUsed").style.color = pack.left ? "var(--accent)" : "var(--danger)";
+      const leftBig = $("packLeftBig");
+      if (leftBig) {
+        leftBig.textContent = String(pack.left);
+        leftBig.style.color = pack.left ? "var(--accent)" : "var(--danger)";
+      }
       const expired = isMemberExpired(m);
       const badge = $("memberStatusBadge");
       badge.textContent = expired ? "만료" : "진행 중";
       badge.className = "status-badge " + (expired ? "expired" : "active");
       $("memberStatusHint").textContent = expired
-        ? memberExpireReason(m) + " — 회차 충전이나 종료일 연장 시 진행 중으로 복구됩니다."
-        : (pack.endDate ? "이용 종료일 " + pack.endDate + "까지 · 잔여 " + pack.left + "회" : "잔여 " + pack.left + "회 · 종료일 미설정");
+        ? memberExpireReason(m)
+        : ("총 " + pack.total + "회" + (pack.endDate ? " · " + pack.endDate + "까지" : ""));
       if (document.activeElement !== $("packEndDate")) $("packEndDate").value = pack.endDate || "";
       if (document.activeElement !== $("injuryText")) $("injuryText").value = m.injuries || "";
       if (detailAttendMember !== m.id) {
         detailAttendWeek = weekStart(today());
         detailAttendMember = m.id;
       }
-      $("detailVolume").innerHTML = weekAttendHtml(m.sessions || {}, detailAttendWeek || today());
-      $("attendList").innerHTML = attendHtml(m);
       $("consultList").innerHTML = await notesHtml(m.consults, "consults");
       $("dietList").innerHTML = await notesHtml(m.dietLogs, "dietLogs", { coach: true, canDel: true });
       $("workoutList").innerHTML = workoutHtml(m);
@@ -4024,9 +3992,6 @@
       const bd = $("bodyDate");
       if (bd && document.activeElement !== bd && !bd.value) bd.value = today();
       await refreshBodyCompare(m);
-      $("bodyList").innerHTML = await bodyHistHtml(m);
-      $("beforeBox").innerHTML = await photoCol("before");
-      $("afterBox").innerHTML = await photoCol("after");
     }
     function snapshot(m) {
       const sessions = {};
@@ -5101,18 +5066,6 @@
       renderLog();
     };
     
-    $("logStart").addEventListener("change", () => {
-      const s = sessionOf(); if (!s) return;
-      s.start = $("logStart").value || "16:00";
-      s.booked = true;
-      saveData();
-    });
-    $("logMins").addEventListener("change", () => {
-      const s = sessionOf(); if (!s) return;
-      s.minutes = Number($("logMins").value) || 60;
-      s.booked = true;
-      saveData();
-    });
     $("logArchiveBack").onclick = goBack;
     $("closeCal").onclick = closeCal;
     $("calBg").addEventListener("click", (e) => { if (e.target.id === "calBg") closeCal(); });
@@ -5275,13 +5228,6 @@
       renderCal();
       if (tab === "home") renderHome();
     };
-    $("logAttend").onclick = () => {
-      const m = currentMember();
-      if (!m || !logDate) return;
-      toggleClassAttend(m, logDate);
-      renderLog();
-    };
-
     $("logBack").onclick = goBack;
     $("logToProfile").onclick = goToMemberProfile;
     $("logWorkProfile").onclick = goToMemberProfile;
@@ -5712,8 +5658,8 @@
       const id = uid(); await putFile(id, await compressImage(file), m.share);
       m.photos.push({ id, kind, date: today() }); saveData(); renderDetail();
     }
-    $("beforeFile").addEventListener("change", (e) => { addPhoto("before", e.target.files[0]); e.target.value = ""; });
-    $("afterFile").addEventListener("change", (e) => { addPhoto("after", e.target.files[0]); e.target.value = ""; });
+    if ($("beforeFile")) $("beforeFile").addEventListener("change", (e) => { addPhoto("before", e.target.files[0]); e.target.value = ""; });
+    if ($("afterFile")) $("afterFile").addEventListener("change", (e) => { addPhoto("after", e.target.files[0]); e.target.value = ""; });
     $("shareMember").onclick = () => copyClientLink(currentMember());
     $("shareReserve").onclick = () => copyReserveLink(currentMember());
     $("logReserveWide").onclick = () => copyReserveLink(currentMember());
