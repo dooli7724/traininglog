@@ -220,7 +220,6 @@
     .cal-cell .hol { color: var(--danger); font-size: .6rem; font-weight: 800; display: block; }
     .label { margin: 16px 0 8px; font-size: .78rem; font-weight: 800; color: var(--muted); letter-spacing: .06em; }
     .hint { color: var(--muted); font-size: .8rem; margin: 0 0 10px; line-height: 1.45; }
-    .prev { color: var(--ok); font-size: .78rem; margin: -4px 0 8px 34px; }
     .tile {
       width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
       text-align: left; background: var(--card); border: none; border-radius: var(--radius);
@@ -249,19 +248,8 @@
     .ex-top .ex-title b { font-size: 1.02rem; }
     .ex-top .btn.danger { margin: 6px 8px 6px 0; flex-shrink: 0; }
     .badge { display: inline-block; margin-left: 6px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 8px; font-size: .72rem; font-weight: 700; }
-    .set-row { display: grid; grid-template-columns: 28px 1fr 40px; gap: 6px; align-items: center; margin-bottom: 8px; }
-    .set-n { font-weight: 800; color: var(--muted); font-size: .78rem; text-align: center; }
-    .set-row .field, .set-add .field { min-height: 44px; padding: 8px 12px; text-align: left; font-weight: 600; font-size: 1rem; }
-    .set-row textarea.field, .set-add textarea.field { display: block; width: 100%; min-height: 44px; max-height: 140px; resize: none; overflow: hidden; line-height: 1.35; field-sizing: content; }
-    .set-add { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-    .set-add-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .set-quick { display: flex; flex-wrap: wrap; gap: 6px; }
-    .set-quick button { flex: 1 1 72px; min-height: 40px; padding: 0 6px; font-size: .78rem; }
-    .set-guide {
-      display: block; width: 100%; text-align: left; margin: 0 0 8px; padding: 10px 12px;
-      border: 0; border-radius: 12px; background: var(--accent-soft); color: var(--accent);
-      font-weight: 800; font-size: .84rem;
-    }
+    .ex-record { display: block; width: 100%; min-height: 140px; margin: 0; resize: vertical; line-height: 1.45; white-space: pre-wrap; }
+    .ex-record-view { margin: 0; white-space: pre-wrap; line-height: 1.5; font-weight: 600; }
     .sketch-pad { margin-top: 12px; }
     .sketch-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .sketch-tools button { flex: 1 1 72px; min-height: 36px; padding: 0 8px; font-size: .75rem; }
@@ -589,15 +577,12 @@
     }
     #logWork .ex-top .badge { margin-left: 0; font-size: .68rem; font-weight: 700; align-self: center; }
     #logWork .ex-acc .acc-b { padding: 2px 14px 16px; }
-    #logWork .set-n { font-size: .74rem; font-weight: 600; color: var(--muted); }
-    #logWork .set-row .field, #logWork .set-add .field,
-    #logWork .set-row textarea.field, #logWork .set-add textarea.field { font-size: 1rem; font-weight: 600; color: var(--text); text-align: left; min-height: 44px; }
     #logWork .ex-acc .label, #logWork .ex-acc .cap {
       margin-top: 16px; font-size: .7rem; font-weight: 700; color: #8B939C; letter-spacing: .04em;
     }
-    #logWork .hint, #logWork .prev { font-size: .74rem; font-weight: 500; color: #8B939C; }
-    #logWork .set-guide { font-size: .78rem; font-weight: 700; }
+    #logWork .hint { font-size: .74rem; font-weight: 500; color: #8B939C; }
     #logWork textarea.field, #logWork .add .field { font-size: .92rem; font-weight: 500; color: #3A4048; }
+    #logWork textarea.field.ex-record { font-size: 1rem; font-weight: 600; color: var(--text); min-height: 140px; }
     .vol-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 0 2px; }
     .vol-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; }
     .vol-bar-wrap {
@@ -752,9 +737,6 @@
     .log-ex h3 { margin: 0 0 6px; font-size: 1rem; }
     .log-ex .kv { font-size: .86rem; }
     .log-ex .kv span { min-width: 88px; }
-    .set-line { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; font-size: .9rem; }
-    .set-line span { color: var(--muted); }
-    .set-line b { font-weight: 800; color: var(--text); }
     .meal-pills { display: flex; gap: 6px; margin: 8px 0; }
     .meal-pills button {
       flex: 1; min-height: 40px; border: 1px solid var(--line); background: var(--card); color: var(--text);
@@ -1462,17 +1444,36 @@
     function sameDate(a, b) {
       return isoDate(a) === isoDate(b);
     }
+    function legacySetsText(sets) {
+      return (sets || []).map((st) => {
+        if (!st) return "";
+        const typed = st.text != null ? String(st.text).trim() : "";
+        if (typed) return typed;
+        const bits = [];
+        if (st.weight != null && st.weight !== "") bits.push(String(st.weight) + "kg");
+        if (st.reps != null && st.reps !== "") bits.push(String(st.reps) + "회");
+        return bits.join(" × ");
+      }).filter(Boolean).join("\n");
+    }
+    function exerciseRecord(e) {
+      if (!e) return "";
+      if (e.record != null && String(e.record).length) return String(e.record);
+      return legacySetsText(e.sets);
+    }
     function normalizeExercise(e) {
       e = e || {};
       const sketch = e.sketch && typeof e.sketch === "object" ? e.sketch : {};
-      return Object.assign({}, e, {
+      const next = Object.assign({}, e, {
         feedback: e.feedback || "",
+        record: exerciseRecord(e),
         media: (e.media || []).map((x) => Object.assign({}, x)),
         sketch: {
           template: ["blank", "body", "lift"].includes(sketch.template) ? sketch.template : "blank",
           strokes: Array.isArray(sketch.strokes) ? sketch.strokes : []
         }
       });
+      delete next.sets;
+      return next;
     }
     function normalizeSession(s) {
       s = Object.assign({ program: "", feedback: "", memo: "", exercises: [], start: "16:00", minutes: 60, attended: false, charged: false }, s || {});
@@ -1852,9 +1853,9 @@
     }
     function dayStats(m, date) {
       const s = (m.sessions && m.sessions[date]) || { exercises: [] };
-      const sets = (s.exercises || []).reduce((n, e) => n + (e.sets || []).length, 0);
-      const notes = !!(s.program || s.feedback || s.memo || (s.exercises || []).some((e) => e.feedback || e.note));
-      return { exercises: (s.exercises || []).length, sets, memo: notes || "" };
+      const logged = (s.exercises || []).filter((e) => exerciseRecord(e).trim()).length;
+      const notes = !!(s.program || s.feedback || s.memo || (s.exercises || []).some((e) => e.feedback || exerciseRecord(e).trim()));
+      return { exercises: (s.exercises || []).length, sets: logged, memo: notes || "" };
     }
     function publicMediaUrl(u) {
       const s = String(u || "");
@@ -1892,14 +1893,7 @@
         id: e.id || "",
         name: e.name,
         feedback: e.feedback || "",
-        sets: (e.sets || []).map((st) => {
-          const text = setLineText(st);
-          const row = { id: st.id || "" };
-          if (text) row.text = text;
-          if (st.weight != null && st.weight !== "") row.weight = st.weight;
-          if (st.reps != null && st.reps !== "") row.reps = st.reps;
-          return row;
-        }),
+        record: exerciseRecord(e),
         media: (e.media || []).map(packMedia).filter(Boolean),
         sketch: sketch || undefined
       };
@@ -1938,8 +1932,7 @@
     function isAttendedSession(s) {
       if (!s) return false;
       if (s.attended || s.charged) return true;
-      const sets = (s.exercises || []).reduce((n, e) => n + ((e.sets || []).length), 0);
-      return !!(sets || (s.exercises || []).length || s.program || s.feedback);
+      return !!((s.exercises || []).length || s.program || s.feedback);
     }
     function chargeSession(m, date) {
       if (!m) return "none";
@@ -2088,41 +2081,6 @@
       const d = weekAgo();
       if (!m.sessions[d] || !dayStats(m, d).sets) return null;
       return { date: d, session: m.sessions[d] };
-    }
-    function prevSets(m, name) {
-      const prev = prevSession(m);
-      if (!prev) return null;
-      const ex = (prev.session.exercises || []).find((e) => e.name === name);
-      return { date: prev.date, sets: (ex && ex.sets) || [] };
-    }
-    function setLineText(st) {
-      if (!st) return "";
-      const typed = st.text != null ? String(st.text).trim() : "";
-      if (typed) return typed;
-      const bits = [];
-      if (st.weight != null && st.weight !== "") bits.push(st.weight + "kg");
-      if (st.reps != null && st.reps !== "") bits.push(st.reps + "회");
-      return bits.join(" × ");
-    }
-    function fmtSets(sets) {
-      return (sets || []).map((s, i) => (i + 1) + "세트 " + (setLineText(s) || "기록 없음")).join(" · ");
-    }
-    function fmtNum(n) {
-      const x = Number(n);
-      if (!Number.isFinite(x)) return "";
-      return String(Math.round(x * 10) / 10);
-    }
-    function lastWeekGuide(m, name, before) {
-      if (!m || !name) return null;
-      const end = before || logDate || today();
-      const start = addDays(end, -7);
-      const dates = Object.keys(m.sessions || {}).filter((d) => d >= start && d < end).sort();
-      for (let i = dates.length - 1; i >= 0; i--) {
-        const ex = ((m.sessions[dates[i]] || {}).exercises || []).find((e) => e.name === name);
-        const sets = (ex && ex.sets) || [];
-        if (sets.length) return { date: dates[i], last: sets[sets.length - 1] };
-      }
-      return null;
     }
     function ensureSketch(ex) {
       if (!ex.sketch || typeof ex.sketch !== "object") ex.sketch = { template: "blank", strokes: [] };
@@ -3290,7 +3248,7 @@
       }));
       recent.sort((a, b) => b.date.localeCompare(a.date));
       $("homeRecent").innerHTML = recent.length
-        ? recent.slice(0, 8).map((r) => `<button class="tile" type="button" data-goto-log="${r.id}" data-log-date="${r.date}"><span><b>${esc(r.name)}</b><small>${prettyDate(r.date)} · ${r.exercises}종목 · ${r.sets}세트</small></span><span class="chev">›</span></button>`).join("")
+        ? recent.slice(0, 8).map((r) => `<button class="tile" type="button" data-goto-log="${r.id}" data-log-date="${r.date}"><span><b>${esc(r.name)}</b><small>${prettyDate(r.date)} · ${r.exercises}종목</small></span><span class="chev">›</span></button>`).join("")
         : '<div class="empty">아직 저장된 운동 기록이 없습니다.</div>';
       const newest = [...state.members]
         .map((m, i) => ({ m, i }))
@@ -3324,7 +3282,7 @@
               const dates = archivedDates(x);
               const st = dayStats(x, today()); const prev = prevSession(x, today());
               const sub = dates.length ? dates.length + "개 일지" : "아직 일지 없음";
-              return `<button class="tile" type="button" data-open="${x.id}"><span><b>${esc(x.name)}</b><small>${sub}${st.sets ? " · 오늘 " + st.sets + "세트" : (prev ? " · 직전 " + prettyDate(prev.date) : "")}</small></span><span class="chev">›</span></button>`;
+              return `<button class="tile" type="button" data-open="${x.id}"><span><b>${esc(x.name)}</b><small>${sub}${st.sets ? " · 오늘 기록" : (prev ? " · 직전 " + prettyDate(prev.date) : "")}</small></span><span class="chev">›</span></button>`;
             }).join("")
           : '<div class="empty">먼저 회원 관리에서 회원을 등록하세요.</div>';
         return;
@@ -3337,7 +3295,7 @@
           ? dates.map((d) => {
               const st = dayStats(m, d);
               const names = ((m.sessions[d] && m.sessions[d].exercises) || []).map((e) => e.name).join(" · ");
-              return `<button class="tile" type="button" data-open-date="${d}"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${st.exercises}종목 · ${st.sets}세트${names ? " · " + esc(names) : ""}</small></span><span class="chev">›</span></button>`;
+              return `<button class="tile" type="button" data-open-date="${d}"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${st.exercises}종목${names ? " · " + esc(names) : ""}</small></span><span class="chev">›</span></button>`;
             }).join("")
           : '<div class="empty">저장된 날짜가 없습니다. 위에서 새 날짜를 추가하세요.</div>';
         return;
@@ -3348,7 +3306,7 @@
       let hint = "";
       if (prev) hint += "직전 수업 " + prettyDate(prev.date);
       if (lw && lw.date < logDate && (!prev || lw.date !== prev.date)) hint += (hint ? " · " : "") + "지난주 " + prettyDate(lw.date);
-      $("logPrevHint").textContent = hint ? hint + " 기록이 종목 아래에 표시됩니다." : "이전 수업 기록이 없습니다.";
+      $("logPrevHint").textContent = hint || "이전 수업 기록이 없습니다.";
       const sess = sessionOf(m, logDate);
       $("logProgram").value = sess.program || "";
       $("logFeedback").value = sess.feedback || "";
@@ -3504,43 +3462,21 @@
     }
     async function renderExercises() {
       const m = currentMember(); const s = sessionOf(m); const box = $("exercises");
-      if (!s || !s.exercises.length) { box.innerHTML = '<div class="empty">종목을 추가한 뒤 세트를 기록하세요.</div>'; return; }
+      if (!s || !s.exercises.length) { box.innerHTML = '<div class="empty">종목을 추가한 뒤 기록을 적으세요.</div>'; return; }
       const cards = [];
       for (const ex of s.exercises) {
-        const prev = prevSets(m, ex.name);
-        const guide = lastWeekGuide(m, ex.name, logDate);
-        let ref = "";
-        if (guide) ref += `<button class="set-guide" type="button" data-use-guide="${esc(ex.id)}" data-guide-text="${esc(setLineText(guide.last))}">지난주 ${esc(prettyDate(guide.date))} 마지막 ${esc(setLineText(guide.last))} · 눌러서 입력</button>`;
-        if (prev && prev.sets.length && (!guide || guide.date !== prev.date)) ref += `<p class="hint">직전(${prettyDate(prev.date)}): ${esc(fmtSets(prev.sets))}</p>`;
-        const rows = (ex.sets || []).map((st, i) => {
-          const pset = prev && prev.sets[i];
-          return `<div class="set-row"><div class="set-n">${i + 1}</div>
-            <textarea class="field" data-set-text="${esc(ex.id)}:${esc(st.id)}" rows="1" spellcheck="false" placeholder="100kg 5회, 60초 버티기, 슈퍼세트…" enterkeyhint="next">${esc(setLineText(st))}</textarea>
-            <button class="btn danger" type="button" data-del-set="${esc(ex.id)}:${esc(st.id)}">×</button></div>
-            ${pset ? `<p class="prev">직전 ${esc(setLineText(pset))}</p>` : ""}`;
-        }).join("");
-        const n = (ex.sets || []).length;
         ensureSketch(ex);
         const open = !logExCollapsed.has(ex.id);
         cards.push(`<article class="acc ex-acc${open ? " open" : ""}" data-ex-acc="${ex.id}">
           <div class="ex-top">
             <button class="acc-h" type="button" data-ex-toggle="${ex.id}">
-              <span class="ex-title"><b>${esc(ex.name)}</b><span class="badge">${n}세트</span></span>
+              <span class="ex-title"><b>${esc(ex.name)}</b></span>
               <span class="arr">▾</span>
             </button>
             <button class="btn danger" type="button" data-del-ex="${ex.id}">삭제</button>
           </div>
           <div class="acc-b">
-          ${ref}
-          ${rows || '<div class="empty" style="padding:8px">세트를 자유롭게 적으세요.</div>'}
-          <div class="set-add">
-            <div class="set-row">
-              <div class="set-n">${n + 1}</div>
-              <textarea class="field" data-new-set="${esc(ex.id)}" rows="1" spellcheck="false" placeholder="다음 세트" enterkeyhint="next"></textarea>
-              <span></span>
-            </div>
-            <button class="btn wide" type="button" data-add-set="${esc(ex.id)}">세트 추가</button>
-          </div>
+          <textarea class="field ex-record" data-ex-record="${esc(ex.id)}" rows="6" spellcheck="false" placeholder="100kg 5회, 60초 버티기, 1세트: 100x5 / 2세트: 100x5">${esc(exerciseRecord(ex))}</textarea>
           <div class="sketch-pad">
             <div class="label">펜슬 메모</div>
             <div class="sketch-tools">
@@ -3558,43 +3494,7 @@
           </div></article>`);
       }
       box.innerHTML = cards.join("");
-      box.querySelectorAll(".set-row textarea.field, .set-add textarea.field").forEach(fitSetLine);
       paintSketches(box);
-      if (pendingSetFocus) {
-        const want = pendingSetFocus;
-        pendingSetFocus = null;
-        const el = want.draft
-          ? box.querySelector(`[data-new-set="${want.exId}"]`)
-          : box.querySelector(`[data-set-text="${want.exId}:${want.setId}"]`);
-        if (el) {
-          el.focus();
-          const len = el.value.length;
-          try { el.setSelectionRange(len, len); } catch (_) {}
-        }
-      }
-    }
-    function fitSetLine(el) {
-      if (!el) return;
-      el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 140) + "px";
-    }
-    let pendingSetFocus = null;
-    function commitSetDraft(exId) {
-      const ex = findEx(exId);
-      const input = document.querySelector(`[data-new-set="${exId}"]`);
-      if (!ex || !input) return false;
-      const text = input.value.trim();
-      if (!text) {
-        input.focus();
-        return false;
-      }
-      ex.sets.push({ id: uid(), text });
-      const m = currentMember();
-      const sess = sessionOf(m);
-      if (m && sess && !sess.charged) chargeSession(m, logDate);
-      else saveData();
-      pendingSetFocus = { exId, draft: true };
-      return true;
     }
     function findEx(id) { const s = sessionOf(); return s ? s.exercises.find((e) => e.id === id) : null; }
     let memberFilter = "active";
@@ -3752,15 +3652,6 @@
     }
     function dayVolume(m, date) {
       let vol = 0, sets = 0;
-      const sess = (m.sessions || {})[date];
-      if (sess) {
-        for (const ex of sess.exercises || []) {
-          for (const st of ex.sets || []) {
-            const w = Number(st.weight), r = Number(st.reps);
-            if (Number.isFinite(w) && Number.isFinite(r) && r > 0) { vol += w * r; sets += 1; }
-          }
-        }
-      }
       for (const row of m.selfWorkouts || []) {
         if (row.date !== date) continue;
         const w = Number(row.weight), r = Number(row.reps);
@@ -4313,14 +4204,14 @@
       const head = program ? `<p class="kv"><span>프로그램</span>${esc(program)}</p>` : "";
       const blocks = [];
       for (const ex of exercises) {
-        const sets = (ex.sets || []).map((st, i) => `<div class="set-line"><span>${i + 1}세트</span><b>${esc(setLineText(st) || "-")}</b></div>`).join("");
+        const record = exerciseRecord(ex).trim();
         const fb = ex.feedback || "";
         const media = await mediaViewHtml(ex);
         const packedSketch = packSketch(ex.sketch);
         const sketch = packedSketch
           ? `<canvas class="sketch-view" data-sketch="${esc(encodeURIComponent(JSON.stringify(packedSketch)))}"></canvas>`
           : "";
-        blocks.push(`<div class="log-ex"><h3>${esc(ex.name)}</h3>${sets || '<p class="hint">세트 없음</p>'}
+        blocks.push(`<div class="log-ex"><h3>${esc(ex.name)}</h3>${record ? `<p class="ex-record-view">${esc(record)}</p>` : '<p class="hint">기록 없음</p>'}
           ${media}
           ${sketch}
           ${fb ? `<p class="kv"><span>종목 피드백</span>${esc(fb)}</p>` : ""}</div>`);
@@ -4479,7 +4370,7 @@
         $("shareBody").innerHTML = `
           <div class="label">오늘 수업 일지</div>
           ${await trainerLogsHtml(pack, false)}
-          <p class="hint">프로그램 · 피드백 · 메모 · 종목 세트·피드백은 트레이너가 작성한 내용입니다.</p>
+          <p class="hint">프로그램 · 피드백 · 메모 · 종목 기록은 트레이너가 작성한 내용입니다.</p>
           <div class="label">개인 운동 · 식단</div>
           ${await dailyComboHtml(data.date || today(), portal, pack, false)}`;
         paintSketches($("shareBody"));
@@ -5321,7 +5212,7 @@
     $("addEx").onclick = async () => {
       const name = $("exName").value.trim(); const s = sessionOf();
       if (!name || !s) return;
-      s.exercises.push({ id: uid(), name, sets: [], media: [], feedback: "" });
+      s.exercises.push({ id: uid(), name, record: "", media: [], feedback: "" });
       $("exName").value = "";
       await persistCloud({ silent: true });
       await renderExercises();
@@ -5364,18 +5255,6 @@
         }
         return;
       }
-      const guideBtn = e.target.closest("[data-use-guide]");
-      if (guideBtn) {
-        const draft = document.querySelector(`[data-new-set="${guideBtn.dataset.useGuide}"]`);
-        if (draft) {
-          draft.value = guideBtn.dataset.guideText || "";
-          fitSetLine(draft);
-          draft.focus();
-          const len = draft.value.length;
-          try { draft.setSelectionRange(len, len); } catch (_) {}
-        }
-        return;
-      }
       const toolBtn = e.target.closest("[data-sketch-tool]");
       if (toolBtn) {
         const splitAt = toolBtn.dataset.sketchTool.lastIndexOf(":");
@@ -5390,20 +5269,9 @@
         }
         return;
       }
-      const addSet = e.target.closest("[data-add-set]");
-      const delSet = e.target.closest("[data-del-set]");
       const delEx = e.target.closest("[data-del-ex]");
       const delMedia = e.target.closest("[data-del-media]");
       const view = e.target.closest("[data-view]");
-      if (addSet) {
-        if (commitSetDraft(addSet.dataset.addSet)) await renderExercises();
-        return;
-      }
-      if (delSet) {
-        const [exId, setId] = delSet.dataset.delSet.split(":");
-        findEx(exId).sets = findEx(exId).sets.filter((s) => s.id !== setId);
-        saveData(); await renderExercises(); return;
-      }
       if (delEx) {
         const ex = findEx(delEx.dataset.delEx);
         if (!ex || !confirm(ex.name + " 종목을 삭제할까요?")) return;
@@ -5491,39 +5359,17 @@
         alert(saveErrText(err));
       }
     });
-    $("exercises").addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
-      const line = e.target.closest("[data-set-text]");
-      const draft = e.target.closest("[data-new-set]");
-      if (!line && !draft) return;
-      e.preventDefault();
-      if (draft) {
-        if (commitSetDraft(draft.dataset.newSet)) renderExercises();
-        return;
-      }
-      const splitAt = line.dataset.setText.lastIndexOf(":");
-      const exId = line.dataset.setText.slice(0, splitAt);
-      const setId = line.dataset.setText.slice(splitAt + 1);
-      const ex = findEx(exId);
-      if (!ex) return;
-      const idx = ex.sets.findIndex((st) => st.id === setId);
-      const next = ex.sets[idx + 1];
-      const target = next
-        ? document.querySelector(`[data-set-text="${exId}:${next.id}"]`)
-        : document.querySelector(`[data-new-set="${exId}"]`);
-      if (target) target.focus();
-    });
     $("exercises").addEventListener("input", (e) => {
-      const line = e.target.closest("[data-set-text]");
-      const draft = e.target.closest("[data-new-set]");
+      const record = e.target.closest("[data-ex-record]");
       const feedback = e.target.closest("[data-ex-feedback]");
-      if (draft) fitSetLine(draft);
-      if (line) {
-        const splitAt = line.dataset.setText.lastIndexOf(":");
-        const exId = line.dataset.setText.slice(0, splitAt);
-        const setId = line.dataset.setText.slice(splitAt + 1);
-        const st = findEx(exId) && findEx(exId).sets.find((s) => s.id === setId);
-        if (st) { st.text = line.value; fitSetLine(line); saveData(); }
+      if (record) {
+        const ex = findEx(record.dataset.exRecord);
+        if (!ex) return;
+        ex.record = record.value;
+        const m = currentMember();
+        const sess = sessionOf(m);
+        if (record.value.trim() && m && sess && !sess.charged) chargeSession(m, logDate);
+        else saveData();
       }
       if (feedback) { const ex = findEx(feedback.dataset.exFeedback); if (ex) { ex.feedback = feedback.value; saveData(); } }
     });
