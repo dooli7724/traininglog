@@ -98,16 +98,11 @@ function messageText(message) {
   return "";
 }
 
-function openaiHint(status, raw) {
-  let message = "";
-  try {
-    const parsed = JSON.parse(raw);
-    message = parsed && parsed.error && (parsed.error.message || parsed.error.code) || "";
-  } catch (_) {
-    message = String(raw || "");
-  }
-  message = String(message || "").replace(/sk-[A-Za-z0-9_\-]+/g, "").replace(/Bearer\s+\S+/gi, "").slice(0, 180);
-  return status + (message ? ": " + message : "");
+function failReason(status, raw) {
+  const text = String(raw || "").toLowerCase();
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429 || text.includes("insufficient_quota") || text.includes("no credits") || text.includes("billing")) return "billing";
+  return "unavailable";
 }
 
 async function askCoach(key, model, messages) {
@@ -139,11 +134,9 @@ async function askCoach(key, model, messages) {
     try { data = JSON.parse(raw); } catch (_) { data = {}; }
     const reply = messageText(data && data.choices && data.choices[0] && data.choices[0].message).slice(0, 2000);
     if (reply) return { reply };
-    lastStatus = response.status;
-    lastRaw = raw;
-    break;
+    return { reply: "", reason: "unavailable" };
   }
-  return { reply: "", hint: openaiHint(lastStatus, lastRaw) };
+  return { reply: "", reason: failReason(lastStatus, lastRaw) };
 }
 
 module.exports = async (req, res) => {
@@ -167,7 +160,7 @@ module.exports = async (req, res) => {
     const messages = cleanMessages(body && body.messages);
     const last = messages[messages.length - 1];
     if (!last || last.role !== "user") {
-      res.status(200).json({ configured: true, reply: "", error: "no_user_message" });
+      res.status(200).json({ configured: true, reply: "", reason: "unavailable" });
       return;
     }
     const system = [
@@ -183,11 +176,11 @@ module.exports = async (req, res) => {
     ].join("\n");
     const result = await askCoach(key, process.env.AI_MODEL || "gpt-4o-mini", [{ role: "system", content: system }].concat(messages));
     if (!result.reply) {
-      res.status(200).json({ configured: true, reply: "", error: result.hint || "empty" });
+      res.status(200).json({ configured: true, reply: "", reason: result.reason || "unavailable" });
       return;
     }
     res.status(200).json({ configured: true, reply: result.reply });
-  } catch (err) {
-    res.status(200).json({ configured: true, reply: "", error: clip(err && err.message, 180) || "failed" });
+  } catch (_) {
+    res.status(200).json({ configured: true, reply: "", reason: "unavailable" });
   }
 };

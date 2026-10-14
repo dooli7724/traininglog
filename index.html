@@ -4585,9 +4585,12 @@
         try { data = await res.json(); } catch (_) { data = null; }
         const reply = data && typeof data.reply === "string" ? data.reply.trim() : "";
         if (!res.ok || !reply) {
-          shareCtx.chatError = data && data.configured === false
+          const reason = data && data.reason;
+          shareCtx.chatError = (data && data.configured === false) || reason === "auth"
             ? "AI 코치 연결이 아직 없어요. 잠시 후 다시 시도해 주세요."
-            : "답변을 받지 못했어요. 다시 보내 주세요.";
+            : reason === "billing"
+              ? "AI 코치 사용량이 부족해 지금은 답할 수 없어요. 관리자에게 알려 주세요."
+              : "답변을 받지 못했어요. 다시 보내 주세요.";
         } else {
           history.push({ role: "assistant", content: reply });
           saveChat(history);
