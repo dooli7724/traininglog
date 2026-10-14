@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#0055FF" />
+  <meta name="theme-color" content="#312E81" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>PT 일지</title>
@@ -21,16 +21,20 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <style>
     :root {
-      --bg: #F8F9FA; --card: #FFFFFF; --line: #E9ECEF; --text: #1A1D21;
-      --muted: #6C757D; --accent: #0055FF; --accent-soft: #E6EEFF; --accent-glow: rgba(0, 85, 255, 0.14);
-      --ok: #00C853; --danger: #FF3B30;
-      --shadow: 0 4px 16px rgba(0, 0, 0, 0.06); --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.08);
-      --tap: 48px; --nav: 64px; --radius: 12px;
-      --page-max: 560px; --page-pad-x: clamp(16px, 5vw, 24px); --page-pad-y: clamp(20px, 5vh, 36px);
+      --bg: #F4F2ED; --card: #FFFFFF; --line: rgba(15, 23, 42, .08); --text: #0F172A;
+      --muted: #64748B; --accent: #312E81; --accent-soft: #EEF2FF; --accent-glow: rgba(49, 46, 129, .16);
+      --ok: #047857; --ok-soft: #ECFDF5; --warn: #B45309; --warn-soft: #FFFBEB;
+      --danger: #BE123C; --danger-soft: #FFF1F2;
+      --shadow: 0 1px 2px rgba(15, 23, 42, .04); --shadow-lg: 0 18px 48px rgba(15, 23, 42, .14);
+      --lift: 0 1px 2px rgba(15, 23, 42, .06);
+      --tap: 48px; --nav: 68px; --radius: 16px;
+      --page-max: 768px; --page-pad-x: clamp(20px, 4vw, 32px); --page-pad-y: clamp(24px, 4vh, 40px);
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
-      margin: 0; min-height: 100%; min-height: 100dvh; background: var(--bg); color: var(--text);
+      margin: 0; min-height: 100%; min-height: 100dvh;
+      background: radial-gradient(920px 420px at 80% -140px, rgba(49, 46, 129, .07), transparent 58%), var(--bg);
+      color: var(--text);
       font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Roboto", "Segoe UI", sans-serif;
       font-weight: 500; -webkit-font-smoothing: antialiased;
     }
@@ -51,8 +55,8 @@
     .btn, .tile, .back, .seg button, .cal-cell, .acc-h, .tabbar button { touch-action: manipulation; }
     .hidden { display: none !important; }
     .top {
-      position: sticky; top: 0; z-index: 20; background: rgba(248,249,250,.92);
-      backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 20; background: rgba(244, 242, 237, .86);
+      backdrop-filter: blur(18px);
       padding: calc(10px + env(safe-area-inset-top, 0px)) var(--page-pad-x) 10px;
       border-bottom: 1px solid var(--line);
       flex-shrink: 0;
@@ -69,8 +73,8 @@
     }
     .members-list-wrap { flex: 1; min-height: 0; width: 100%; }
     .members-list-wrap .label { margin-top: 4px; }
-    .top h1 { margin: 0; font-size: clamp(1.05rem, 4.6vw, 1.28rem); letter-spacing: -.03em; font-weight: 800; }
-    .top p { margin: 4px 0 0; color: var(--muted); font-size: .84rem; }
+    .top h1 { margin: 0; font-size: clamp(1.2rem, 4.8vw, 1.5rem); letter-spacing: -.04em; font-weight: 700; color: var(--text); }
+    .top p { margin: 4px 0 0; color: var(--muted); font-size: .86rem; font-weight: 500; }
     .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
     .top .row h1 { flex: 1; min-width: 0; font-size: clamp(.95rem, 4vw, 1.12rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hdr-btn { min-height: 40px !important; padding: 0 10px !important; font-size: .75rem !important; flex-shrink: 0; white-space: nowrap; }
@@ -118,33 +122,35 @@
       min-height: calc(100dvh - var(--nav) - 120px - var(--page-pad-y) * 2);
     }
     .btn {
-      min-height: var(--tap); border: 0; border-radius: var(--radius); padding: 0 16px;
-      font-weight: 700; background: var(--accent); color: #fff;
-      box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28);
+      min-height: var(--tap); border: 0; border-radius: 14px; padding: 0 18px;
+      font-weight: 600; letter-spacing: -.01em; background: var(--accent); color: #fff;
+      box-shadow: var(--lift);
     }
-    .btn:active { transform: scale(.98); }
-    .btn.soft { background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow); }
-    .btn.danger { background: #FFF0F0; color: var(--danger); border: 1px solid #FFD6D6; min-height: 40px; font-size: .84rem; box-shadow: none; }
+    .btn:active { transform: scale(.985); }
+    .btn:focus-visible, .field:focus-visible { outline: none; }
+    .btn.soft { background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: none; }
+    .btn.danger { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(190, 18, 60, .12); min-height: 40px; font-size: .84rem; box-shadow: none; }
     .btn.wide { width: 100%; }
     .field, select.field {
       width: 100%; min-height: var(--tap); border: 1px solid var(--line);
-      background: var(--card); border-radius: var(--radius); padding: 12px 14px; outline: none;
+      background: #fff; border-radius: 14px; padding: 12px 16px; outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
     }
-    .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
-    textarea.field { min-height: 88px; resize: vertical; line-height: 1.5; }
-    .cap { display: block; margin: 10px 0 6px; font-size: .78rem; font-weight: 800; color: var(--muted); }
+    .field:focus { border-color: #4338CA; box-shadow: 0 0 0 4px var(--accent-glow); }
+    textarea.field { min-height: 96px; resize: vertical; line-height: 1.55; }
+    .cap { display: block; margin: 14px 0 8px; font-size: .75rem; font-weight: 600; color: var(--muted); letter-spacing: .01em; }
     .add { display: flex; gap: 8px; margin-bottom: 12px; }
     .add .btn { flex-shrink: 0; }
     .add .field { flex: 1; min-width: 0; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-    .card { background: var(--card); border: none; border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; margin-bottom: 10px; }
-    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-    .stat { text-align: center; padding: 14px 8px; width: 100%; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .stat { text-align: left; padding: 18px 16px; width: 100%; }
     button.stat { cursor: pointer; }
     button.stat:active { transform: scale(.98); }
-    .stat b { display: block; font-size: 1.35rem; font-weight: 800; color: var(--accent); }
-    .stat span { color: var(--muted); font-size: .75rem; }
+    .stat b { display: block; font-size: 1.7rem; font-weight: 700; letter-spacing: -.04em; color: var(--text); }
+    .stat span { color: var(--muted); font-size: .75rem; font-weight: 600; }
     .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 8px 0 10px; }
     .seg button {
       min-height: 40px; border: 1px solid var(--line); border-radius: var(--radius);
@@ -192,10 +198,10 @@
     .tl-block {
       position: absolute; left: 3px; right: auto; overflow: hidden;
       border: 0; border-radius: 8px; padding: 5px 6px; text-align: left; color: #fff;
-      box-shadow: 0 4px 12px rgba(0, 85, 255, .22); z-index: 2;
+      box-shadow: var(--lift); z-index: 2;
       cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none;
     }
-    .tl-block.dragging { z-index: 9; cursor: grabbing; box-shadow: 0 10px 22px rgba(0, 85, 255, .32); opacity: .95; touch-action: none; }
+    .tl-block.dragging { z-index: 9; cursor: grabbing; box-shadow: var(--shadow-lg); opacity: .95; touch-action: none; }
     .tl-block b, .tl-block small { display: block; }
     .tl-block b { font-size: .74rem; line-height: 1.25; }
     .tl-block small { font-size: .64rem; opacity: .92; }
@@ -218,17 +224,17 @@
     .cal-cell.sun b, .cal-cell.holiday b { color: var(--danger); }
     .cal-cell small { display: block; color: var(--accent); font-size: .68rem; font-weight: 800; }
     .cal-cell .hol { color: var(--danger); font-size: .6rem; font-weight: 800; display: block; }
-    .label { margin: 16px 0 8px; font-size: .78rem; font-weight: 800; color: var(--muted); letter-spacing: .06em; }
+    .label { margin: 22px 0 10px; font-size: .72rem; font-weight: 700; color: var(--muted); letter-spacing: .08em; }
     .hint { color: var(--muted); font-size: .8rem; margin: 0 0 10px; line-height: 1.45; }
     .tile {
-      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      text-align: left; background: var(--card); border: none; border-radius: var(--radius);
-      box-shadow: var(--shadow); padding: 12px; margin-bottom: 8px; min-height: 64px; color: inherit;
+      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 16px 16px; margin-bottom: 10px; min-height: 68px; color: inherit;
     }
     .tile > span:first-child { min-width: 0; flex: 1; }
-    .tile b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
-    .tile small { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .chev { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+    .tile b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; letter-spacing: -.02em; }
+    .tile small { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; margin-top: 2px; }
+    .chev { color: #94A3B8; font-size: 1.15rem; font-weight: 500; }
     .split-tile { display: flex; gap: 8px; margin-bottom: 8px; }
     .split-tile .tile { flex: 1; margin-bottom: 0; min-width: 0; }
     .split-tile .side {
@@ -271,7 +277,8 @@
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
       height: calc(var(--nav) + env(safe-area-inset-bottom, 0px));
       padding-bottom: env(safe-area-inset-bottom, 0px);
-      background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+      background: rgba(255,255,255,.92); backdrop-filter: blur(16px);
+      border-top: 1px solid var(--line); box-shadow: none;
     }
     body.share .tabbar { display: none; }
     .client-nav {
@@ -323,9 +330,9 @@
     .book-dots i, .book-legend i {
       width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0;
     }
-    .book-dots i.open, .book-legend i.open { background: #0055FF; }
-    .book-dots i.full, .book-legend i.full { background: #00C853; }
-    .book-dots i.wait, .book-legend i.wait { background: #FF8A00; }
+    .book-dots i.open, .book-legend i.open { background: var(--accent); }
+    .book-dots i.full, .book-legend i.full { background: var(--ok); }
+    .book-dots i.wait, .book-legend i.wait { background: var(--warn); }
     .book-cell.on .book-dots i.open, .home-day.on .book-dots i.open { background: #fff; }
     .book-cell.on .book-dots i.full, .home-day.on .book-dots i.full { background: #B8FFD0; }
     .book-cell.on .book-dots i.wait, .home-day.on .book-dots i.wait { background: #FFE0A3; }
@@ -375,9 +382,9 @@
     }
     body.reserve-public { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
     body.reserve-public .tabbar, body.reserve-public .client-nav { display: none !important; }
-    .book-cal .tl-block.open { background: #0055FF; }
-    .book-cal .tl-block.full { background: #00C853; }
-    .book-cal .tl-block.wait { background: #FF8A00; }
+    .book-cal .tl-block.open { background: var(--accent); }
+    .book-cal .tl-block.full { background: var(--ok); }
+    .book-cal .tl-block.wait { background: var(--warn); }
     .book-cal .tl-block.closed { background: #8E8E93; }
     .book-cal .tl-block.done { background: #5C6B7A; }
     .book-cal .tl-block.missed { background: #78716C; }
@@ -430,7 +437,7 @@
     }
     .client-cal-day.muted { opacity: .35; }
     .client-cal-day.has { color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent-glow), var(--shadow); }
-    .client-cal-day.on { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); }
+    .client-cal-day.on { background: var(--accent); color: #fff; box-shadow: var(--lift); }
     .client-cal-day small { display: block; font-size: .55rem; font-weight: 800; margin-top: 2px; opacity: .9; }
     .share-panel { display: none; }
     .share-panel.on { display: block; }
@@ -452,7 +459,7 @@
     .record-card .record-top .meta { flex: 1; min-width: 0; }
     .coach-bubble {
       margin-top: 10px; padding: 10px 12px; border-radius: var(--radius);
-      background: var(--accent-soft); border: 1px solid #C5D8FF;
+      background: var(--accent-soft); border: 1px solid rgba(49, 46, 129, .12);
     }
     .coach-bubble span {
       display: block; font-size: .68rem; font-weight: 800; color: var(--accent); margin-bottom: 4px;
@@ -460,12 +467,12 @@
     .coach-bubble p { margin: 0; font-size: .88rem; line-height: 1.45; font-weight: 600; }
     .coach-box { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
     .book-count-line { margin: 0; font-size: .95rem; font-weight: 800; }
-    .book-count-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
-    .book-count-day { text-align: center; background: var(--bg); border-radius: 10px; padding: 6px 2px; }
-    .book-count-day span { display: block; font-size: .62rem; font-weight: 800; color: var(--muted); }
-    .book-count-day b { font-size: .95rem; }
-    .book-count-day.on { background: var(--accent-soft); color: var(--accent); }
-    .book-count-day.on span { color: var(--accent); }
+    .book-count-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 12px; }
+    .book-count-day { text-align: center; background: var(--bg); border-radius: 999px; padding: 8px 2px; border: 1px solid transparent; }
+    .book-count-day span { display: block; font-size: .62rem; font-weight: 700; color: var(--muted); }
+    .book-count-day b { font-size: .95rem; font-weight: 700; }
+    .book-count-day.on { background: var(--accent); color: #fff; }
+    .book-count-day.on span { color: rgba(255,255,255,.78); }
     .home-count { margin: 0 0 10px; font-size: .92rem; font-weight: 800; }
     .sketch-canvas.eraser { cursor: cell; }
     .volume-card { margin-bottom: 12px; }
@@ -500,10 +507,10 @@
     .attend-day.miss .mark { background: var(--danger); color: #fff; }
     .attend-day.miss .st { color: var(--danger); }
     .remind-banner {
-      background: linear-gradient(180deg, #EEF3FF 0%, #FFFFFF 100%);
-      border: 1.5px solid #C5D8FF; border-radius: var(--radius);
-      padding: 12px; margin-bottom: 14px;
-      box-shadow: 0 6px 18px rgba(0, 85, 255, 0.12);
+      background: linear-gradient(180deg, #F4F6FF 0%, #FFFFFF 100%);
+      border: 1px solid rgba(49, 46, 129, .12); border-radius: var(--radius);
+      padding: 16px; margin-bottom: 16px;
+      box-shadow: var(--shadow);
     }
     .remind-kicker {
       font-size: .72rem; font-weight: 800; color: var(--accent); letter-spacing: .02em; margin-bottom: 8px;
@@ -550,7 +557,7 @@
     }
     #logWork > .acc,
     #logWork > .log-block {
-      background: #E7EEF8;
+      background: #EEF0F6;
       box-shadow: none;
       margin-bottom: 14px;
     }
@@ -567,13 +574,13 @@
     #logWork > .acc > .acc-b { padding: 4px 16px 16px; }
     #logWork > .log-block .add { margin-bottom: 12px; }
     #logWork .ex-acc {
-      margin: 0 0 12px; background: #fff; box-shadow: var(--shadow); border-left: 4px solid var(--accent);
+      margin: 0 0 12px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); border-left: 3px solid var(--accent);
     }
     #logWork .ex-acc:last-child { margin-bottom: 0; }
     #logWork .ex-top .acc-h { min-height: 72px; padding: 14px 8px 14px 14px; align-items: center; }
     #logWork .ex-top .ex-title { gap: 8px; }
     #logWork .ex-top .ex-title b {
-      font-size: 1.72rem; font-weight: 800; line-height: 1.12; letter-spacing: -.045em; color: #05070C;
+      font-size: 1.72rem; font-weight: 800; line-height: 1.12; letter-spacing: -.045em; color: var(--text);
     }
     #logWork .ex-top .badge { margin-left: 0; font-size: .68rem; font-weight: 700; align-self: center; }
     #logWork .ex-acc .acc-b { padding: 2px 14px 16px; }
@@ -591,8 +598,8 @@
     }
     .vol-bar {
       width: 70%; min-height: 4px; border-radius: 8px 8px 4px 4px;
-      background: linear-gradient(180deg, #3377FF 0%, #0055FF 100%);
-      box-shadow: 0 4px 10px rgba(0, 85, 255, 0.25);
+      background: var(--accent);
+      box-shadow: none;
     }
     .vol-col > span { margin-top: 6px; font-size: .68rem; font-weight: 800; color: var(--muted); }
     .vol-col > small { font-size: .58rem; font-weight: 700; color: var(--accent); line-height: 1.2; }
@@ -600,19 +607,19 @@
     .home-week-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
     .home-week-nav h3 { flex: 1; margin: 0; text-align: center; font-size: .92rem; font-weight: 800; min-width: 0; }
     .home-week-nav .btn { min-height: 40px; min-width: 40px; padding: 0 10px; }
-    .home-week-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 12px; }
+    .home-week-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 16px; }
     .home-day {
-      border: 0; border-radius: var(--radius); background: var(--bg); color: var(--text);
-      padding: 8px 2px 6px; text-align: center; min-height: 64px;
+      border: 1px solid transparent; border-radius: 18px; background: var(--bg); color: var(--text);
+      padding: 10px 2px 8px; text-align: center; min-height: 76px;
       display: flex; flex-direction: column; align-items: center; gap: 2px;
-      box-shadow: inset 0 0 0 1px var(--line);
+      box-shadow: none;
     }
     .home-day .wd { font-size: .62rem; font-weight: 800; color: var(--muted); }
     .home-day .dn { font-size: .95rem; font-weight: 800; line-height: 1.1; }
     .home-day .cnt { font-size: .58rem; font-weight: 800; color: var(--accent); min-height: 12px; }
     .home-day.sun .wd, .home-day.sun .dn, .home-day.holiday .wd, .home-day.holiday .dn { color: var(--danger); }
     .home-day.today { box-shadow: inset 0 0 0 1.5px var(--accent-glow); }
-    .home-day.on { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); }
+    .home-day.on { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: none; }
     .home-day.on .wd, .home-day.on .dn, .home-day.on .cnt { color: #fff; }
     .home-day.on.sun .wd, .home-day.on.sun .dn { color: #FFE8E8; }
     .home-week-label { margin: 0 0 8px; font-size: .78rem; font-weight: 800; color: var(--muted); }
@@ -630,14 +637,14 @@
       min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius);
       background: var(--card); color: var(--text); font-weight: 700; font-size: .84rem; box-shadow: var(--shadow);
     }
-    .member-seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); }
+    .member-seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--lift); }
     .member-seg button em { font-style: normal; opacity: .85; font-weight: 800; }
     .status-badge {
       display: inline-block; margin-left: 6px; border-radius: 999px; padding: 2px 8px;
       font-size: .68rem; font-weight: 800; vertical-align: middle;
     }
-    .status-badge.active { background: var(--accent-soft); color: var(--accent); }
-    .status-badge.expired { background: #FFF0F0; color: var(--danger); }
+    .status-badge.active { background: var(--ok-soft); color: var(--ok); }
+    .status-badge.expired { background: var(--danger-soft); color: var(--danger); }
     .tile.expired-tile { opacity: .92; }
     .tile.expired-tile b { color: var(--muted); }
     .tabbar button {
@@ -647,6 +654,29 @@
     }
     .tabbar button.on { color: var(--accent); }
     .tabbar .ico { font-size: 1.15rem; line-height: 1; }
+    svg.ico, svg.sec-ico { display: block; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+    svg.ico { width: 22px; height: 22px; }
+    .sec-title { display: inline-flex; align-items: center; gap: 8px; }
+    svg.sec-ico { width: 18px; height: 18px; flex: none; color: var(--accent); }
+    .tone-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .tone-row b { min-width: 0; }
+    .tone-dot { width: 8px; height: 8px; border-radius: 99px; flex: none; background: var(--accent); }
+    .tone-dot.full { background: var(--ok); }
+    .tone-dot.wait { background: var(--warn); }
+    .tone-dot.closed, .tone-dot.done { background: #64748B; }
+    .tone-dot.missed { background: #A8A29E; }
+    .book-slot { position: relative; }
+    .book-slot::before {
+      content: ""; position: absolute; left: 10px; top: 18px; bottom: 18px; width: 3px; border-radius: 99px; background: var(--accent);
+    }
+    .book-slot.full::before { background: var(--ok); }
+    .book-slot.wait::before { background: var(--warn); }
+    .book-slot.closed::before, .book-slot.done::before { background: #64748B; }
+    .book-slot.missed::before { background: #A8A29E; }
+    .tag.full { background: var(--ok-soft); color: var(--ok); }
+    .tag.wait { background: var(--warn-soft); color: var(--warn); }
+    .tag.closed { background: #F1F5F9; color: #475569; }
+    .book-slot { padding-left: 22px; }
     .viewer { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 24px; }
     .viewer img, .viewer video { max-width: 100%; max-height: 80dvh; border-radius: 12px; }
     #dayLogBg { z-index: 55; }
@@ -708,7 +738,7 @@
     }
     .act4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; justify-items: stretch; }
     .act4 .btn { min-height: 44px; font-size: .78rem; padding: 8px 6px; white-space: normal; line-height: 1.25; }
-    .acc { background: var(--card); border: none; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 10px; overflow: hidden; }
+    .acc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
     .acc-h {
       width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: space-between;
       gap: 8px; padding: 0 14px; border: 0; background: transparent; color: var(--text);
@@ -746,7 +776,7 @@
     .share-hero { margin: 4px 0 14px; }
     .share-hero h2 { margin: 0 0 4px; font-size: 1.22rem; letter-spacing: -.03em; }
     .share-hero p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.45; }
-    .share-goal { background: var(--accent-soft); border: 1px solid #C5D8FF; border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; }
+    .share-goal { background: var(--accent-soft); border: 1px solid rgba(49, 46, 129, .12); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; }
     .share-goal span { display: block; font-size: .72rem; font-weight: 800; color: var(--accent); margin-bottom: 4px; }
     .share-goal b { font-size: 1.02rem; font-weight: 800; }
     .tag { display: inline-block; margin-left: 6px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 7px; font-size: .68rem; font-weight: 800; }
@@ -807,14 +837,14 @@
     html[data-client="1"] #authGate,
     html[data-client="1"] body.auth-open #authGate { display: none !important; }
     .auth-card {
-      width: 100%; max-width: 400px; background: var(--card); border-radius: 16px;
-      box-shadow: var(--shadow-lg); padding: 28px 22px 22px;
+      width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+      box-shadow: var(--shadow-lg); padding: 32px 24px 24px;
     }
     .auth-mark {
       width: 48px; height: 48px; border-radius: 14px; background: var(--accent);
       color: #fff; font-weight: 800; font-size: 1.15rem;
       display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 4px 14px rgba(0, 85, 255, 0.28); margin-bottom: 14px;
+      box-shadow: var(--lift); margin-bottom: 14px;
     }
     .auth-card h2 { margin: 0 0 6px; font-size: 1.28rem; font-weight: 800; letter-spacing: -.03em; }
     .auth-card .auth-lead { margin: 0 0 18px; color: var(--muted); font-size: .9rem; line-height: 1.45; }
@@ -980,13 +1010,13 @@
         <p class="label" id="logDay"></p>
         <p class="hint" id="logPrevHint"></p>
         <div class="acc open" data-log-acc="program">
-          <button class="acc-h" type="button" data-log-toggle="program">오늘 프로그램 <span class="arr">▾</span></button>
+          <button class="acc-h" type="button" data-log-toggle="program"><span class="sec-title"><svg class="sec-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>오늘 프로그램</span> <span class="arr">▾</span></button>
           <div class="acc-b">
             <textarea class="field ex-note" id="logProgram" placeholder="오늘 전체 운동 계획 · 루틴"></textarea>
           </div>
         </div>
         <div class="log-block">
-          <div class="label log-sec">운동 종목</div>
+          <div class="label log-sec"><span class="sec-title"><svg class="sec-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7v10"/><path d="M18 7v10"/><path d="M6 12h12"/><path d="M3 9v6"/><path d="M21 9v6"/></svg>운동 종목</span></div>
           <div class="add">
             <input class="field" id="exName" placeholder="종목 (예: 스쿼트)" autocomplete="off" />
             <button class="btn" id="addEx" type="button">추가</button>
@@ -994,13 +1024,13 @@
           <div id="exercises"></div>
         </div>
         <div class="acc open" data-log-acc="feedback">
-          <button class="acc-h" type="button" data-log-toggle="feedback">피드백 <span class="arr">▾</span></button>
+          <button class="acc-h" type="button" data-log-toggle="feedback"><span class="sec-title"><svg class="sec-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>피드백</span> <span class="arr">▾</span></button>
           <div class="acc-b">
             <textarea class="field ex-note" id="logFeedback" placeholder="오늘 전체 수업 총평 · 코칭 피드백"></textarea>
           </div>
         </div>
         <div class="acc open" data-log-acc="memo">
-          <button class="acc-h" type="button" data-log-toggle="memo">메모 <span class="arr">▾</span></button>
+          <button class="acc-h" type="button" data-log-toggle="memo"><span class="sec-title"><svg class="sec-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>메모</span> <span class="arr">▾</span></button>
           <div class="acc-b">
             <textarea class="field ex-note" id="logMemo" placeholder="기타 특이사항"></textarea>
           </div>
@@ -1080,8 +1110,8 @@
         <div class="acc-b">
           <p class="hint" id="bodyTrend"></p>
           <div class="legend">
-            <span><i style="background:#0055FF"></i>체중</span>
-            <span><i style="background:#00C853"></i>골격근량</span>
+            <span><i style="background:#312E81"></i>체중</span>
+            <span><i style="background:#047857"></i>골격근량</span>
             <span><i style="background:#FF6B35"></i>체지방률</span>
           </div>
           <div class="chart-wrap" id="bodyChart"></div>
@@ -1266,10 +1296,10 @@
   </main>
 
   <nav class="client-nav" id="clientNav" aria-label="회원 기록 메뉴">
-    <button type="button" data-client-tab="today" class="on"><span class="ico">◎</span>오늘 기록</button>
-    <button type="button" data-client-tab="history"><span class="ico">▣</span>이전 기록</button>
-    <button type="button" data-client-tab="write"><span class="ico">✎</span>기록 작성</button>
-    <button type="button" data-client-tab="book"><span class="ico">◷</span>예약<span class="nav-badge hidden" id="clientBookBadge"></span></button>
+    <button type="button" data-client-tab="today" class="on"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2 2"/></svg>오늘 기록</button>
+    <button type="button" data-client-tab="history"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>이전 기록</button>
+    <button type="button" data-client-tab="write"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>기록 작성</button>
+    <button type="button" data-client-tab="book"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18"/></svg>예약<span class="nav-badge hidden" id="clientBookBadge"></span></button>
   </nav>
 
   <div id="reserveSheetBg" class="modal-bg hidden">
@@ -1283,10 +1313,10 @@
   </div>
 
   <nav class="tabbar">
-    <button type="button" data-tab="home" class="on"><span class="ico">⌂</span>홈</button>
-    <button type="button" data-tab="log"><span class="ico">✎</span>운동 일지</button>
-    <button type="button" data-tab="members"><span class="ico">☰</span>회원 관리</button>
-    <button type="button" data-tab="book"><span class="ico">◷</span>예약<span class="nav-badge hidden" id="bookBadge"></span></button>
+    <button type="button" data-tab="home" class="on"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10.5 9-7 9 7"/><path d="M5 10v10h14V10"/></svg>홈</button>
+    <button type="button" data-tab="log"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>운동 일지</button>
+    <button type="button" data-tab="members"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>회원 관리</button>
+    <button type="button" data-tab="book"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18"/></svg>예약<span class="nav-badge hidden" id="bookBadge"></span></button>
   </nav>
 
   <div id="modalBg" class="modal-bg hidden">
@@ -2130,13 +2160,15 @@
     function homeSlotRow(slot, date) {
       const person = slotConfirmedPerson(slot);
       const member = person ? memberByBookingName(person.name) : null;
-      const label = slotToneLabel(slotTone(slot, false));
+      const tone = slotTone(slot, false);
+      const label = slotToneLabel(tone);
       const when = fmtSlotClock(slot.start_time, slot.end_time);
       const title = bookBlockTitle(slot);
       const jump = `data-open-book-day="${esc(date)}" data-open-book-slot="${esc(slot.id)}"`;
+      const body = `<span class="tone-row"><i class="tone-dot ${tone}"></i><b>${esc(title)}</b></span><small>${esc(when)} · ${esc(label)}</small>`;
       const main = member
-        ? `<button class="tile" type="button" data-goto-log="${esc(member.id)}" data-log-date="${esc(date)}"><span><b>${esc(title)}</b><small>${esc(when)} · ${esc(label)}</small></span><span class="chev">›</span></button>`
-        : `<button class="tile" type="button" ${jump}><span><b>${esc(title)}</b><small>${esc(when)} · ${esc(label)}</small></span><span class="chev">›</span></button>`;
+        ? `<button class="tile" type="button" data-goto-log="${esc(member.id)}" data-log-date="${esc(date)}"><span>${body}</span><span class="chev">›</span></button>`
+        : `<button class="tile" type="button" ${jump}><span>${body}</span><span class="chev">›</span></button>`;
       const side = member ? `<button class="tile side" type="button" ${jump}>예약</button>` : "";
       return `<div class="split-tile">${main}${side}</div>`;
     }
@@ -2307,6 +2339,7 @@
       if (!rows.length && slot.status !== "closed" && !frozen) rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
       if (missed) rows.push('<p class="hint" style="margin:6px 0 0">예약 없이 시간이 지났습니다.</p>');
       if (slot.status === "closed" && !frozen) rows.push('<p class="hint" style="margin:6px 0 0">마감된 칸입니다. 오픈 취소를 누르면 기록이 삭제되고 오픈 전으로 돌아갑니다.</p>');
+      const tone = done ? "done" : (missed ? "missed" : (slot.status === "closed" ? "closed" : (confirmed ? "full" : (waiting.length ? "wait" : "open"))));
       const st = done ? "진행 완료" : (missed ? "미진행" : (slot.status === "closed" ? "마감" : (slot.status === "booked" ? "예약됨" : "비어 있음")));
       const start = slotClockValue(slot.start_time);
       const end = slotClockValue(slot.end_time);
@@ -2338,8 +2371,8 @@
             </div>
             <button class="btn wide" type="button" data-book-save="${esc(slot.id)}">이 시간으로 저장</button>
           </div>`);
-      return `<div class="card book-slot${done ? " done" : ""}${missed ? " missed" : ""}" data-book-slot-card="${esc(slot.id)}">
-        <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag${done ? " done" : ""}${missed ? " missed" : ""}">${st}</span></div>
+      return `<div class="card book-slot ${tone}${done ? " done" : ""}${missed ? " missed" : ""}" data-book-slot-card="${esc(slot.id)}">
+        <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag ${tone}${done ? " done" : ""}${missed ? " missed" : ""}">${st}</span></div>
         ${rows.join("")}
         ${assign}
         ${actions}
@@ -3627,7 +3660,7 @@
         return `<text x="${xAt(i).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#6C757D">${esc(r.date.slice(5).replace("-", "/"))}</text>`;
       }).join("");
       const axis = `<text x="${pl}" y="${H - 10}" text-anchor="start" font-size="9" fill="#A89F90">측정일</text>`;
-      return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${grid}${series("weight", "#0055FF")}${series("muscle", "#00C853")}${series("fat", "#FF6B35")}${labels}${axis}</svg>`;
+      return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${grid}${series("weight", "#312E81")}${series("muscle", "#047857")}${series("fat", "#FF6B35")}${labels}${axis}</svg>`;
     }
     function bodyStatsHtml(rows) {
       const asc = [...rows].sort((a, b) => a.date.localeCompare(b.date));
@@ -3639,12 +3672,12 @@
         let delta = "";
         if (Number.isFinite(a) && Number.isFinite(b) && asc.length > 1) {
           const n = b - a;
-          const col = n === 0 ? "#6C757D" : (key === "fat" ? (n < 0 ? "#00C853" : "#FF3B30") : (n > 0 ? "#00C853" : "#FF3B30"));
+          const col = n === 0 ? "#6C757D" : (key === "fat" ? (n < 0 ? "#047857" : "#FF3B30") : (n > 0 ? "#047857" : "#FF3B30"));
           delta = `<em style="color:${col}">${n > 0 ? "+" : ""}${n.toFixed(1)}${unit}</em>`;
         }
         return `<div><span style="color:${color}">${label}</span><b>${has ? b.toFixed(1) + unit : "-"}</b>${delta}</div>`;
       }
-      return cell("체중", "weight", "kg", "#0055FF") + cell("골격근량", "muscle", "kg", "#00C853") + cell("체지방률", "fat", "%", "#FF6B35");
+      return cell("체중", "weight", "kg", "#312E81") + cell("골격근량", "muscle", "kg", "#047857") + cell("체지방률", "fat", "%", "#FF6B35");
     }
     function lastNDays(n, end) {
       const base = end || today();
@@ -4389,8 +4422,8 @@
       const goal = profile.goal ? `<div class="share-goal"><span>목표</span><b>${esc(profile.goal)}</b></div>` : "";
       const chart = body.length
         ? `<div class="legend">
-            <span><i style="background:#0055FF"></i>체중</span>
-            <span><i style="background:#00C853"></i>골격근량</span>
+            <span><i style="background:#312E81"></i>체중</span>
+            <span><i style="background:#047857"></i>골격근량</span>
             <span><i style="background:#FF6B35"></i>체지방률</span>
           </div>
           <div class="chart-wrap">${bodyChartSvg(body)}</div>
@@ -4506,7 +4539,7 @@
     function closeModal() { $("modalBg").classList.add("hidden"); editingId = null; }
 
     const TL_FROM = 6, TL_TO = 24;
-    const BLOCK_COLORS = ["#0055FF", "#0044CC", "#3366FF", "#0066FF", "#0033AA", "#0088FF"];
+    const BLOCK_COLORS = ["#312E81", "#4338CA", "#1E1B4B", "#3730A3", "#4F46E5", "#6366F1"];
     const KR_HOLIDAYS = {
       "2026-01-01": "새해",
       "2026-02-16": "설날",
