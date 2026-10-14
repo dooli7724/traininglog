@@ -535,30 +535,43 @@
     #logWork > #logDay {
       margin: 0 0 6px; font-size: 1.08rem; font-weight: 800; color: var(--text); letter-spacing: -.02em;
     }
-    #logWork > .log-sec,
-    #logWork > .acc > .acc-h {
-      font-size: 1.22rem; font-weight: 800; color: var(--text); letter-spacing: -.03em;
+    #logWork > .acc,
+    #logWork > .log-block {
+      background: #E7EEF8;
+      box-shadow: none;
+      margin-bottom: 14px;
     }
-    #logWork > .log-sec { margin: 22px 0 12px; }
-    #logWork > .acc { margin-bottom: 16px; }
-    #logWork > .acc > .acc-h { min-height: 60px; padding: 16px 16px; }
-    #logWork > .acc > .acc-b { padding: 12px 16px 16px; }
-    #logWork .ex-acc { margin: 0 0 14px; border-left: 4px solid var(--accent); }
-    #logWork .ex-top .acc-h { min-height: 68px; padding: 12px 8px 12px 14px; align-items: center; }
+    #logWork > .log-block {
+      border-radius: var(--radius);
+      padding: 4px 14px 16px;
+    }
+    #logWork > .acc > .acc-h,
+    #logWork > .log-block > .log-sec {
+      font-size: 1.28rem; font-weight: 800; color: #12141A; letter-spacing: -.03em;
+    }
+    #logWork > .log-block > .log-sec { margin: 12px 2px 12px; }
+    #logWork > .acc > .acc-h { min-height: 62px; padding: 16px 16px; }
+    #logWork > .acc > .acc-b { padding: 4px 16px 16px; }
+    #logWork > .log-block .add { margin-bottom: 12px; }
+    #logWork .ex-acc {
+      margin: 0 0 12px; background: #fff; box-shadow: var(--shadow); border-left: 4px solid var(--accent);
+    }
+    #logWork .ex-acc:last-child { margin-bottom: 0; }
+    #logWork .ex-top .acc-h { min-height: 72px; padding: 14px 8px 14px 14px; align-items: center; }
     #logWork .ex-top .ex-title { gap: 8px; }
     #logWork .ex-top .ex-title b {
-      font-size: 1.58rem; font-weight: 800; line-height: 1.15; letter-spacing: -.04em; color: #0B0D12;
+      font-size: 1.72rem; font-weight: 800; line-height: 1.12; letter-spacing: -.045em; color: #05070C;
     }
-    #logWork .ex-top .badge { margin-left: 0; font-size: .7rem; font-weight: 700; align-self: center; }
-    #logWork .ex-acc .acc-b { padding: 4px 14px 16px; }
-    #logWork .set-n { font-size: .78rem; font-weight: 700; color: var(--muted); }
-    #logWork .set-row .field, #logWork .set-add .field { font-size: .95rem; font-weight: 600; }
+    #logWork .ex-top .badge { margin-left: 0; font-size: .68rem; font-weight: 700; align-self: center; }
+    #logWork .ex-acc .acc-b { padding: 2px 14px 16px; }
+    #logWork .set-n { font-size: .74rem; font-weight: 600; color: var(--muted); }
+    #logWork .set-row .field, #logWork .set-add .field { font-size: .92rem; font-weight: 600; color: #3A4048; }
     #logWork .ex-acc .label, #logWork .ex-acc .cap {
-      margin-top: 16px; font-size: .74rem; font-weight: 700; color: var(--muted); letter-spacing: .02em;
+      margin-top: 16px; font-size: .7rem; font-weight: 700; color: #8B939C; letter-spacing: .04em;
     }
-    #logWork .hint, #logWork .prev { font-size: .75rem; font-weight: 500; }
-    #logWork .set-guide { font-size: .8rem; font-weight: 700; }
-    #logWork textarea.field { font-size: .95rem; font-weight: 500; }
+    #logWork .hint, #logWork .prev { font-size: .74rem; font-weight: 500; color: #8B939C; }
+    #logWork .set-guide { font-size: .78rem; font-weight: 700; }
+    #logWork textarea.field, #logWork .add .field { font-size: .92rem; font-weight: 500; color: #3A4048; }
     .vol-chart { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 0 2px; }
     .vol-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; }
     .vol-bar-wrap {
@@ -980,12 +993,14 @@
             <textarea class="field ex-note" id="logProgram" placeholder="오늘 전체 운동 계획 · 루틴"></textarea>
           </div>
         </div>
-        <div class="label log-sec">운동 종목</div>
-        <div class="add">
-          <input class="field" id="exName" placeholder="종목 (예: 스쿼트)" autocomplete="off" />
-          <button class="btn" id="addEx" type="button">추가</button>
+        <div class="log-block">
+          <div class="label log-sec">운동 종목</div>
+          <div class="add">
+            <input class="field" id="exName" placeholder="종목 (예: 스쿼트)" autocomplete="off" />
+            <button class="btn" id="addEx" type="button">추가</button>
+          </div>
+          <div id="exercises"></div>
         </div>
-        <div id="exercises"></div>
         <div class="acc open" data-log-acc="feedback">
           <button class="acc-h" type="button" data-log-toggle="feedback">피드백 <span class="arr">▾</span></button>
           <div class="acc-b">
