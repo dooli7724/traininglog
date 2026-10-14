@@ -29,7 +29,7 @@ loadEnv(join(root, ".env"));
 let dbUrl = process.env.SUPABASE_DB_URL || "";
 if (!dbUrl && process.env.SUPABASE_DB_PASSWORD) {
   const password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
-  dbUrl = `postgresql://postgres:${password}@db.${ref}.supabase.co:5432/postgres?sslmode=require`;
+  dbUrl = `postgresql://postgres.${ref}:${password}@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres?sslmode=require`;
 }
 
 if (!dbUrl) {
