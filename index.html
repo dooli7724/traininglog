@@ -456,6 +456,15 @@
     }
     .coach-bubble p { margin: 0; font-size: .88rem; line-height: 1.45; font-weight: 600; }
     .coach-box { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .book-count-line { margin: 0; font-size: .95rem; font-weight: 800; }
+    .book-count-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+    .book-count-day { text-align: center; background: var(--bg); border-radius: 10px; padding: 6px 2px; }
+    .book-count-day span { display: block; font-size: .62rem; font-weight: 800; color: var(--muted); }
+    .book-count-day b { font-size: .95rem; }
+    .book-count-day.on { background: var(--accent-soft); color: var(--accent); }
+    .book-count-day.on span { color: var(--accent); }
+    .home-count { margin: 0 0 10px; font-size: .92rem; font-weight: 800; }
+    .sketch-canvas.eraser { cursor: cell; }
     .volume-card { margin-bottom: 12px; }
     .volume-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 12px; }
     .volume-head b { font-size: .95rem; font-weight: 800; }
@@ -2149,7 +2158,11 @@
             </div>`;
           }).join("")
         : '<div class="empty" style="padding:16px 8px">이 날 예정된 수업이 없습니다.</div>';
+      const todayN = classesOn(today()).length;
+      const weekN = days.reduce((n, d) => n + classesOn(d).length, 0);
+      const weekWord = days.indexOf(today()) >= 0 ? "이번 주" : "이 주";
       return `
+        <p class="home-count">오늘 예약 ${todayN}건 / ${weekWord} 총 예약 ${weekN}건</p>
         <div class="home-week-nav">
           <button class="btn soft" type="button" data-home-week="-1" aria-label="이전 주">‹</button>
           <h3>${label}</h3>
@@ -3273,74 +3286,21 @@
       const pressure = ev.pressure > 0 && ev.pressure < 1 ? ev.pressure : 0.5;
       return { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)), p: pressure };
     }
-    function drawBodyGuide(ctx, w, h) {
-      const cx = w * 0.5;
-      ctx.strokeStyle = "#C5C9CE";
-      ctx.fillStyle = "#F4F6F8";
-      ctx.lineWidth = Math.max(2, w * 0.008);
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.arc(cx, h * 0.12, h * 0.055, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(cx, h * 0.175);
-      ctx.lineTo(cx, h * 0.22);
-      ctx.moveTo(w * 0.28, h * 0.28);
-      ctx.quadraticCurveTo(cx, h * 0.22, w * 0.72, h * 0.28);
-      ctx.lineTo(w * 0.66, h * 0.52);
-      ctx.quadraticCurveTo(cx, h * 0.58, w * 0.34, h * 0.52);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(w * 0.3, h * 0.3);
-      ctx.quadraticCurveTo(w * 0.16, h * 0.42, w * 0.22, h * 0.58);
-      ctx.moveTo(w * 0.7, h * 0.3);
-      ctx.quadraticCurveTo(w * 0.84, h * 0.42, w * 0.78, h * 0.58);
-      ctx.moveTo(w * 0.4, h * 0.54);
-      ctx.quadraticCurveTo(w * 0.36, h * 0.74, w * 0.38, h * 0.9);
-      ctx.moveTo(w * 0.6, h * 0.54);
-      ctx.quadraticCurveTo(w * 0.64, h * 0.74, w * 0.62, h * 0.9);
-      ctx.stroke();
-    }
-    function drawLiftGuide(ctx, w, h) {
-      ctx.strokeStyle = "#C5C9CE";
-      ctx.fillStyle = "#F4F6F8";
-      ctx.lineWidth = Math.max(2, w * 0.008);
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      const hip = [w * 0.46, h * 0.48];
-      const knee = [w * 0.58, h * 0.68];
-      const ankle = [w * 0.5, h * 0.88];
-      const shoulder = [w * 0.4, h * 0.32];
-      const head = [w * 0.36, h * 0.2];
-      ctx.beginPath();
-      ctx.moveTo(w * 0.22, h * 0.9);
-      ctx.lineTo(w * 0.78, h * 0.9);
-      ctx.moveTo(ankle[0], ankle[1]);
-      ctx.lineTo(knee[0], knee[1]);
-      ctx.lineTo(hip[0], hip[1]);
-      ctx.lineTo(shoulder[0], shoulder[1]);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(head[0], head[1], h * 0.055, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(shoulder[0], shoulder[1] - h * 0.02, w * 0.11, h * 0.028, -0.4, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.save();
-      ctx.setLineDash([6, 6]);
-      ctx.beginPath();
-      ctx.moveTo(shoulder[0], h * 0.08);
-      ctx.lineTo(shoulder[0], shoulder[1] - h * 0.05);
-      ctx.stroke();
-      ctx.restore();
-      ctx.beginPath();
-      ctx.arc(knee[0], knee[1], h * 0.06, Math.PI * 1.15, Math.PI * 1.85);
-      ctx.stroke();
+    function eraseSketch(sketch, x, y, rx, ry) {
+      const next = [];
+      (sketch.strokes || []).forEach((stroke) => {
+        let chunk = [];
+        stroke.forEach((p) => {
+          const dx = (p.x - x) / rx;
+          const dy = (p.y - y) / ry;
+          if (dx * dx + dy * dy <= 1) {
+            if (chunk.length) next.push(chunk);
+            chunk = [];
+          } else chunk.push(p);
+        });
+        if (chunk.length) next.push(chunk);
+      });
+      sketch.strokes = next.slice(-80);
     }
     function drawSketch(canvas, sketch) {
       const width = canvas.clientWidth || canvas.parentElement && canvas.parentElement.clientWidth || 320;
@@ -3352,8 +3312,6 @@
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, width, height);
-      if (sketch.template === "body") drawBodyGuide(ctx, width, height);
-      if (sketch.template === "lift") drawLiftGuide(ctx, width, height);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.strokeStyle = "#1C1C1E";
@@ -3380,11 +3338,28 @@
     function bindSketchPointer(canvas, sketch) {
       let drawing = null;
       function local(ev) { return sketchPoint(canvas, ev); }
+      function eraserSize() {
+        const rect = canvas.getBoundingClientRect();
+        const w = rect.width || canvas.clientWidth || 320;
+        const h = rect.height || canvas.clientHeight || 240;
+        return { rx: 16 / w, ry: 16 / h };
+      }
+      function erase(pt) {
+        const size = eraserSize();
+        eraseSketch(sketch, pt.x, pt.y, size.rx, size.ry);
+        drawSketch(canvas, sketch);
+      }
       canvas.addEventListener("pointerdown", (ev) => {
         if (ev.button != null && ev.button !== 0) return;
         ev.preventDefault();
         canvas.setPointerCapture(ev.pointerId);
-        const stroke = [local(ev)];
+        const pt = local(ev);
+        if (canvas.dataset.tool === "eraser") {
+          drawing = { id: ev.pointerId, eraser: true };
+          erase(pt);
+          return;
+        }
+        const stroke = [pt];
         sketch.strokes.push(stroke);
         drawing = { id: ev.pointerId, stroke };
         drawSketch(canvas, sketch);
@@ -3393,6 +3368,10 @@
         if (!drawing || drawing.id !== ev.pointerId) return;
         ev.preventDefault();
         const pt = local(ev);
+        if (drawing.eraser) {
+          erase(pt);
+          return;
+        }
         const prev = drawing.stroke[drawing.stroke.length - 1];
         if (prev && Math.hypot(pt.x - prev.x, pt.y - prev.y) < 0.002) return;
         drawing.stroke.push(pt);
@@ -3452,7 +3431,7 @@
         const seed = n ? ex.sets[n - 1] : null;
         const seedW = seed ? fmtNum(seed.weight) : "";
         const seedR = seed ? fmtNum(seed.reps) : "";
-        const sketch = ensureSketch(ex);
+        ensureSketch(ex);
         const open = !logExCollapsed.has(ex.id);
         cards.push(`<article class="acc ex-acc${open ? " open" : ""}" data-ex-acc="${ex.id}">
           <div class="ex-top">
@@ -3482,13 +3461,11 @@
           <div class="sketch-pad">
             <div class="label">펜슬 메모</div>
             <div class="sketch-tools">
-              <button class="btn soft${sketch.template === "blank" ? " on" : ""}" type="button" data-sketch-template="${esc(ex.id)}:blank">빈 노트</button>
-              <button class="btn soft${sketch.template === "body" ? " on" : ""}" type="button" data-sketch-template="${esc(ex.id)}:body">전신</button>
-              <button class="btn soft${sketch.template === "lift" ? " on" : ""}" type="button" data-sketch-template="${esc(ex.id)}:lift">리프팅</button>
-              <button class="btn soft" type="button" data-sketch-clear="${esc(ex.id)}">지우기</button>
+              <button class="btn soft on" type="button" data-sketch-tool="${esc(ex.id)}:pen">펜</button>
+              <button class="btn soft" type="button" data-sketch-tool="${esc(ex.id)}:eraser">지우개</button>
             </div>
-            <canvas class="sketch-canvas" data-sketch-ex="${esc(ex.id)}"></canvas>
-            <p class="hint">애플펜슬이나 손가락으로 통증 부위, 바벨 궤적, 관절 각도를 표시합니다.</p>
+            <canvas class="sketch-canvas" data-sketch-ex="${esc(ex.id)}" data-tool="pen"></canvas>
+            <p class="hint">애플펜슬이나 손가락으로 그립니다. 지우개를 고르면 선의 일부만 지울 수 있습니다.</p>
           </div>
           <div class="label" style="margin-top:12px">사진 · 영상</div>
           <div class="media">${await mediaHtml(ex)}</div>
@@ -3683,19 +3660,19 @@
     function weekVolumeSeriesMember(m) {
       return lastNDays(7).map((date) => ({ date, ...dayVolume(m || { sessions: {}, selfWorkouts: [] }, date) }));
     }
-    function volumeChartHtml(series, title) {
-      const rows = series || [];
-      const max = Math.max(1, ...rows.map((s) => s.vol));
-      const totalVol = rows.reduce((a, s) => a + s.vol, 0);
-      const totalSets = rows.reduce((a, s) => a + s.sets, 0);
-      const bars = rows.map((s) => {
-        const h = Math.max(s.vol ? 8 : 4, Math.round((s.vol / max) * 100));
-        return `<div class="vol-col"><div class="vol-bar-wrap"><div class="vol-bar" style="height:${h}%"></div></div><span>${s.date.slice(8)}</span><small>${s.vol ? Math.round(s.vol) : "0"}</small></div>`;
+    function bookingCountHtml(anchor) {
+      const start = weekStart(anchor || today());
+      const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+      const todayN = classesOn(today()).length;
+      const weekN = days.reduce((n, d) => n + classesOn(d).length, 0);
+      const weekWord = days.indexOf(today()) >= 0 ? "이번 주" : "이 주";
+      const cells = days.map((d) => {
+        const n = classesOn(d).length;
+        return `<div class="book-count-day${d === today() ? " on" : ""}"><span>${weekdayName(d)}</span><b>${n}</b></div>`;
       }).join("");
       return `<div class="card volume-card">
-        <div class="volume-head"><b>${esc(title || "최근 7일 볼륨")}</b><span>총 ${Math.round(totalVol).toLocaleString()}kg · ${totalSets}세트</span></div>
-        <div class="vol-chart">${bars}</div>
-        <p class="hint" style="margin:8px 0 0">볼륨 = 무게(kg) × 횟수. 수업·개인 운동을 합산합니다.</p>
+        <p class="book-count-line">오늘 예약 ${todayN}건 / ${weekWord} 총 예약 ${weekN}건</p>
+        <div class="book-count-days">${cells}</div>
       </div>`;
     }
     function coachBubbleHtml(text) {
@@ -4658,11 +4635,7 @@
         }).join("");
         $("calBody").innerHTML = head + '<div class="cal-grid">' + grid + "</div>";
       }
-      const volDays = calMode === "week"
-        ? Array.from({ length: 7 }, (_, i) => addDays(weekStart(calIso || today()), i))
-        : lastNDays(7, calIso || today());
-      const volSeries = volDays.map((date) => ({ date, ...aggregateDayVolume(state.members, date) }));
-      $("calVolume").innerHTML = volumeChartHtml(volSeries, calMode === "week" ? "이번 주 볼륨" : "최근 7일 볼륨");
+      $("calVolume").innerHTML = bookingCountHtml(calIso || today());
       $("calBody").scrollTop = y;
     }
     function hourPx(el) {
@@ -5284,26 +5257,18 @@
         if (r) r.value = fmtNum(guideBtn.dataset.guideR);
         return;
       }
-      const templateBtn = e.target.closest("[data-sketch-template]");
-      if (templateBtn) {
-        const splitAt = templateBtn.dataset.sketchTemplate.lastIndexOf(":");
-        const exId = templateBtn.dataset.sketchTemplate.slice(0, splitAt);
-        const template = templateBtn.dataset.sketchTemplate.slice(splitAt + 1);
-        const ex = findEx(exId);
-        if (!ex) return;
-        ensureSketch(ex).template = template;
-        saveData();
-        await renderExercises();
-        return;
-      }
-      const clearBtn = e.target.closest("[data-sketch-clear]");
-      if (clearBtn) {
-        const ex = findEx(clearBtn.dataset.sketchClear);
-        if (!ex) return;
-        ensureSketch(ex).strokes = [];
-        saveData();
-        const canvas = document.querySelector(`[data-sketch-ex="${ex.id}"]`);
-        if (canvas) drawSketch(canvas, ex.sketch);
+      const toolBtn = e.target.closest("[data-sketch-tool]");
+      if (toolBtn) {
+        const splitAt = toolBtn.dataset.sketchTool.lastIndexOf(":");
+        const tool = toolBtn.dataset.sketchTool.slice(splitAt + 1);
+        const pad = toolBtn.closest(".sketch-pad");
+        if (!pad) return;
+        pad.querySelectorAll("[data-sketch-tool]").forEach((b) => b.classList.toggle("on", b === toolBtn));
+        const canvas = pad.querySelector("canvas.sketch-canvas");
+        if (canvas) {
+          canvas.dataset.tool = tool === "eraser" ? "eraser" : "pen";
+          canvas.classList.toggle("eraser", canvas.dataset.tool === "eraser");
+        }
         return;
       }
       const addSet = e.target.closest("[data-add-set]");
