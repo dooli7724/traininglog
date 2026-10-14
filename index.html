@@ -5937,6 +5937,7 @@
         }
       }
       state.members = state.members.filter((x) => x.id !== m.id);
+      if (!state.members.length && window.Cloud) Cloud._allowEmpty = true;
       if (window.Cloud && Cloud.ready) {
         for (const w of m.selfWorkouts || []) Cloud.deleteLog(m.share, w.id);
         for (const n of m.dietLogs || []) Cloud.deleteLog(m.share, n.id);
@@ -6358,10 +6359,10 @@
       showAuthGate(true);
     };
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden && window.Cloud && Cloud.canWrite) Cloud.flush();
+      if (document.hidden && window.Cloud && Cloud.canWrite && Cloud._dirty) Cloud.flush();
     });
     window.addEventListener("pagehide", () => {
-      if (window.Cloud && Cloud.canWrite) Cloud.flush();
+      if (window.Cloud && Cloud.canWrite && Cloud._dirty) Cloud.flush();
     });
     async function enterTrainerApp() {
       showAuthGate(false);
@@ -6372,18 +6373,21 @@
       toastCloud("클라우드에서 불러오는 중…");
       try {
         const next = await Cloud.hydrate();
-        if (cached.dirty && cached.members && cached.members.length) {
+        const remoteCount = (next && next.members && next.members.length) || 0;
+        const localCount = (cached.members && cached.members.length) || 0;
+        const keepLocal = localCount > 0 && (cached.dirty || remoteCount === 0);
+        if (keepLocal) {
           state = { members: cached.members };
           Cloud._dirty = true;
           const pushed = await Cloud.flush();
           if (!pushed || !pushed.ok) {
             setSyncDot("error");
-            alert("이전에 저장하지 못한 기록이 이 기기에 남아 있습니다.\n" + saveErrText(pushed && pushed.error));
+            alert("이 기기에 남아 있는 회원 기록을 클라우드에 올리지 못했습니다.\n" + saveErrText(pushed && pushed.error));
           } else {
             setCloudState(state);
             Cloud.subscribe();
             setSyncDot("on");
-            toastCloud("미저장 기록을 클라우드에 올렸습니다.");
+            toastCloud(remoteCount === 0 ? "이 기기의 회원 기록을 클라우드에 다시 올렸습니다." : "미저장 기록을 클라우드에 올렸습니다.");
           }
         } else {
           setCloudState(next);

@@ -496,6 +496,14 @@
       return { ok: false, error: new Error("로그인 세션이 만료되었습니다. 다시 로그인해 주세요.") };
     }
     const state = getState();
+    const memberCount = (state && state.members && state.members.length) || 0;
+    if (!memberCount && !Cloud._allowEmpty) {
+      Cloud._dirty = false;
+      Cloud.status = "saved";
+      Cloud._lastResult = { ok: true };
+      return Cloud._lastResult;
+    }
+    Cloud._allowEmpty = false;
     Cloud._flushing = true;
     Cloud.status = "saving";
     Cloud._lastError = null;
