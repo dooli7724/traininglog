@@ -3,6 +3,10 @@
   "private": true,
   "description": "PT workout logger — static web app",
   "scripts": {
-    "build": "echo 'Static site — no build step'"
+    "build": "echo 'Static site — no build step'",
+    "db:push": "node scripts/db-push.cjs"
+  },
+  "devDependencies": {
+    "supabase": "^2.120.0"
   }
 }

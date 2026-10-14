@@ -1,0 +1,15 @@
+---
+description: Apply database changes with Supabase CLI migrations instead of the SQL editor
+alwaysApply: true
+---
+
+# Database migrations
+
+Do not ask the user to paste SQL into the Supabase SQL editor.
+
+- Put each schema change in a new file: `supabase/migrations/YYYYMMDDHHMMSS_short_name.sql`.
+- Do not edit a migration that has already been applied. Add another file.
+- After adding or changing a migration, run `npm run db:push` from the project root.
+- `npm run db:push` reads `SUPABASE_DB_PASSWORD` or `SUPABASE_DB_URL` from `.env`. Never commit `.env` or print the password or connection string.
+- If push fails because `.env` has no password, say that the password still needs to be added once. Do not invent a password or reset the database password.
+- `supabase/schema.sql` and `supabase/reservation_migration.sql` are references. New database changes go in `supabase/migrations`.
