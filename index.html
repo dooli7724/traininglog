@@ -131,6 +131,42 @@
     .btn.soft { background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: none; }
     .btn.danger { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(190, 18, 60, .12); min-height: 40px; font-size: .84rem; box-shadow: none; }
     .btn.wide { width: 100%; }
+    .btn:disabled { opacity: .55; }
+    .fact { padding: 12px 0; border-top: 1px solid var(--line); }
+    .fact:first-child { border-top: 0; padding-top: 0; }
+    .fact span { display: block; margin: 0 0 4px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
+    .fact b { display: block; font-size: 1.02rem; font-weight: 700; line-height: 1.45; white-space: pre-wrap; color: var(--text); }
+    .coach-ai { margin: 2px 0 16px; }
+    .coach-ai-btn {
+      width: 100%; background: #fff; color: var(--accent);
+      border: 1px solid rgba(49, 46, 129, .16); box-shadow: var(--shadow);
+    }
+    .ai-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .ai-kicker { margin: 0; font-size: .75rem; font-weight: 600; color: var(--muted); line-height: 1.45; }
+    .ai-card {
+      background: #fff; border: 1px solid var(--line); border-radius: 16px;
+      box-shadow: var(--shadow); padding: 16px;
+    }
+    .ai-card h3 { margin: 0 0 8px; font-size: 1.02rem; font-weight: 800; letter-spacing: -.02em; }
+    .ai-card p { margin: 0; font-size: .92rem; line-height: 1.55; color: var(--text); white-space: pre-wrap; }
+    .ai-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 12px; color: var(--muted); font-size: .75rem; font-weight: 700; }
+    .ai-flow b { color: var(--accent); font-weight: 800; }
+    .ai-phase { margin-top: 12px; }
+    .ai-phase-name {
+      display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px;
+      border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+      font-size: .72rem; font-weight: 800;
+    }
+    .ai-phase ol { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .ai-phase li { display: flex; flex-direction: column; gap: 2px; }
+    .ai-phase li b { font-size: .98rem; font-weight: 800; }
+    .ai-phase li small { color: var(--muted); font-size: .78rem; font-weight: 600; line-height: 1.4; }
+    .ai-load { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .ai-load li { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; border-left: 3px solid var(--accent); }
+    .ai-load b { font-size: .95rem; font-weight: 800; }
+    .ai-load span { color: var(--muted); font-size: .8rem; font-weight: 600; }
+    .ai-load em { font-style: normal; color: var(--ok); font-weight: 700; font-size: .88rem; }
+    .ai-load small { color: var(--muted); font-size: .78rem; font-weight: 600; line-height: 1.4; }
     .field, select.field {
       width: 100%; min-height: var(--tap); border: 1px solid var(--line);
       background: #fff; border-radius: 14px; padding: 12px 16px; outline: none;
@@ -1009,6 +1045,10 @@
       <div id="logWork" class="hidden">
         <p class="label" id="logDay"></p>
         <p class="hint" id="logPrevHint"></p>
+        <div class="coach-ai">
+          <button class="btn coach-ai-btn" id="coachAiBtn" type="button">✨ AI 루틴 & 코칭 방향 추천받기</button>
+          <div id="coachAiResult" class="hidden"></div>
+        </div>
         <div class="acc open" data-log-acc="program">
           <button class="acc-h" type="button" data-log-toggle="program"><span class="sec-title"><svg class="sec-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>오늘 프로그램</span> <span class="arr">▾</span></button>
           <div class="acc-b">
@@ -1091,9 +1131,10 @@
         <button class="btn soft" id="shareReserve" type="button">예약 링크</button>
       </div>
       <div class="acc" data-acc="injury">
-        <button class="acc-h" type="button">특이사항 및 부상 이력 <span class="arr">▾</span></button>
+        <button class="acc-h" type="button">부상/통증 이력 및 특이사항 <span class="arr">▾</span></button>
         <div class="acc-b">
-          <textarea class="field" id="injuryText" placeholder="통증, 수술 이력, 주의 동작 등"></textarea>
+          <textarea class="field" id="injuryText" placeholder="허리, 무릎, 수술 이력, 피해야 할 동작"></textarea>
+          <p class="hint">여기 적은 내용은 회원 정보의 부상 이력과 같은 칸입니다. 수업 추천에도 함께 읽힙니다.</p>
         </div>
       </div>
       <div class="acc" data-acc="consult">
@@ -1348,14 +1389,24 @@
           <input class="field" id="pAge" inputmode="numeric" placeholder="예: 34" />
         </div>
       </div>
-      <label class="cap">목표</label>
-      <input class="field" id="pGoal" placeholder="체지방 감소, 근력 증가 등" />
-      <label class="cap">병력 및 통증 히스토리</label>
-      <textarea class="field" id="pHistory" placeholder="허리, 무릎 통증 등"></textarea>
-      <label class="cap">운동 경력</label>
-      <input class="field" id="pExp" placeholder="예: 헬스 1년" />
-      <label class="cap">참고사항</label>
-      <textarea class="field" id="pNotes" placeholder="직업, 수면, 식단, 주의점"></textarea>
+      <label class="cap">운동 목표</label>
+      <textarea class="field" id="pGoal" placeholder="체지방 감소, 근력, 자세 교정 등"></textarea>
+      <label class="cap">부상/통증 이력 및 특이사항</label>
+      <textarea class="field" id="pHistory" placeholder="허리 디스크, 무릎 통증, 피해야 할 동작"></textarea>
+      <label class="cap">운동 경력/수준</label>
+      <div class="grid2">
+        <select class="field" id="pLevel">
+          <option value="">수준 선택</option>
+          <option>입문</option>
+          <option>초급</option>
+          <option>중급</option>
+          <option>상급</option>
+        </select>
+        <input class="field" id="pExp" placeholder="예: 헬스 1년" />
+      </div>
+      <p class="hint">목표, 부상 이력, 경력은 수업 추천을 만들 때 함께 읽습니다.</p>
+      <label class="cap">기타 참고</label>
+      <textarea class="field" id="pNotes" placeholder="직업, 수면, 식단"></textarea>
       <div class="actions">
         <button class="btn soft" id="closeModal" type="button">취소</button>
         <button class="btn" type="submit">저장</button>
@@ -1436,6 +1487,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
   <script src="js/config.js"></script>
   <script src="js/cloud.js"></script>
+  <script src="js/coach.js"></script>
   <script>
     const DATA_KEY = "pt-logger-v3";
     const DB_NAME = "pt-logger-media";
@@ -1462,7 +1514,7 @@
       const d = new Date(); d.setDate(d.getDate() - 7);
       return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
     };
-    const emptyProfile = () => ({ gender: "", age: "", goal: "", history: "", experience: "", notes: "", contact: "" });
+    const emptyProfile = () => ({ gender: "", age: "", goal: "", history: "", experience: "", level: "", notes: "", contact: "" });
     function isoDate(v) {
       if (!v) return "";
       const s = String(v).trim();
@@ -1523,6 +1575,7 @@
     }
     function normalizeMember(m) {
       const profile = Object.assign(emptyProfile(), m.profile || {});
+      if (!profile.history && m.injuries) profile.history = m.injuries;
       const sessions = {};
       Object.keys(m.sessions || {}).forEach((d) => {
         const key = isoDate(d) || d;
@@ -1830,6 +1883,8 @@
     let calDidDrag = false;
     let calDrag = null;
     let editingId = null;
+    let coachPlan = null;
+    let coachToken = 0;
     let logExCollapsed = new Set();
     let logSessionCollapsed = new Set();
     const memberBy = (id) => state.members.find((m) => m.id === id);
@@ -1883,7 +1938,10 @@
     }
     function dayStats(m, date) {
       const s = (m.sessions && m.sessions[date]) || { exercises: [] };
-      const logged = (s.exercises || []).filter((e) => exerciseRecord(e).trim()).length;
+      const logged = (s.exercises || []).filter((e) => {
+        const text = exerciseRecord(e).trim();
+        return text && !(window.CoachPlan && CoachPlan.isPlaceholderRecord(text));
+      }).length;
       const notes = !!(s.program || s.feedback || s.memo || (s.exercises || []).some((e) => e.feedback || exerciseRecord(e).trim()));
       return { exercises: (s.exercises || []).length, sets: logged, memo: notes || "" };
     }
@@ -3344,6 +3402,7 @@
       $("logProgram").value = sess.program || "";
       $("logFeedback").value = sess.feedback || "";
       $("logMemo").value = sess.memo || "";
+      clearCoachPlan();
       ["program", "feedback", "memo"].forEach((key) => {
         const box = document.querySelector(`[data-log-acc="${key}"]`);
         if (box) box.classList.toggle("open", !logSessionCollapsed.has(key));
@@ -3602,9 +3661,9 @@
         <p class="kv"><span>연락처</span>${esc(p.contact || p.phone || "-")}</p>
         <p class="kv"><span>성별</span>${esc(p.gender || "-")}</p>
         <p class="kv"><span>연령</span>${esc(p.age ? p.age + "세" : "-")}</p>
-        <p class="kv"><span>목표</span>${esc(p.goal || "-")}</p>
-        <p class="kv"><span>병력/통증</span>${esc(p.history || "-")}</p>
-        <p class="kv"><span>운동 경력</span>${esc(p.experience || "-")}</p>
+        <p class="kv"><span>운동 목표</span>${esc(p.goal || "-")}</p>
+        <p class="kv"><span>부상/특이사항</span>${esc(p.history || "-")}</p>
+        <p class="kv"><span>경력/수준</span>${esc([p.level, p.experience].filter(Boolean).join(" · ") || "-")}</p>
         <p class="kv"><span>참고</span>${esc(p.notes || "-")}</p>
         ${edit ? '<button class="btn wide" type="button" data-edit-profile="1" style="margin-top:10px">프로필 · 회차 수정</button>' : ""}
       </div>`;
@@ -3772,12 +3831,19 @@
       }
       return parts.join("");
     }
+    function memberHistoryText(m) {
+      const p = (m && m.profile) || {};
+      return [p.history, m && m.injuries, p.notes].map((s) => String(s || "").trim()).filter((s, i, arr) => s && arr.indexOf(s) === i).join("\n");
+    }
     function detailFactsHtml(m) {
       const p = m.profile || {};
-      const who = [p.gender, p.age ? p.age + "세" : ""].filter(Boolean).join(" · ") || "-";
-      return `<p class="kv"><span>연락처</span>${esc(p.contact || p.phone || "-")}</p>
-        <p class="kv"><span>목표</span>${esc(p.goal || "-")}</p>
-        <p class="kv"><span>기본</span>${esc(who)}</p>`;
+      const history = memberHistoryText(m);
+      const level = [p.level, p.experience].filter(Boolean).join(" · ");
+      const who = [p.gender, p.age ? p.age + "세" : ""].filter(Boolean).join(" · ");
+      const fact = (label, value) => `<div class="fact"><span>${label}</span><b>${esc(value || "아직 없음")}</b></div>`;
+      const missing = !String(p.goal || "").trim() && !history && !level;
+      const hint = missing ? `<p class="hint" style="margin:8px 0 0">정보 수정에서 목표와 부상 이력, 경력을 적으면 수업 추천이 회원에게 맞춰집니다.</p>` : "";
+      return fact("운동 목표", p.goal) + fact("부상/통증 이력 및 특이사항", history) + fact("운동 경력/수준", level) + fact("연락처", p.contact || p.phone) + (who ? fact("기본", who) : "") + hint;
     }
     function workoutHtml(m) {
       const dates = Object.keys(m.sessions || {}).sort().reverse().filter((d) => {
@@ -3940,7 +4006,7 @@
         ? memberExpireReason(m)
         : ("총 " + pack.total + "회" + (pack.endDate ? " · " + pack.endDate + "까지" : ""));
       if (document.activeElement !== $("packEndDate")) $("packEndDate").value = pack.endDate || "";
-      if (document.activeElement !== $("injuryText")) $("injuryText").value = m.injuries || "";
+      if (document.activeElement !== $("injuryText")) $("injuryText").value = (m.profile && m.profile.history) || m.injuries || "";
       if (detailAttendMember !== m.id) {
         detailAttendWeek = weekStart(today());
         detailAttendMember = m.id;
@@ -4530,7 +4596,8 @@
       $("pGender").value = (m.profile && m.profile.gender) || "";
       $("pAge").value = (m.profile && m.profile.age) || "";
       $("pGoal").value = (m.profile && m.profile.goal) || "";
-      $("pHistory").value = (m.profile && m.profile.history) || "";
+      $("pHistory").value = (m.profile && m.profile.history) || m.injuries || "";
+      $("pLevel").value = (m.profile && m.profile.level) || "";
       $("pExp").value = (m.profile && m.profile.experience) || "";
       $("pNotes").value = (m.profile && m.profile.notes) || "";
       $("modalBg").classList.remove("hidden");
@@ -5220,7 +5287,8 @@
       const name = $("pName").value.trim(); if (!name) return;
       const profile = {
         gender: $("pGender").value, age: $("pAge").value.trim(), goal: $("pGoal").value.trim(),
-        history: $("pHistory").value.trim(), experience: $("pExp").value.trim(), notes: $("pNotes").value.trim(),
+        history: $("pHistory").value.trim(), experience: $("pExp").value.trim(), level: $("pLevel").value,
+        notes: $("pNotes").value.trim(),
         contact: ($("pContact").value || "").trim()
       };
       if (editingId) {
@@ -5241,6 +5309,115 @@
       if (!ok) return;
       closeModal();
       if (currentId) setTab("detail", true); else renderMembers();
+    });
+    function clearCoachPlan() {
+      coachToken += 1;
+      coachPlan = null;
+      const box = $("coachAiResult");
+      if (!box) return;
+      box.classList.add("hidden");
+      box.innerHTML = "";
+    }
+    function coachResultHtml(plan) {
+      const flow = (plan.blocks || []).map((block) => `<b>${esc(block.phase)}</b>`).join("<span>→</span>");
+      const phases = (plan.blocks || []).map((block) => {
+        const items = block.items.map((item) => {
+          const target = (item.record || "").split("\n")[0].replace(/^목표:\s*/, "");
+          const sub = [target, item.cue].filter(Boolean).join(" · ");
+          return `<li><b>${esc(item.name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</li>`;
+        }).join("");
+        return `<div class="ai-phase"><span class="ai-phase-name">${esc(block.phase)}</span><ol>${items}</ol></div>`;
+      }).join("");
+      const loads = (plan.overload || []).length
+        ? `<ul class="ai-load">${plan.overload.map((row) => `<li><b>${esc(row.name)}</b><span>${esc(row.lastLabel)}</span><em>${esc(row.nextLabel)}</em>${row.note ? `<small>${esc(row.note)}</small>` : ""}</li>`).join("")}</ul>`
+        : `<p>지난 2주 기록에 무게·횟수가 없습니다. 오늘 수행한 내용을 종목 칸에 적어두면 다음 수업부터 목표 중량을 계산합니다.</p>`;
+      const kicker = plan.meta && plan.meta.polished
+        ? "방향 문장은 AI가 다듬었습니다. 종목과 중량은 최근 2주 일지에서 계산했습니다."
+        : "운동 목표, 부상 이력, 최근 2주 일지를 읽어 만든 수업 초안입니다.";
+      return `<div class="ai-panel">
+        <p class="ai-kicker">${kicker}</p>
+        <article class="ai-card"><h3>오늘의 코칭 포인트</h3><p>${esc(plan.direction)}</p></article>
+        <article class="ai-card"><h3>추천 운동 종목 및 순서</h3><p class="ai-flow">${flow}</p>${phases}</article>
+        <article class="ai-card"><h3>점진적 과부하</h3>${loads}</article>
+        <button class="btn wide" id="coachAiApply" type="button">오늘 프로그램 · 종목에 넣기</button>
+      </div>`;
+    }
+    function renderCoachResult(plan) {
+      const box = $("coachAiResult");
+      if (!box) return;
+      box.innerHTML = coachResultHtml(plan);
+      box.classList.remove("hidden");
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    async function polishCoachPlan(plan, member, token) {
+      if (!window.CoachPlan || !CoachPlan.brief) return;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const res = await fetch("/api/coach", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brief: CoachPlan.brief(member, logDate || today(), plan) }),
+          signal: ctrl.signal
+        });
+        if (!res.ok || token !== coachToken) return;
+        const data = await res.json();
+        const text = data && typeof data.direction === "string" ? data.direction.trim() : "";
+        if (!text || text.length < 24 || text.length > 900 || /[<>]/.test(text) || token !== coachToken) return;
+        coachPlan = CoachPlan.withDirection(plan, text);
+        renderCoachResult(coachPlan);
+      } catch (_) { /* 로컬 초안을 그대로 보여 줍니다. */ }
+      finally { clearTimeout(timer); }
+    }
+    async function applyCoachPlan() {
+      const plan = coachPlan;
+      const m = currentMember();
+      const s = plan && m ? sessionOf(m) : null;
+      if (!s) return;
+      const hasText = !!(s.program || "").trim() || (s.exercises || []).length;
+      if (hasText && !confirm("이미 적힌 오늘 프로그램과 종목 뒤에 추천 루틴을 넣을까요?")) return;
+      const marker = plan.blocks && plan.blocks[0] && plan.blocks[0].items[0] && plan.blocks[0].items[0].name;
+      const already = marker && (s.program || "").includes("워밍업") && (s.program || "").includes(marker);
+      if (!already) {
+        s.program = (s.program || "").trim() ? (s.program.trim() + "\n\n" + plan.program) : plan.program;
+      }
+      const names = new Set((s.exercises || []).map((ex) => String(ex.name || "").trim()));
+      let added = 0;
+      (plan.exercises || []).forEach((item) => {
+        const name = String(item.name || "").trim();
+        if (!name || names.has(name)) return;
+        s.exercises.push({ id: uid(), name, record: item.record || "", media: [], feedback: "" });
+        names.add(name);
+        added += 1;
+      });
+      if (already && !added) {
+        toastCloud("오늘 일지에 같은 루틴이 이미 있습니다.");
+        return;
+      }
+      $("logProgram").value = s.program || "";
+      logSessionCollapsed.delete("program");
+      const programBox = document.querySelector('[data-log-acc="program"]');
+      if (programBox) programBox.classList.add("open");
+      await persistCloud({ silent: true });
+      await renderExercises();
+      toastCloud("오늘 프로그램과 종목에 넣었습니다.");
+    }
+    $("coachAiBtn").onclick = async () => {
+      const m = currentMember();
+      if (!m || !window.CoachPlan) return;
+      const token = ++coachToken;
+      const btn = $("coachAiBtn");
+      btn.disabled = true;
+      try {
+        coachPlan = CoachPlan.build(m, logDate || today());
+        renderCoachResult(coachPlan);
+        await polishCoachPlan(coachPlan, m, token);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    $("coachAiResult").addEventListener("click", (e) => {
+      if (e.target.closest("#coachAiApply")) applyCoachPlan();
     });
     $("addEx").onclick = async () => {
       const name = $("exName").value.trim(); const s = sessionOf();
@@ -5401,7 +5578,9 @@
         ex.record = record.value;
         const m = currentMember();
         const sess = sessionOf(m);
-        if (record.value.trim() && m && sess && !sess.charged) chargeSession(m, logDate);
+        const performed = record.value.trim();
+        const placeholder = window.CoachPlan && CoachPlan.isPlaceholderRecord(performed);
+        if (performed && !placeholder && m && sess && !sess.charged) chargeSession(m, logDate);
         else saveData();
       }
       if (feedback) { const ex = findEx(feedback.dataset.exFeedback); if (ex) { ex.feedback = feedback.value; saveData(); } }
@@ -5472,7 +5651,14 @@
     $("packLog").onclick = () => { if (currentId) openArchive(currentId); };
     $("packTodayLog").onclick = () => { if (currentId) openLog(currentId, today()); };
     $("packCal").onclick = () => openCal();
-    $("injuryText").addEventListener("change", () => { const m = currentMember(); if (!m) return; m.injuries = $("injuryText").value; saveData(); });
+    $("injuryText").addEventListener("input", () => {
+      const m = currentMember(); if (!m) return;
+      m.profile = Object.assign(emptyProfile(), m.profile || {});
+      m.injuries = $("injuryText").value;
+      m.profile.history = $("injuryText").value;
+      saveData();
+      if ($("profileCard")) $("profileCard").innerHTML = detailFactsHtml(m);
+    });
     function addNote(key, inputId) {
       const m = currentMember(); if (!m) return;
       const text = $(inputId).value.trim(); if (!text) return;
