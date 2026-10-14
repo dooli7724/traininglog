@@ -873,6 +873,23 @@
     return data;
   };
 
+  Cloud.coachBookSeries = async function (series) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("coach_book_series", {
+      p_from: series.from,
+      p_until: series.until,
+      p_time: series.time,
+      p_minutes: series.minutes,
+      p_rule: series.rule,
+      p_weekdays: series.weekdays || [],
+      p_name: series.name,
+      p_contact: series.contact
+    });
+    if (error) throw error;
+    return data;
+  };
+
   Cloud.publicBookSlot = async function (scheduleId, name, contact) {
     if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
     const { data, error } = await Cloud.sb.rpc("public_book_slot", {

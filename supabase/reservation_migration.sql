@@ -907,7 +907,14 @@ begin
           from public.reservations r
           where r.schedule_id = s.id and r.status <> 'cancelled'
         ), '[]'::jsonb),
-        'completed', s.end_time <= now()
+        'completed', s.end_time <= now() and exists (
+          select 1 from public.reservations r
+          where r.schedule_id = s.id and r.status = 'confirmed'
+        ),
+        'missed', s.end_time <= now() and s.status <> 'closed' and not exists (
+          select 1 from public.reservations r
+          where r.schedule_id = s.id and r.status = 'confirmed'
+        )
       ) as slot
     from public.schedules s
     where s.coach_id = uid
@@ -1488,6 +1495,229 @@ $mig$;
 
 revoke all on function public.coach_book_slot(uuid, text, text) from public, anon;
 grant execute on function public.coach_book_slot(uuid, text, text) to authenticated;
+
+create or replace function public.coach_book_series(
+  p_from date,
+  p_until date,
+  p_time time,
+  p_minutes int,
+  p_rule text,
+  p_weekdays int[],
+  p_name text,
+  p_contact text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $mig$
+declare
+  uid uuid := auth.uid();
+  guest_name text := btrim(coalesce(p_name, ''));
+  guest_contact text := regexp_replace(btrim(coalesce(p_contact, '')), '[[:space:]-]', '', 'g');
+  guest_id text;
+  d date;
+  include_day boolean;
+  slot_start timestamptz;
+  slot_end timestamptz;
+  exact_id uuid;
+  rid uuid;
+  token text;
+  slot_rec record;
+  wait_rec record;
+  label text;
+  created int := 0;
+  skipped_past int := 0;
+  skipped_conflict int := 0;
+  skipped_same int := 0;
+  anchor_dow int;
+  anchor_day int;
+begin
+  if uid is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+  if char_length(guest_name) < 1 or char_length(guest_name) > 30 then
+    raise exception '이름을 입력해 주세요';
+  end if;
+  if char_length(guest_contact) < 4 or char_length(guest_contact) > 40 then
+    raise exception '연락처를 입력해 주세요';
+  end if;
+  if p_from is null or p_until is null or p_until < p_from then
+    raise exception '종료일은 시작일보다 뒤여야 합니다';
+  end if;
+  if (p_until - p_from) > 370 then
+    raise exception '한 번에 최대 1년까지 반복할 수 있습니다';
+  end if;
+  if p_time is null then
+    raise exception '시작 시간을 입력해 주세요';
+  end if;
+  if p_minutes not in (30, 50, 60, 90) then
+    raise exception '수업 길이는 30, 50, 60, 90분 중에서 고르세요';
+  end if;
+  if p_rule not in ('daily', 'weekly', 'biweekly', 'monthly') then
+    raise exception '반복은 매일, 매주, 격주, 매월 중에서 고르세요';
+  end if;
+  if p_rule = 'weekly' and (p_weekdays is null or cardinality(p_weekdays) = 0) then
+    raise exception '요일을 하나 이상 선택해 주세요';
+  end if;
+
+  guest_id := 'guest:' || md5(lower(guest_name) || '|' || guest_contact);
+  anchor_dow := extract(dow from p_from)::int;
+  anchor_day := extract(day from p_from)::int;
+  d := p_from;
+
+  while d <= p_until loop
+    include_day := false;
+    if p_rule = 'daily' then
+      include_day := true;
+    elsif p_rule = 'weekly' then
+      include_day := extract(dow from d)::int = any(p_weekdays);
+    elsif p_rule = 'biweekly' then
+      include_day := extract(dow from d)::int = anchor_dow and ((d - p_from) % 14 = 0);
+    elsif p_rule = 'monthly' then
+      include_day := extract(day from d)::int = anchor_day;
+    end if;
+
+    if include_day then
+      slot_start := (d + p_time) at time zone 'Asia/Seoul';
+      slot_end := slot_start + make_interval(mins => p_minutes);
+      if slot_end <= now() then
+        skipped_past := skipped_past + 1;
+      elsif created >= 200 then
+        raise exception '한 번에 200건까지만 반복 예약할 수 있습니다. 기간을 나눠 주세요';
+      else
+        perform 1
+        from public.schedules s
+        where s.coach_id = uid
+          and s.status <> 'closed'
+          and s.start_time < slot_end
+          and s.end_time > slot_start
+        order by s.id
+        for update;
+
+        if exists (
+          select 1
+          from public.reservations r
+          join public.schedules s on s.id = r.schedule_id
+          where s.coach_id = uid
+            and s.status <> 'closed'
+            and s.start_time < slot_end
+            and s.end_time > slot_start
+            and r.status = 'confirmed'
+            and r.client_id <> guest_id
+        ) then
+          skipped_conflict := skipped_conflict + 1;
+        elsif exists (
+          select 1
+          from public.reservations r
+          join public.schedules s on s.id = r.schedule_id
+          where s.coach_id = uid
+            and s.status <> 'closed'
+            and s.start_time = slot_start
+            and s.end_time = slot_end
+            and r.status = 'confirmed'
+            and r.client_id = guest_id
+        ) then
+          skipped_same := skipped_same + 1;
+        else
+          for slot_rec in
+            select s.id, s.start_time
+            from public.schedules s
+            where s.coach_id = uid
+              and s.status <> 'closed'
+              and s.start_time < slot_end
+              and s.end_time > slot_start
+              and not (s.start_time = slot_start and s.end_time = slot_end)
+              and not exists (
+                select 1 from public.reservations r
+                where r.schedule_id = s.id and r.status = 'confirmed'
+              )
+            order by s.id
+            for update
+          loop
+            label := public._slot_label(slot_rec.start_time);
+            for wait_rec in
+              select * from public.reservations
+              where schedule_id = slot_rec.id and status = 'waiting'
+              for update
+            loop
+              perform public._booking_notice(
+                'member', uid, wait_rec.client_id, wait_rec.member_share, wait_rec.schedule_id, wait_rec.id,
+                'cancelled', '대기 신청이 취소되었습니다',
+                label || ' 시간에 고정 수업이 잡혀 대기가 취소되었습니다.'
+              );
+            end loop;
+            update public.booking_notices set schedule_id = null where schedule_id = slot_rec.id;
+            delete from public.schedules where id = slot_rec.id;
+          end loop;
+
+          exact_id := null;
+          select s.id into exact_id
+          from public.schedules s
+          where s.coach_id = uid
+            and s.status <> 'closed'
+            and s.start_time = slot_start
+            and s.end_time = slot_end
+          limit 1;
+
+          if exact_id is null then
+            insert into public.schedules (coach_id, start_time, end_time, status, cancel_hours)
+            values (uid, slot_start, slot_end, 'booked', 6)
+            returning id into exact_id;
+          else
+            update public.schedules set status = 'booked' where id = exact_id;
+          end if;
+
+          rid := null;
+          select r.id into rid
+          from public.reservations r
+          where r.schedule_id = exact_id
+            and r.client_id = guest_id
+            and r.status = 'waiting'
+          for update;
+
+          if rid is null then
+            token := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+            insert into public.reservations (
+              schedule_id, client_id, member_share, member_name, contact, cancel_token, status, waiting_order
+            ) values (
+              exact_id, guest_id, '', guest_name, guest_contact, token, 'confirmed', 0
+            );
+          else
+            update public.reservations
+            set status = 'confirmed', waiting_order = 0, member_name = guest_name, contact = guest_contact
+            where id = rid;
+          end if;
+          created := created + 1;
+        end if;
+      end if;
+    end if;
+    d := d + 1;
+  end loop;
+
+  if created = 0 and skipped_past = 0 and skipped_conflict = 0 and skipped_same = 0 then
+    raise exception '반복할 날짜가 없습니다';
+  end if;
+
+  if created > 0 then
+    perform public._booking_notice(
+      'coach', uid, guest_id, '', null, null,
+      'booked', guest_name || ' 님 반복 예약',
+      guest_name || ' · ' || guest_contact || ' 고정 수업 ' || created || '건을 확정했습니다.'
+    );
+  end if;
+
+  return jsonb_build_object(
+    'created', created,
+    'skipped_past', skipped_past,
+    'skipped_conflict', skipped_conflict,
+    'skipped_same', skipped_same
+  );
+end;
+$mig$;
+
+revoke all on function public.coach_book_series(date, date, time, int, text, int[], text, text) from public, anon;
+grant execute on function public.coach_book_series(date, date, time, int, text, int[], text, text) to authenticated;
 
 revoke all on function public.public_booking_board(text[]) from public;
 grant execute on function public.public_booking_board(text[]) to anon, authenticated;
