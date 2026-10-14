@@ -1,11 +1,34 @@
 async function readJson(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string" && req.body) {
-    try { return JSON.parse(req.body); } catch (_) { return {}; }
+  let value = req && req.body;
+  if (value && typeof value.then === "function") {
+    try { value = await value; } catch (_) { value = undefined; }
   }
+  if (Buffer.isBuffer(value)) value = value.toString("utf8");
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) value = undefined;
+    else {
+      try { return JSON.parse(text); } catch (_) { return {}; }
+    }
+  }
+  if (value && typeof value.getReader === "function") {
+    const chunks = [];
+    const reader = value.getReader();
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      if (next.value) chunks.push(Buffer.from(next.value));
+    }
+    if (!chunks.length) return {};
+    try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch (_) { return {}; }
+  }
+  if (value && typeof value === "object" && Object.keys(value).length) return value;
+
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  if (!chunks.length) return {};
+  try {
+    for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  } catch (_) {}
+  if (!chunks.length) return value && typeof value === "object" ? value : {};
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch (_) { return {}; }
 }
 
@@ -61,6 +84,68 @@ function cleanMessages(list) {
   return out.slice(-16);
 }
 
+function messageText(message) {
+  if (!message) return "";
+  const content = message.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (typeof part === "string") return part;
+      if (part && typeof part.text === "string") return part.text;
+      return "";
+    }).join("").trim();
+  }
+  return "";
+}
+
+function openaiHint(status, raw) {
+  let message = "";
+  try {
+    const parsed = JSON.parse(raw);
+    message = parsed && parsed.error && (parsed.error.message || parsed.error.code) || "";
+  } catch (_) {
+    message = String(raw || "");
+  }
+  message = String(message || "").replace(/sk-[A-Za-z0-9_\-]+/g, "").replace(/Bearer\s+\S+/gi, "").slice(0, 180);
+  return status + (message ? ": " + message : "");
+}
+
+async function askCoach(key, model, messages) {
+  const variants = [
+    { model, messages, temperature: 0.5, max_completion_tokens: 1200 },
+    { model, messages, max_completion_tokens: 1200 },
+    { model, messages, temperature: 0.5, max_tokens: 700 },
+    { model, messages, max_tokens: 700 }
+  ];
+  let lastStatus = 0;
+  let lastRaw = "";
+  for (const payload of variants) {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + key,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    const raw = await response.text();
+    if (!response.ok) {
+      lastStatus = response.status;
+      lastRaw = raw;
+      if (response.status !== 400) break;
+      continue;
+    }
+    let data = {};
+    try { data = JSON.parse(raw); } catch (_) { data = {}; }
+    const reply = messageText(data && data.choices && data.choices[0] && data.choices[0].message).slice(0, 2000);
+    if (reply) return { reply };
+    lastStatus = response.status;
+    lastRaw = raw;
+    break;
+  }
+  return { reply: "", hint: openaiHint(lastStatus, lastRaw) };
+}
+
 module.exports = async (req, res) => {
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -82,7 +167,7 @@ module.exports = async (req, res) => {
     const messages = cleanMessages(body && body.messages);
     const last = messages[messages.length - 1];
     if (!last || last.role !== "user") {
-      res.status(200).json({ configured: true, reply: "" });
+      res.status(200).json({ configured: true, reply: "", error: "no_user_message" });
       return;
     }
     const system = [
@@ -96,27 +181,13 @@ module.exports = async (req, res) => {
       "",
       contextBlock(body && body.context)
     ].join("\n");
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + key,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: process.env.AI_MODEL || "gpt-4o-mini",
-        temperature: 0.5,
-        max_tokens: 700,
-        messages: [{ role: "system", content: system }].concat(messages)
-      })
-    });
-    if (!response.ok) {
-      res.status(200).json({ configured: true, reply: "" });
+    const result = await askCoach(key, process.env.AI_MODEL || "gpt-4o-mini", [{ role: "system", content: system }].concat(messages));
+    if (!result.reply) {
+      res.status(200).json({ configured: true, reply: "", error: result.hint || "empty" });
       return;
     }
-    const data = await response.json();
-    const reply = String(data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim().slice(0, 2000);
-    res.status(200).json({ configured: true, reply });
-  } catch (_) {
-    res.status(200).json({ configured: true, reply: "" });
+    res.status(200).json({ configured: true, reply: result.reply });
+  } catch (err) {
+    res.status(200).json({ configured: true, reply: "", error: clip(err && err.message, 180) || "failed" });
   }
 };
