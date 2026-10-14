@@ -861,6 +861,18 @@
     return data;
   };
 
+  Cloud.coachBookSlot = async function (scheduleId, name, contact) {
+    if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
+    await Cloud.ensureSession();
+    const { data, error } = await Cloud.sb.rpc("coach_book_slot", {
+      p_schedule_id: scheduleId,
+      p_name: name,
+      p_contact: contact
+    });
+    if (error) throw error;
+    return data;
+  };
+
   Cloud.publicBookSlot = async function (scheduleId, name, contact) {
     if (!Cloud.sb) throw new Error("클라우드에 연결되지 않았습니다.");
     const { data, error } = await Cloud.sb.rpc("public_book_slot", {

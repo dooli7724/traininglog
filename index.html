@@ -373,6 +373,9 @@
     .book-cal .tl-block.full { background: #00C853; }
     .book-cal .tl-block.wait { background: #FF8A00; }
     .book-cal .tl-block.closed { background: #8E8E93; }
+    .book-cal .tl-block.done { background: #5C6B7A; }
+    .book-dots i.done, .book-legend i.done { background: #5C6B7A; }
+    .tag.done { background: #EEF1F4; color: #3A4550; }
     .book-cal .tl-col.on { box-shadow: inset 0 0 0 2px var(--accent); }
     .book-reset-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .book-reset-row .btn { min-height: 40px; padding: 0 4px; font-size: .74rem; }
@@ -2054,7 +2057,7 @@
     function bookingErr(err) {
       let msg = (err && (err.message || err.details || err.error_description)) || "예약 처리에 실패했습니다.";
       msg = String(msg).replace(/^[\w.]+:\s*/, "");
-      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule|move_schedule|delete_schedule|public_book_slot|public_booking_board|public_claim_bookings|public_cancel_reservation/i.test(msg)) {
+      if (/schema cache|Could not find the function|PGRST202|booking_board|open_schedule|move_schedule|delete_schedule|public_book_slot|public_booking_board|public_claim_bookings|public_cancel_reservation|coach_book_slot/i.test(msg)) {
         return "예약 기능이 아직 데이터베이스에 없습니다. Supabase SQL Editor에서 reservation_migration.sql 만 실행해 주세요.";
       }
       return msg;
@@ -2094,23 +2097,44 @@
         paintBookBadge("bookBadge", board && board.unread);
       } catch (_) {}
     }
+    function slotIsDone(slot) {
+      if (!slot) return false;
+      if (slot.completed) return true;
+      const end = new Date(slot.end_time).getTime();
+      return Number.isFinite(end) && end <= Date.now();
+    }
     function coachSlotHtml(slot) {
+      const done = slotIsDone(slot);
       const people = (slot.reservations || []).filter((r) => r.status !== "cancelled");
       const confirmed = people.find((r) => r.status === "confirmed");
       const waiting = people.filter((r) => r.status === "waiting").sort((a, b) => a.waiting_order - b.waiting_order);
       const rows = [];
       if (confirmed) {
-        rows.push(`<div class="book-person"><b>확정</b><span>${esc(confirmed.name || "회원")}${confirmed.contact ? " · " + esc(confirmed.contact) : ""}</span><button class="btn danger" type="button" data-book-cancel="${esc(confirmed.id)}">취소</button></div>`);
+        const label = done ? "진행 완료" : "확정";
+        const cancel = done ? "" : `<button class="btn danger" type="button" data-book-cancel="${esc(confirmed.id)}">취소</button>`;
+        rows.push(`<div class="book-person"><b>${label}</b><span>${esc(confirmed.name || "회원")}${confirmed.contact ? " · " + esc(confirmed.contact) : ""}</span>${cancel}</div>`);
       }
       waiting.forEach((w) => {
-        rows.push(`<div class="book-person"><b>대기 ${w.waiting_order}</b><span>${esc(w.name || "회원")}${w.contact ? " · " + esc(w.contact) : ""}</span><button class="btn danger" type="button" data-book-cancel="${esc(w.id)}">취소</button></div>`);
+        const cancel = done ? "" : `<button class="btn danger" type="button" data-book-cancel="${esc(w.id)}">취소</button>`;
+        rows.push(`<div class="book-person"><b>대기 ${w.waiting_order}</b><span>${esc(w.name || "회원")}${w.contact ? " · " + esc(w.contact) : ""}</span>${cancel}</div>`);
       });
-      if (!rows.length && slot.status !== "closed") rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
-      if (slot.status === "closed") rows.push('<p class="hint" style="margin:6px 0 0">마감된 칸입니다. 오픈 취소를 누르면 기록이 삭제되고 오픈 전으로 돌아갑니다.</p>');
-      const st = slot.status === "closed" ? "마감" : (slot.status === "booked" ? "예약됨" : "비어 있음");
+      if (!rows.length && slot.status !== "closed" && !done) rows.push('<p class="hint" style="margin:6px 0 0">아직 신청이 없습니다.</p>');
+      if (!rows.length && done) rows.push('<p class="hint" style="margin:6px 0 0">예약 없이 끝난 시간입니다.</p>');
+      if (slot.status === "closed" && !done) rows.push('<p class="hint" style="margin:6px 0 0">마감된 칸입니다. 오픈 취소를 누르면 기록이 삭제되고 오픈 전으로 돌아갑니다.</p>');
+      const st = done ? "진행 완료" : (slot.status === "closed" ? "마감" : (slot.status === "booked" ? "예약됨" : "비어 있음"));
       const start = slotClockValue(slot.start_time);
       const end = slotClockValue(slot.end_time);
-      const actions = slot.status === "closed"
+      const assign = !done && slot.status !== "closed" && !confirmed
+        ? `<div class="book-edit">
+            <label class="cap">직접 예약</label>
+            <input class="field" data-assign-name="${esc(slot.id)}" placeholder="회원 이름" autocomplete="name" />
+            <input class="field" data-assign-contact="${esc(slot.id)}" placeholder="전화번호" inputmode="tel" autocomplete="tel" style="margin-top:8px" />
+            <button class="btn wide" type="button" data-book-assign="${esc(slot.id)}" style="margin-top:8px">이 시간 예약 확정</button>
+          </div>`
+        : "";
+      const actions = done
+        ? `<p class="hint" style="margin:8px 0 0">진행이 끝난 수업입니다. 기록은 캘린더에 남습니다.</p>`
+        : (slot.status === "closed"
         ? `<button class="btn danger wide" type="button" data-book-drop="${esc(slot.id)}">오픈 취소</button>`
         : `<div class="book-slot-actions">
             <button class="btn soft" type="button" data-book-edit="${esc(slot.id)}">시간 수정</button>
@@ -2123,10 +2147,11 @@
               <input class="field" type="time" data-edit-end="${esc(slot.id)}" value="${esc(end)}" aria-label="종료 수정" />
             </div>
             <button class="btn wide" type="button" data-book-save="${esc(slot.id)}">이 시간으로 저장</button>
-          </div>`;
-      return `<div class="card book-slot" data-book-slot-card="${esc(slot.id)}">
-        <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag">${st}</span></div>
+          </div>`);
+      return `<div class="card book-slot${done ? " done" : ""}" data-book-slot-card="${esc(slot.id)}">
+        <div class="row"><b style="flex:1">${esc(fmtSlotClock(slot.start_time, slot.end_time))}</b><span class="tag${done ? " done" : ""}">${st}</span></div>
         ${rows.join("")}
+        ${assign}
         ${actions}
       </div>`;
     }
@@ -2152,6 +2177,7 @@
     let bookCal = { mode: "week", cursor: "", day: "" };
     let bookFocusSlot = "";
     function slotBookFlags(slot, member) {
+      if (slotIsDone(slot)) return { open: false, full: false, wait: false, closed: false, done: true };
       if (slot.status === "closed") return { open: false, full: false, wait: false, closed: true };
       if (member) {
         const mine = slot.mine && slot.mine.status;
@@ -2165,17 +2191,19 @@
       return { open: !full, full, wait, closed: false };
     }
     function dayBookFlags(list, member) {
-      const flags = { open: false, full: false, wait: false, closed: false };
+      const flags = { open: false, full: false, wait: false, closed: false, done: false };
       (list || []).forEach((slot) => {
         const f = slotBookFlags(slot, member);
         if (f.open) flags.open = true;
         if (f.full) flags.full = true;
         if (f.wait) flags.wait = true;
         if (f.closed) flags.closed = true;
+        if (f.done) flags.done = true;
       });
       return flags;
     }
     function slotTone(slot, member) {
+      if (!member && slotIsDone(slot)) return "done";
       if (slot.status === "closed") return "closed";
       if (member) {
         const mine = slot.mine && slot.mine.status;
@@ -2189,7 +2217,7 @@
       return "open";
     }
     function slotToneLabel(tone) {
-      return { open: "비어 있음", full: "예약", wait: "대기", closed: "마감" }[tone] || "";
+      return { open: "비어 있음", full: "예약", wait: "대기", closed: "마감", done: "진행 완료" }[tone] || "";
     }
     function memberBlockTitle(slot) {
       const mine = slot.mine;
@@ -2199,6 +2227,11 @@
       return "예약 가능";
     }
     function bookBlockTitle(slot) {
+      if (slotIsDone(slot)) {
+        const people = (slot.reservations || []).filter((r) => r.status !== "cancelled");
+        const confirmed = people.find((r) => r.status === "confirmed");
+        return confirmed ? (confirmed.name || "회원") + " · 완료" : "진행 완료";
+      }
       if (slot.status === "closed") return "마감";
       const people = (slot.reservations || []).filter((r) => r.status !== "cancelled");
       const confirmed = people.find((r) => r.status === "confirmed");
@@ -2209,10 +2242,10 @@
       return "비어 있음";
     }
     function bookDotsHtml(flags) {
-      return `<span class="book-dots">${flags.open ? '<i class="open"></i>' : ""}${flags.full ? '<i class="full"></i>' : ""}${flags.wait ? '<i class="wait"></i>' : ""}${flags.closed ? '<i class="closed"></i>' : ""}</span>`;
+      return `<span class="book-dots">${flags.open ? '<i class="open"></i>' : ""}${flags.full ? '<i class="full"></i>' : ""}${flags.wait ? '<i class="wait"></i>' : ""}${flags.done ? '<i class="done"></i>' : ""}${flags.closed ? '<i class="closed"></i>' : ""}</span>`;
     }
     function bookLegendHtml() {
-      return `<div class="book-legend"><span><i class="open"></i>빈 시간</span><span><i class="full"></i>예약됨</span><span><i class="wait"></i>대기</span><span><i class="closed"></i>마감</span></div>`;
+      return `<div class="book-legend"><span><i class="open"></i>빈 시간</span><span><i class="full"></i>예약됨</span><span><i class="wait"></i>대기</span><span><i class="done"></i>진행 완료</span><span><i class="closed"></i>마감</span></div>`;
     }
     function bookWeekGridHtml(slots, days, member, selected, ns) {
       const hours = TL_TO - TL_FROM;
@@ -2344,6 +2377,7 @@
       if (flags.open) bits.push("빈 시간");
       if (flags.full) bits.push("예약");
       if (flags.wait) bits.push("대기");
+      if (flags.done) bits.push("진행 완료");
       return bits.join(" · ");
     }
     function bookResetRange(kind) {
@@ -5179,9 +5213,10 @@
       const closeBtn = e.target.closest("[data-book-close]");
       const dropBtn = e.target.closest("[data-book-drop]");
       const saveBtn = e.target.closest("[data-book-save]");
+      const assignBtn = e.target.closest("[data-book-assign]");
       const cancelBtn = e.target.closest("[data-book-cancel]");
       const readBtn = e.target.closest("#bookRead");
-      const btn = openBtn || repeatBtn || exClose || dayClose || resetBtn || closeBtn || dropBtn || saveBtn || cancelBtn || readBtn;
+      const btn = openBtn || repeatBtn || exClose || dayClose || resetBtn || closeBtn || dropBtn || saveBtn || assignBtn || cancelBtn || readBtn;
       if (!btn) return;
       btn.disabled = true;
       try {
@@ -5231,6 +5266,19 @@
           await renderBook();
           return;
         }
+        if (assignBtn) {
+          const id = assignBtn.dataset.bookAssign;
+          const nameEl = document.querySelector('[data-assign-name="' + id + '"]');
+          const contactEl = document.querySelector('[data-assign-contact="' + id + '"]');
+          const name = nameEl ? nameEl.value.trim() : "";
+          const contact = contactEl ? contactEl.value.trim() : "";
+          if (!name) { alert("회원 이름을 입력해 주세요."); return; }
+          if (!contact) { alert("전화번호를 입력해 주세요."); return; }
+          const res = await Cloud.coachBookSlot(id, name, contact);
+          alert((res && res.name ? res.name : name) + " 님 예약을 확정했습니다.");
+          await renderBook();
+          return;
+        }
         if (repeatBtn) {
           const weekdays = selectedBookDows();
           if (!weekdays.length) { alert("요일을 하나 이상 선택해 주세요."); return; }
@@ -5262,7 +5310,7 @@
         }
         if (resetBtn) {
           const range = bookResetRange(resetBtn.dataset.bookReset);
-          const list = slotsInBookRange(range.from, range.to);
+          const list = slotsInBookRange(range.from, range.to).filter((slot) => !slotIsDone(slot));
           if (!list.length) { alert(range.label + "에는 초기화할 열린 시간이 없습니다."); return; }
           const activeCount = (slot) => ((slot.reservations || []).filter((r) => r.status !== "cancelled").length);
           const bookedSlots = list.filter((slot) => activeCount(slot) > 0);

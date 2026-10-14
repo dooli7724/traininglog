@@ -906,11 +906,12 @@ begin
           ) order by case r.status when 'confirmed' then 0 when 'waiting' then 1 else 2 end, r.waiting_order, r.created_at)
           from public.reservations r
           where r.schedule_id = s.id and r.status <> 'cancelled'
-        ), '[]'::jsonb)
+        ), '[]'::jsonb),
+        'completed', s.end_time <= now()
       ) as slot
     from public.schedules s
     where s.coach_id = uid
-      and s.end_time > now()
+      and s.end_time > now() - interval '400 days'
   ) x;
 
   select count(*) into unread
@@ -1071,6 +1072,9 @@ begin
   end if;
   if slot.coach_id <> uid then
     raise exception '본인이 연 시간만 취소할 수 있습니다';
+  end if;
+  if slot.end_time <= now() then
+    raise exception '끝난 수업은 삭제하지 않고 진행 완료로 남깁니다';
   end if;
   label := public._slot_label(slot.start_time);
   for rec in
@@ -1405,6 +1409,85 @@ begin
   return jsonb_build_object('cancelled_id', res.id, 'promoted', promoted_id is not null);
 end;
 $mig$;
+
+create or replace function public.coach_book_slot(p_schedule_id uuid, p_name text, p_contact text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $mig$
+declare
+  uid uuid := auth.uid();
+  slot public.schedules%rowtype;
+  guest_name text := btrim(coalesce(p_name, ''));
+  guest_contact text := regexp_replace(btrim(coalesce(p_contact, '')), '[[:space:]-]', '', 'g');
+  guest_id text;
+  token text;
+  rid uuid;
+  label text;
+begin
+  if uid is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+  if char_length(guest_name) < 1 or char_length(guest_name) > 30 then
+    raise exception '이름을 입력해 주세요';
+  end if;
+  if char_length(guest_contact) < 4 or char_length(guest_contact) > 40 then
+    raise exception '연락처를 입력해 주세요';
+  end if;
+  select * into slot from public.schedules where id = p_schedule_id for update;
+  if not found then
+    raise exception '시간을 찾을 수 없습니다';
+  end if;
+  if slot.coach_id <> uid then
+    raise exception '본인이 연 시간만 예약할 수 있습니다';
+  end if;
+  if slot.status = 'closed' then
+    raise exception '마감된 시간입니다';
+  end if;
+  if slot.end_time <= now() then
+    raise exception '이미 끝난 수업은 예약할 수 없습니다';
+  end if;
+  if exists (
+    select 1 from public.reservations r
+    where r.schedule_id = slot.id and r.status = 'confirmed'
+  ) then
+    raise exception '이미 확정된 예약이 있습니다';
+  end if;
+  guest_id := 'guest:' || md5(lower(guest_name) || '|' || guest_contact);
+  if exists (
+    select 1 from public.reservations r
+    where r.schedule_id = slot.id
+      and r.client_id = guest_id
+      and r.status in ('confirmed', 'waiting')
+  ) then
+    raise exception '이미 이 시간을 예약했거나 대기 중입니다';
+  end if;
+  token := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+  label := public._slot_label(slot.start_time);
+  insert into public.reservations (
+    schedule_id, client_id, member_share, member_name, contact, cancel_token, status, waiting_order
+  ) values (
+    slot.id, guest_id, '', guest_name, guest_contact, token, 'confirmed', 0
+  ) returning id into rid;
+  update public.schedules set status = 'booked' where id = slot.id;
+  perform public._booking_notice(
+    'coach', slot.coach_id, guest_id, '', slot.id, rid,
+    'booked', guest_name || ' 님 예약',
+    label || ' 코치가 ' || guest_name || ' · ' || guest_contact || ' 예약을 확정했습니다.'
+  );
+  return jsonb_build_object(
+    'id', rid,
+    'status', 'confirmed',
+    'name', guest_name,
+    'contact', guest_contact,
+    'token', token
+  );
+end;
+$mig$;
+
+revoke all on function public.coach_book_slot(uuid, text, text) from public, anon;
+grant execute on function public.coach_book_slot(uuid, text, text) to authenticated;
 
 revoke all on function public.public_booking_board(text[]) from public;
 grant execute on function public.public_booking_board(text[]) to anon, authenticated;
