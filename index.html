@@ -220,7 +220,7 @@
     .cal-cell .hol { color: var(--danger); font-size: .6rem; font-weight: 800; display: block; }
     .label { margin: 16px 0 8px; font-size: .78rem; font-weight: 800; color: var(--muted); letter-spacing: .06em; }
     .hint { color: var(--muted); font-size: .8rem; margin: 0 0 10px; line-height: 1.45; }
-    .prev { color: var(--ok); font-size: .78rem; margin: -4px 0 8px 54px; }
+    .prev { color: var(--ok); font-size: .78rem; margin: -4px 0 8px 34px; }
     .tile {
       width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
       text-align: left; background: var(--card); border: none; border-radius: var(--radius);
@@ -249,9 +249,10 @@
     .ex-top .ex-title b { font-size: 1.02rem; }
     .ex-top .btn.danger { margin: 6px 8px 6px 0; flex-shrink: 0; }
     .badge { display: inline-block; margin-left: 6px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 8px; font-size: .72rem; font-weight: 700; }
-    .set-row { display: grid; grid-template-columns: 54px 1fr 1fr 40px; gap: 6px; align-items: center; margin-bottom: 8px; }
-    .set-n { font-weight: 800; color: var(--accent); font-size: .9rem; }
-    .set-row .field, .set-add .field { min-height: 44px; padding: 8px; text-align: center; font-weight: 700; font-size: 1rem; }
+    .set-row { display: grid; grid-template-columns: 28px 1fr 40px; gap: 6px; align-items: center; margin-bottom: 8px; }
+    .set-n { font-weight: 800; color: var(--muted); font-size: .78rem; text-align: center; }
+    .set-row .field, .set-add .field { min-height: 44px; padding: 8px 12px; text-align: left; font-weight: 600; font-size: 1rem; }
+    .set-row textarea.field, .set-add textarea.field { display: block; width: 100%; min-height: 44px; max-height: 140px; resize: none; overflow: hidden; line-height: 1.35; field-sizing: content; }
     .set-add { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
     .set-add-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .set-quick { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -589,7 +590,8 @@
     #logWork .ex-top .badge { margin-left: 0; font-size: .68rem; font-weight: 700; align-self: center; }
     #logWork .ex-acc .acc-b { padding: 2px 14px 16px; }
     #logWork .set-n { font-size: .74rem; font-weight: 600; color: var(--muted); }
-    #logWork .set-row .field, #logWork .set-add .field { font-size: .92rem; font-weight: 600; color: #3A4048; }
+    #logWork .set-row .field, #logWork .set-add .field,
+    #logWork .set-row textarea.field, #logWork .set-add textarea.field { font-size: 1rem; font-weight: 600; color: var(--text); text-align: left; min-height: 44px; }
     #logWork .ex-acc .label, #logWork .ex-acc .cap {
       margin-top: 16px; font-size: .7rem; font-weight: 700; color: #8B939C; letter-spacing: .04em;
     }
@@ -1890,7 +1892,14 @@
         id: e.id || "",
         name: e.name,
         feedback: e.feedback || "",
-        sets: (e.sets || []).map((st) => ({ id: st.id || "", weight: st.weight, reps: st.reps })),
+        sets: (e.sets || []).map((st) => {
+          const text = setLineText(st);
+          const row = { id: st.id || "" };
+          if (text) row.text = text;
+          if (st.weight != null && st.weight !== "") row.weight = st.weight;
+          if (st.reps != null && st.reps !== "") row.reps = st.reps;
+          return row;
+        }),
         media: (e.media || []).map(packMedia).filter(Boolean),
         sketch: sketch || undefined
       };
@@ -2086,8 +2095,17 @@
       const ex = (prev.session.exercises || []).find((e) => e.name === name);
       return { date: prev.date, sets: (ex && ex.sets) || [] };
     }
+    function setLineText(st) {
+      if (!st) return "";
+      const typed = st.text != null ? String(st.text).trim() : "";
+      if (typed) return typed;
+      const bits = [];
+      if (st.weight != null && st.weight !== "") bits.push(st.weight + "kg");
+      if (st.reps != null && st.reps !== "") bits.push(st.reps + "회");
+      return bits.join(" × ");
+    }
     function fmtSets(sets) {
-      return (sets || []).map((s, i) => (i + 1) + "세트 " + s.weight + "kg × " + s.reps).join(" · ");
+      return (sets || []).map((s, i) => (i + 1) + "세트 " + (setLineText(s) || "기록 없음")).join(" · ");
     }
     function fmtNum(n) {
       const x = Number(n);
@@ -3492,20 +3510,16 @@
         const prev = prevSets(m, ex.name);
         const guide = lastWeekGuide(m, ex.name, logDate);
         let ref = "";
-        if (guide) ref += `<button class="set-guide" type="button" data-use-guide="${esc(ex.id)}" data-guide-w="${esc(guide.last.weight)}" data-guide-r="${esc(guide.last.reps)}">지난주 ${esc(prettyDate(guide.date))} 마지막 ${esc(guide.last.weight)}kg × ${esc(guide.last.reps)}회 · 눌러서 입력</button>`;
+        if (guide) ref += `<button class="set-guide" type="button" data-use-guide="${esc(ex.id)}" data-guide-text="${esc(setLineText(guide.last))}">지난주 ${esc(prettyDate(guide.date))} 마지막 ${esc(setLineText(guide.last))} · 눌러서 입력</button>`;
         if (prev && prev.sets.length && (!guide || guide.date !== prev.date)) ref += `<p class="hint">직전(${prettyDate(prev.date)}): ${esc(fmtSets(prev.sets))}</p>`;
         const rows = (ex.sets || []).map((st, i) => {
           const pset = prev && prev.sets[i];
-          return `<div class="set-row"><div class="set-n">${i + 1}세트</div>
-            <input class="field" inputmode="decimal" data-set-w="${ex.id}:${st.id}" value="${st.weight}" placeholder="kg" />
-            <input class="field" inputmode="numeric" data-set-r="${ex.id}:${st.id}" value="${st.reps}" placeholder="회" />
-            <button class="btn danger" type="button" data-del-set="${ex.id}:${st.id}">×</button></div>
-            ${pset ? `<p class="prev">직전 ${pset.weight}kg × ${pset.reps}회</p>` : ""}`;
+          return `<div class="set-row"><div class="set-n">${i + 1}</div>
+            <textarea class="field" data-set-text="${esc(ex.id)}:${esc(st.id)}" rows="1" spellcheck="false" placeholder="100kg 5회, 60초 버티기, 슈퍼세트…" enterkeyhint="next">${esc(setLineText(st))}</textarea>
+            <button class="btn danger" type="button" data-del-set="${esc(ex.id)}:${esc(st.id)}">×</button></div>
+            ${pset ? `<p class="prev">직전 ${esc(setLineText(pset))}</p>` : ""}`;
         }).join("");
         const n = (ex.sets || []).length;
-        const seed = n ? ex.sets[n - 1] : null;
-        const seedW = seed ? fmtNum(seed.weight) : "";
-        const seedR = seed ? fmtNum(seed.reps) : "";
         ensureSketch(ex);
         const open = !logExCollapsed.has(ex.id);
         cards.push(`<article class="acc ex-acc${open ? " open" : ""}" data-ex-acc="${ex.id}">
@@ -3518,21 +3532,15 @@
           </div>
           <div class="acc-b">
           ${ref}
-          ${rows || '<div class="empty" style="padding:8px">세트 없음</div>'}
+          ${rows || '<div class="empty" style="padding:8px">세트를 자유롭게 적으세요.</div>'}
           <div class="set-add">
-            <div class="set-add-fields">
-              <input class="field" inputmode="decimal" data-new-w="${ex.id}" value="${esc(seedW)}" placeholder="중량(kg)" />
-              <input class="field" inputmode="numeric" data-new-r="${ex.id}" value="${esc(seedR)}" placeholder="횟수" />
+            <div class="set-row">
+              <div class="set-n">${n + 1}</div>
+              <textarea class="field" data-new-set="${esc(ex.id)}" rows="1" spellcheck="false" placeholder="다음 세트" enterkeyhint="next"></textarea>
+              <span></span>
             </div>
-            <div class="set-quick">
-              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:w:-2.5">−2.5kg</button>
-              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:w:2.5">+2.5kg</button>
-              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:w:5">+5kg</button>
-              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:r:-1">−1회</button>
-              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:r:1">+1회</button>
-              <button class="btn soft" type="button" data-set-bump="${esc(ex.id)}:r:5">+5회</button>
-            </div>
-            <button class="btn wide" type="button" data-add-set="${ex.id}">세트 완료</button></div>
+            <button class="btn wide" type="button" data-add-set="${esc(ex.id)}">세트 추가</button>
+          </div>
           <div class="sketch-pad">
             <div class="label">펜슬 메모</div>
             <div class="sketch-tools">
@@ -3550,7 +3558,43 @@
           </div></article>`);
       }
       box.innerHTML = cards.join("");
+      box.querySelectorAll(".set-row textarea.field, .set-add textarea.field").forEach(fitSetLine);
       paintSketches(box);
+      if (pendingSetFocus) {
+        const want = pendingSetFocus;
+        pendingSetFocus = null;
+        const el = want.draft
+          ? box.querySelector(`[data-new-set="${want.exId}"]`)
+          : box.querySelector(`[data-set-text="${want.exId}:${want.setId}"]`);
+        if (el) {
+          el.focus();
+          const len = el.value.length;
+          try { el.setSelectionRange(len, len); } catch (_) {}
+        }
+      }
+    }
+    function fitSetLine(el) {
+      if (!el) return;
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 140) + "px";
+    }
+    let pendingSetFocus = null;
+    function commitSetDraft(exId) {
+      const ex = findEx(exId);
+      const input = document.querySelector(`[data-new-set="${exId}"]`);
+      if (!ex || !input) return false;
+      const text = input.value.trim();
+      if (!text) {
+        input.focus();
+        return false;
+      }
+      ex.sets.push({ id: uid(), text });
+      const m = currentMember();
+      const sess = sessionOf(m);
+      if (m && sess && !sess.charged) chargeSession(m, logDate);
+      else saveData();
+      pendingSetFocus = { exId, draft: true };
+      return true;
     }
     function findEx(id) { const s = sessionOf(); return s ? s.exercises.find((e) => e.id === id) : null; }
     let memberFilter = "active";
@@ -4269,7 +4313,7 @@
       const head = program ? `<p class="kv"><span>프로그램</span>${esc(program)}</p>` : "";
       const blocks = [];
       for (const ex of exercises) {
-        const sets = (ex.sets || []).map((st, i) => `<div class="set-line"><span>${i + 1}세트</span><b>${esc(st.weight)}kg × ${esc(st.reps)}회</b></div>`).join("");
+        const sets = (ex.sets || []).map((st, i) => `<div class="set-line"><span>${i + 1}세트</span><b>${esc(setLineText(st) || "-")}</b></div>`).join("");
         const fb = ex.feedback || "";
         const media = await mediaViewHtml(ex);
         const packedSketch = packSketch(ex.sketch);
@@ -5320,27 +5364,16 @@
         }
         return;
       }
-      const bump = e.target.closest("[data-set-bump]");
-      if (bump) {
-        const parts = bump.dataset.setBump.split(":");
-        const exId = parts[0];
-        const kind = parts[1];
-        const delta = Number(parts[2]);
-        const input = document.querySelector(kind === "w" ? `[data-new-w="${exId}"]` : `[data-new-r="${exId}"]`);
-        if (!input || !Number.isFinite(delta)) return;
-        const cur = input.value === "" ? 0 : Number(input.value);
-        const base = Number.isFinite(cur) ? cur : 0;
-        const next = Math.max(0, Math.round((base + delta) * 10) / 10);
-        input.value = fmtNum(next);
-        return;
-      }
       const guideBtn = e.target.closest("[data-use-guide]");
       if (guideBtn) {
-        const exId = guideBtn.dataset.useGuide;
-        const w = document.querySelector(`[data-new-w="${exId}"]`);
-        const r = document.querySelector(`[data-new-r="${exId}"]`);
-        if (w) w.value = fmtNum(guideBtn.dataset.guideW);
-        if (r) r.value = fmtNum(guideBtn.dataset.guideR);
+        const draft = document.querySelector(`[data-new-set="${guideBtn.dataset.useGuide}"]`);
+        if (draft) {
+          draft.value = guideBtn.dataset.guideText || "";
+          fitSetLine(draft);
+          draft.focus();
+          const len = draft.value.length;
+          try { draft.setSelectionRange(len, len); } catch (_) {}
+        }
         return;
       }
       const toolBtn = e.target.closest("[data-sketch-tool]");
@@ -5363,27 +5396,8 @@
       const delMedia = e.target.closest("[data-del-media]");
       const view = e.target.closest("[data-view]");
       if (addSet) {
-        const ex = findEx(addSet.dataset.addSet);
-        const w = document.querySelector(`[data-new-w="${ex.id}"]`);
-        const r = document.querySelector(`[data-new-r="${ex.id}"]`);
-        if (!ex || !w.value || !r.value) return;
-        ex.sets.push({ id: uid(), weight: Number(w.value), reps: Number(r.value) });
-        w.value = ""; r.value = "";
-        const m = currentMember();
-        const sess = sessionOf(m);
-        if (m && sess && !sess.charged) {
-          const charged = chargeSession(m, logDate);
-          if (charged === "ok") toastCloud("잔여 1회 차감");
-          else if (charged === "empty") toastCloud("잔여 회차가 없어 차감하지 않았습니다", true);
-        } else saveData();
-        const saved = await persistCloud({ notify: true });
-        if (!saved) return;
-        const attendBtn = $("logAttend");
-        if (attendBtn && sess) {
-          attendBtn.textContent = attendBtnLabel(sess);
-          attendBtn.classList.toggle("soft", !!(sess.attended || sess.charged));
-        }
-        await renderExercises(); return;
+        if (commitSetDraft(addSet.dataset.addSet)) await renderExercises();
+        return;
       }
       if (delSet) {
         const [exId, setId] = delSet.dataset.delSet.split(":");
@@ -5477,11 +5491,40 @@
         alert(saveErrText(err));
       }
     });
+    $("exercises").addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+      const line = e.target.closest("[data-set-text]");
+      const draft = e.target.closest("[data-new-set]");
+      if (!line && !draft) return;
+      e.preventDefault();
+      if (draft) {
+        if (commitSetDraft(draft.dataset.newSet)) renderExercises();
+        return;
+      }
+      const splitAt = line.dataset.setText.lastIndexOf(":");
+      const exId = line.dataset.setText.slice(0, splitAt);
+      const setId = line.dataset.setText.slice(splitAt + 1);
+      const ex = findEx(exId);
+      if (!ex) return;
+      const idx = ex.sets.findIndex((st) => st.id === setId);
+      const next = ex.sets[idx + 1];
+      const target = next
+        ? document.querySelector(`[data-set-text="${exId}:${next.id}"]`)
+        : document.querySelector(`[data-new-set="${exId}"]`);
+      if (target) target.focus();
+    });
     $("exercises").addEventListener("input", (e) => {
-      const w = e.target.closest("[data-set-w]"); const r = e.target.closest("[data-set-r]");
+      const line = e.target.closest("[data-set-text]");
+      const draft = e.target.closest("[data-new-set]");
       const feedback = e.target.closest("[data-ex-feedback]");
-      if (w) { const [exId, setId] = w.dataset.setW.split(":"); const st = findEx(exId).sets.find((s) => s.id === setId); if (st) { st.weight = Number(w.value); saveData(); } }
-      if (r) { const [exId, setId] = r.dataset.setR.split(":"); const st = findEx(exId).sets.find((s) => s.id === setId); if (st) { st.reps = Number(r.value); saveData(); } }
+      if (draft) fitSetLine(draft);
+      if (line) {
+        const splitAt = line.dataset.setText.lastIndexOf(":");
+        const exId = line.dataset.setText.slice(0, splitAt);
+        const setId = line.dataset.setText.slice(splitAt + 1);
+        const st = findEx(exId) && findEx(exId).sets.find((s) => s.id === setId);
+        if (st) { st.text = line.value; fitSetLine(line); saveData(); }
+      }
       if (feedback) { const ex = findEx(feedback.dataset.exFeedback); if (ex) { ex.feedback = feedback.value; saveData(); } }
     });
     $("memberList").addEventListener("click", (e) => {
