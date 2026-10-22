@@ -254,6 +254,14 @@
     .ex-head h2 { flex: 1; margin: 0; font-size: 1.05rem; }
     .ex-acc { margin-bottom: 10px; }
     .ex-top { display: flex; align-items: stretch; gap: 0; }
+    .ex-order { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; padding-left: 4px; }
+    .ex-order button, .ex-rename {
+      width: 36px; min-height: 28px; padding: 0; border: 0; background: transparent; color: var(--muted);
+    }
+    .ex-order button:disabled { opacity: .28; }
+    .ex-rename { margin: 8px 0; }
+    .ex-rename svg, .ex-order svg { width: 18px; height: 18px; display: block; margin: 0 auto; }
+    .ex-name-input { flex: 1; min-width: 0; margin: 8px 6px; font-size: 1.2rem; font-weight: 800; min-height: 44px; }
     .ex-top .acc-h { padding-right: 8px; }
     .ex-top .ex-title { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
     .ex-top .ex-title b { font-size: 1.02rem; }
@@ -1014,6 +1022,7 @@
       <div id="logWork" class="hidden">
         <p class="label" id="logDay"></p>
         <p class="hint" id="logPrevHint"></p>
+        <button class="btn danger wide" id="logDeleteDay" type="button">이 날짜 일지 삭제</button>
         <div class="acc open" data-log-acc="program">
           <button class="acc-h" type="button" data-log-toggle="program"><span class="sec-title"><svg class="sec-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>오늘 프로그램</span> <span class="arr">▾</span></button>
           <div class="acc-b">
@@ -3520,37 +3529,35 @@
       const m = currentMember(); const s = sessionOf(m); const box = $("exercises");
       if (!s || !s.exercises.length) { box.innerHTML = '<div class="empty">종목을 추가한 뒤 기록을 적으세요.</div>'; return; }
       const cards = [];
-      for (const ex of s.exercises) {
-        ensureSketch(ex);
+      const last = s.exercises.length - 1;
+      for (let index = 0; index < s.exercises.length; index++) {
+        const ex = s.exercises[index];
         const open = !logExCollapsed.has(ex.id);
         cards.push(`<article class="acc ex-acc${open ? " open" : ""}" data-ex-acc="${ex.id}">
           <div class="ex-top">
+            <div class="ex-order">
+              <button type="button" data-move-ex="${esc(ex.id)}" data-move-dir="-1" aria-label="위로" ${index === 0 ? "disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 14 6-6 6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button type="button" data-move-ex="${esc(ex.id)}" data-move-dir="1" aria-label="아래로" ${index === last ? "disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </div>
             <button class="acc-h" type="button" data-ex-toggle="${ex.id}">
               <span class="ex-title"><b>${esc(ex.name)}</b></span>
               <span class="arr">▾</span>
             </button>
+            <button class="ex-rename" type="button" data-rename-ex="${esc(ex.id)}" aria-label="이름 수정"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="btn danger" type="button" data-del-ex="${ex.id}">삭제</button>
           </div>
           <div class="acc-b">
           <textarea class="field ex-record" data-ex-record="${esc(ex.id)}" rows="6" spellcheck="false" placeholder="100kg 5회, 60초 버티기, 1세트: 100x5 / 2세트: 100x5">${esc(exerciseRecord(ex))}</textarea>
-          <div class="sketch-pad">
-            <div class="label">펜슬 메모</div>
-            <div class="sketch-tools">
-              <button class="btn soft on" type="button" data-sketch-tool="${esc(ex.id)}:pen">펜</button>
-              <button class="btn soft" type="button" data-sketch-tool="${esc(ex.id)}:eraser">지우개</button>
-            </div>
-            <canvas class="sketch-canvas" data-sketch-ex="${esc(ex.id)}" data-tool="pen"></canvas>
-            <p class="hint">애플펜슬이나 손가락으로 그립니다. 지우개를 고르면 선의 일부만 지울 수 있습니다.</p>
-          </div>
           <div class="label" style="margin-top:12px">사진 · 영상</div>
           <div class="media">${await mediaHtml(ex)}</div>
-          <div class="add" style="margin:0;flex-wrap:wrap"><label class="btn soft file" style="flex:1">영상 촬영<input type="file" accept="video/*" capture="environment" data-files="${ex.id}" /></label><label class="btn soft file" style="flex:1">앨범에서 첨부<input type="file" accept="image/*,video/*" multiple data-files="${ex.id}" /></label></div>
-          <label class="cap">피드백</label>
-          <textarea class="field ex-note" data-ex-feedback="${ex.id}" placeholder="이 종목에 대한 코칭 피드백">${esc(ex.feedback || "")}</textarea>
+          <div class="add" style="margin:0;flex-wrap:wrap">
+            <label class="btn soft file" style="flex:1">사진<input type="file" accept="image/*" capture="environment" data-files="${ex.id}" /></label>
+            <label class="btn soft file" style="flex:1">영상<input type="file" accept="video/*" capture="environment" data-files="${ex.id}" /></label>
+            <label class="btn soft file" style="flex:1 1 100%">앨범에서 사진·영상<input type="file" accept="image/*,video/*" multiple data-files="${ex.id}" /></label>
+          </div>
           </div></article>`);
       }
       box.innerHTML = cards.join("");
-      paintSketches(box);
     }
     function findEx(id) { const s = sessionOf(); return s ? s.exercises.find((e) => e.id === id) : null; }
     let memberFilter = "active";
@@ -3612,7 +3619,9 @@
       $("memberFilterHint").textContent = memberFilter === "expired"
         ? "잔여 0회이거나 이용 종료일이 지난 회원입니다. 회차 충전·종료일 연장 시 진행 중으로 복구됩니다."
         : "잔여 횟수가 있거나 이용 기간 중인 회원입니다.";
-      const list = memberFilter === "expired" ? expired : active;
+      const list = (memberFilter === "expired" ? expired : active)
+        .slice()
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko", { sensitivity: "base" }));
       $("memberList").innerHTML = list.length
         ? list.map(memberTileHtml).join("")
         : `<div class="empty">${memberFilter === "expired" ? "만료된 회원이 없습니다." : "진행 중인 회원이 없습니다."}</div>`;
@@ -5305,32 +5314,88 @@
     bindLogField("logProgram", "program");
     bindLogField("logFeedback", "feedback");
     bindLogField("logMemo", "memo");
+    $("logDeleteDay").onclick = async () => {
+      const m = currentMember();
+      const date = logDate;
+      if (!m || !date) return;
+      const s = m.sessions && m.sessions[date];
+      if (!s) { logDate = null; renderLog(); return; }
+      if (!confirm(prettyDate(date) + " 일지 전체를 삭제할까요?\n종목, 기록, 사진, 영상이 함께 지워집니다.")) return;
+      const share = m.share || "";
+      for (const ex of s.exercises || []) {
+        for (const media of ex.media || []) {
+          if (!media || media.kind === "link") continue;
+          await delFile(media.id, share);
+          if (media.kind === "video" && window.Cloud && Cloud.ready && share) await Cloud.deleteLog(share, media.id);
+        }
+      }
+      if (s.charged) {
+        const used = Math.max(0, (Number(m.pack && m.pack.used) || 0) - 1);
+        m.pack = m.pack || { total: 0, used: 0, endDate: "" };
+        m.pack.used = used;
+      }
+      delete m.sessions[date];
+      logDate = null;
+      const ok = await persistCloud({ notify: true });
+      if (!ok) return;
+      renderLog();
+    };
     $("exercises").addEventListener("click", async (e) => {
+      const moveBtn = e.target.closest("[data-move-ex]");
+      if (moveBtn && !moveBtn.disabled) {
+        const s = sessionOf();
+        if (!s) return;
+        document.querySelectorAll("#exercises [data-ex-record]").forEach((el) => {
+          const row = s.exercises.find((x) => x.id === el.dataset.exRecord);
+          if (row) row.record = el.value;
+        });
+        const id = moveBtn.dataset.moveEx;
+        const dir = Number(moveBtn.dataset.moveDir) || 0;
+        const i = s.exercises.findIndex((x) => x.id === id);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= s.exercises.length) return;
+        const [row] = s.exercises.splice(i, 1);
+        s.exercises.splice(j, 0, row);
+        saveData();
+        await renderExercises();
+        return;
+      }
+      const renameBtn = e.target.closest("[data-rename-ex]");
+      if (renameBtn) {
+        const ex = findEx(renameBtn.dataset.renameEx);
+        const top = renameBtn.closest(".ex-top");
+        if (!ex || !top || top.querySelector(".ex-name-input")) return;
+        const acc = top.querySelector(".acc-h");
+        if (acc) acc.hidden = true;
+        const input = document.createElement("input");
+        input.className = "field ex-name-input";
+        input.value = ex.name || "";
+        input.setAttribute("aria-label", "종목 이름");
+        top.insertBefore(input, renameBtn);
+        input.focus();
+        input.select();
+        let done = false;
+        const finish = (save) => {
+          if (done) return;
+          done = true;
+          const next = input.value.trim();
+          if (save && next) ex.name = next;
+          saveData();
+          renderExercises();
+        };
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+          if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+        });
+        input.addEventListener("blur", () => finish(true));
+        return;
+      }
       const toggle = e.target.closest("[data-ex-toggle]");
       if (toggle) {
         const id = toggle.dataset.exToggle;
         if (logExCollapsed.has(id)) logExCollapsed.delete(id); else logExCollapsed.add(id);
         const art = toggle.closest(".ex-acc");
         if (art) art.classList.toggle("open", !logExCollapsed.has(id));
-        if (!logExCollapsed.has(id)) {
-          const canvas = art && art.querySelector("canvas.sketch-canvas");
-          const ex = findEx(id);
-          if (canvas && ex) drawSketch(canvas, ensureSketch(ex));
-        }
-        return;
-      }
-      const toolBtn = e.target.closest("[data-sketch-tool]");
-      if (toolBtn) {
-        const splitAt = toolBtn.dataset.sketchTool.lastIndexOf(":");
-        const tool = toolBtn.dataset.sketchTool.slice(splitAt + 1);
-        const pad = toolBtn.closest(".sketch-pad");
-        if (!pad) return;
-        pad.querySelectorAll("[data-sketch-tool]").forEach((b) => b.classList.toggle("on", b === toolBtn));
-        const canvas = pad.querySelector("canvas.sketch-canvas");
-        if (canvas) {
-          canvas.dataset.tool = tool === "eraser" ? "eraser" : "pen";
-          canvas.classList.toggle("eraser", canvas.dataset.tool === "eraser");
-        }
         return;
       }
       const delEx = e.target.closest("[data-del-ex]");
@@ -5425,19 +5490,16 @@
     });
     $("exercises").addEventListener("input", (e) => {
       const record = e.target.closest("[data-ex-record]");
-      const feedback = e.target.closest("[data-ex-feedback]");
-      if (record) {
-        const ex = findEx(record.dataset.exRecord);
-        if (!ex) return;
-        ex.record = record.value;
-        const m = currentMember();
-        const sess = sessionOf(m);
-        const performed = record.value.trim();
-        const placeholder = goalOnlyRecord(performed);
-        if (performed && !placeholder && m && sess && !sess.charged) chargeSession(m, logDate);
-        else saveData();
-      }
-      if (feedback) { const ex = findEx(feedback.dataset.exFeedback); if (ex) { ex.feedback = feedback.value; saveData(); } }
+      if (!record) return;
+      const ex = findEx(record.dataset.exRecord);
+      if (!ex) return;
+      ex.record = record.value;
+      const m = currentMember();
+      const sess = sessionOf(m);
+      const performed = record.value.trim();
+      const placeholder = goalOnlyRecord(performed);
+      if (performed && !placeholder && m && sess && !sess.charged) chargeSession(m, logDate);
+      else saveData();
     });
     $("memberList").addEventListener("click", (e) => {
       const arch = e.target.closest("[data-open-archive]");
