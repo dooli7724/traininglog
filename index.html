@@ -277,7 +277,19 @@
       width: 100%; height: 240px; display: block; border-radius: 12px;
       border: 1px solid var(--line); background: #fff; touch-action: none; cursor: crosshair;
     }
-    .media { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+    .media { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 6px; }
+    .media-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .media-actions .file { flex: 1 1 148px; gap: 6px; min-height: var(--tap); }
+    .media-actions svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .media-card { width: 132px; }
+    .media-card .thumb { width: 132px; height: 132px; }
+    .media-ops { display: flex; gap: 4px; margin-top: 4px; }
+    .media-ops .btn, .media-ops .file { flex: 1; min-height: 32px; padding: 0 4px; font-size: .72rem; font-weight: 700; }
+    .media-kind {
+      position: absolute; left: 6px; bottom: 6px; pointer-events: none;
+      background: rgba(15, 23, 42, .72); color: #fff; border-radius: 999px;
+      font-size: .65rem; font-weight: 700; padding: 2px 6px;
+    }
     .thumb { width: 76px; height: 76px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); background: var(--bg); position: relative; display: block; }
     .thumb.lg { width: 100%; height: 150px; }
     .thumb img, .thumb video { width: 100%; height: 100%; object-fit: cover; }
@@ -3390,8 +3402,17 @@
           url: media.url, video_url: media.video_url, path: media.path, kind: media.kind
         });
         if (!url) continue;
-        const inner = media.kind === "video" ? `<video src="${url}" muted playsinline></video>` : `<img src="${url}" alt="" />`;
-        parts.push(`<button class="thumb" type="button" data-view="${media.id}:${media.kind}">${inner}<span class="x" data-del-media="${ex.id}:${media.id}">×</span></button>`);
+        const inner = media.kind === "video"
+          ? `<video src="${url}" muted playsinline preload="metadata"></video>`
+          : `<img src="${url}" alt="" />`;
+        const label = media.kind === "video" ? "영상" : "사진";
+        parts.push(`<div class="media-card">
+          <button class="thumb" type="button" data-view="${media.id}:${media.kind}">${inner}<span class="media-kind">${label}</span></button>
+          <div class="media-ops">
+            <label class="btn soft file">교체<input type="file" accept="image/*,video/*" data-replace-ex="${esc(ex.id)}" data-replace-id="${esc(media.id)}" /></label>
+            <button class="btn danger" type="button" data-del-media="${esc(ex.id)}:${esc(media.id)}">삭제</button>
+          </div>
+        </div>`);
       }
       return parts.join("");
     }
@@ -3549,11 +3570,10 @@
           <div class="acc-b">
           <textarea class="field ex-record" data-ex-record="${esc(ex.id)}" rows="6" spellcheck="false" placeholder="100kg 5회, 60초 버티기, 1세트: 100x5 / 2세트: 100x5">${esc(exerciseRecord(ex))}</textarea>
           <div class="label" style="margin-top:12px">사진 · 영상</div>
-          <div class="media">${await mediaHtml(ex)}</div>
-          <div class="add" style="margin:0;flex-wrap:wrap">
-            <label class="btn soft file" style="flex:1">사진<input type="file" accept="image/*" capture="environment" data-files="${ex.id}" /></label>
-            <label class="btn soft file" style="flex:1">영상<input type="file" accept="video/*" capture="environment" data-files="${ex.id}" /></label>
-            <label class="btn soft file" style="flex:1 1 100%">앨범에서 사진·영상<input type="file" accept="image/*,video/*" multiple data-files="${ex.id}" /></label>
+          <div class="media">${await mediaHtml(ex) || '<p class="hint" style="margin:0">촬영하거나 올린 사진·영상이 여기에 보입니다.</p>'}</div>
+          <div class="media-actions">
+            <label class="btn soft file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.75"/></svg>사진/동영상 촬영<input type="file" accept="image/*,video/*" capture="environment" data-files="${esc(ex.id)}" /></label>
+            <label class="btn soft file">파일 업로드<input type="file" accept="image/*,video/*" multiple data-files="${esc(ex.id)}" /></label>
           </div>
           </div></article>`);
       }
@@ -5340,6 +5360,34 @@
       if (!ok) return;
       renderLog();
     };
+    async function forgetExerciseMedia(media, share) {
+      if (!media || media.kind === "link") return;
+      await delFile(media.id, share);
+      if (media.kind === "video" && window.Cloud && Cloud.ready && share) await Cloud.deleteLog(share, media.id);
+    }
+    async function uploadExerciseMedia(file, share) {
+      const isVideo = isVideoFile(file);
+      if (!(window.Cloud && Cloud.ready)) throw new Error("클라우드에 연결되지 않아 저장소에 올릴 수 없습니다.");
+      const id = uid();
+      if (isVideo) {
+        if (file.size > 50 * 1024 * 1024) throw new Error("영상은 50MB 이하만 업로드됩니다.");
+        if (!Cloud.uploadVideo) throw new Error("클라우드에 연결되지 않아 영상을 저장소에 올릴 수 없습니다.");
+        toastCloud("영상을 클라우드에 업로드하는 중…");
+        const url = publicMediaUrl(await Cloud.uploadVideo(id, file, share));
+        if (!url) throw new Error("영상 공개 주소를 만들지 못했습니다.");
+        try { await putFileLocal(id, file); } catch (_) {}
+        urls.set(id, url);
+        return { id, kind: "video", url, video_url: url, path: Cloud.storagePath(id, share) };
+      }
+      if (!Cloud.upload) throw new Error("클라우드에 연결되지 않아 사진을 저장소에 올릴 수 없습니다.");
+      toastCloud("사진을 클라우드에 업로드하는 중…");
+      const blob = await compressImage(file);
+      const url = publicMediaUrl(await Cloud.upload(id, blob || file, share));
+      if (!url) throw new Error("사진 공개 주소를 만들지 못했습니다.");
+      try { await putFileLocal(id, blob || file); } catch (_) {}
+      urls.set(id, url);
+      return { id, kind: "image", url, video_url: "", path: Cloud.storagePath(id, share) };
+    }
     $("exercises").addEventListener("click", async (e) => {
       const moveBtn = e.target.closest("[data-move-ex]");
       if (moveBtn && !moveBtn.disabled) {
@@ -5405,25 +5453,23 @@
         const ex = findEx(delEx.dataset.delEx);
         if (!ex || !confirm(ex.name + " 종목을 삭제할까요?")) return;
         const share = (currentMember() && currentMember().share) || "";
-        for (const media of ex.media || []) {
-          if (media.kind === "link") continue;
-          await delFile(media.id, share);
-          if (media.kind === "video" && window.Cloud && Cloud.ready && share) await Cloud.deleteLog(share, media.id);
-        }
+        for (const media of ex.media || []) await forgetExerciseMedia(media, share);
         sessionOf().exercises = sessionOf().exercises.filter((x) => x.id !== ex.id);
         saveData(); await renderExercises(); return;
       }
       if (delMedia) {
         e.stopPropagation();
-        const [exId, mediaId] = delMedia.dataset.delMedia.split(":");
+        const splitAt = delMedia.dataset.delMedia.indexOf(":");
+        const exId = delMedia.dataset.delMedia.slice(0, splitAt);
+        const mediaId = delMedia.dataset.delMedia.slice(splitAt + 1);
         const ex = findEx(exId);
+        if (!ex) return;
         const media = (ex.media || []).find((x) => x.id === mediaId);
-        if (media && media.kind !== "link") await delFile(media.id, (currentMember() && currentMember().share) || "");
-        if (media && media.kind === "video" && window.Cloud && Cloud.ready && currentMember()) {
-          await Cloud.deleteLog(currentMember().share, media.id);
-        }
+        await forgetExerciseMedia(media, (currentMember() && currentMember().share) || "");
         ex.media = (ex.media || []).filter((x) => x.id !== mediaId);
-        saveData(); await renderExercises(); return;
+        await persistCloud({ silent: true });
+        await renderExercises();
+        return;
       }
       if (view && !e.target.closest(".x")) {
         const [id, kind] = view.dataset.view.split(":");
@@ -5431,62 +5477,60 @@
       }
     });
     $("exercises").addEventListener("change", async (e) => {
-      const input = e.target.closest("[data-files]");
-      if (!input || !input.files.length) return;
-      const ex = findEx(input.dataset.files);
+      const input = e.target.closest("[data-files], [data-replace-ex]");
+      if (!input || !input.files || !input.files.length) return;
+      const ex = findEx(input.dataset.files || input.dataset.replaceEx);
       if (!ex) return;
       ex.media = ex.media || [];
+      const replaceId = input.dataset.replaceId || "";
       const member = currentMember();
       const share = (member && member.share) || "";
+      const files = replaceId ? [input.files[0]] : [...input.files];
+      let added = 0;
       try {
-        for (const file of [...input.files]) {
-          const isVideo = isVideoFile(file);
-          if (isVideo && file.size > 50 * 1024 * 1024) { alert("영상은 50MB 이하만 업로드됩니다."); continue; }
-          const id = uid();
-          if (isVideo) {
-            if (!(window.Cloud && Cloud.ready && Cloud.uploadVideo)) {
-              alert("클라우드에 연결되지 않아 영상을 저장소에 올릴 수 없습니다.");
-              continue;
-            }
-            toastCloud("영상을 클라우드에 업로드하는 중…");
-            const url = await Cloud.uploadVideo(id, file, share);
-            if (!url) throw new Error("영상 공개 주소를 만들지 못했습니다.");
-            const path = Cloud.storagePath(id, share);
-            ex.media.push({ id, kind: "video", url, video_url: url, path });
-            const sess = sessionOf(member);
-            if (sess) sess.video_url = url;
-            urls.set(id, url);
-            try { await putFileLocal(id, file); } catch (_) {}
+        for (const file of files) {
+          const fresh = await uploadExerciseMedia(file, share);
+          if (replaceId) {
+            const idx = ex.media.findIndex((x) => x.id === replaceId);
+            const prev = idx >= 0 ? ex.media[idx] : null;
+            if (prev && prev.id !== fresh.id) await forgetExerciseMedia(prev, share);
+            if (idx >= 0) ex.media.splice(idx, 1, fresh);
+            else ex.media.push(fresh);
           } else {
-            const url = await putFile(id, await compressImage(file), share);
-            const path = (window.Cloud && Cloud.storagePath) ? Cloud.storagePath(id, share) : "";
-            ex.media.push({ id, kind: "image", url: url || "", path, video_url: "" });
+            ex.media.push(fresh);
           }
-        }
-        input.value = "";
-        const ok = await persistCloud({ notify: true });
-        if (ok && member && window.Cloud && Cloud.ready) {
-          for (const media of ex.media || []) {
-            if (media.kind !== "video" || !media.video_url) continue;
-            try {
-              await Cloud.upsertLog(share, "video", {
-                id: media.id,
-                member_id: member.id,
-                date: logDate || today(),
-                exerciseId: ex.id,
-                video_url: media.video_url,
-                path: media.path || ""
-              });
-            } catch (err) {
-              console.warn(err);
-              toastCloud("영상은 저장소에 올렸습니다. 일지 테이블 반영은 schema.sql 실행 후 다시 저장해 주세요.", true);
-            }
+          if (fresh.kind === "video") {
+            const sess = sessionOf(member);
+            if (sess) sess.video_url = fresh.video_url;
           }
+          added += 1;
         }
-        if (ok) await renderExercises();
       } catch (err) {
         alert(saveErrText(err));
+      } finally {
+        input.value = "";
       }
+      if (!added) return;
+      const ok = await persistCloud({ notify: true });
+      if (ok && member && window.Cloud && Cloud.ready) {
+        for (const media of ex.media || []) {
+          if (media.kind !== "video" || !media.video_url) continue;
+          try {
+            await Cloud.upsertLog(share, "video", {
+              id: media.id,
+              member_id: member.id,
+              date: logDate || today(),
+              exerciseId: ex.id,
+              video_url: media.video_url,
+              path: media.path || ""
+            });
+          } catch (err) {
+            console.warn(err);
+            toastCloud("영상은 저장소에 올렸습니다. 일지 반영은 잠시 후 다시 저장해 주세요.", true);
+          }
+        }
+      }
+      if (ok) await renderExercises();
     });
     $("exercises").addEventListener("input", (e) => {
       const record = e.target.closest("[data-ex-record]");

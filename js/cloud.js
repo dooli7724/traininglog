@@ -718,17 +718,19 @@
 
   Cloud.upload = async function (id, blob, share) {
     if (!Cloud.sb || !blob) return "";
+    await Cloud.ensureSession();
     const path = Cloud.storagePath(id, share);
     const { error } = await Cloud.sb.storage.from("pt-media").upload(path, blob, {
       upsert: true,
-      contentType: blob.type || "image/jpeg"
+      contentType: blob.type || "image/jpeg",
+      cacheControl: "3600"
     });
     if (error) {
       console.warn("upload", error);
       throw error;
     }
     const { data } = Cloud.sb.storage.from("pt-media").getPublicUrl(path);
-    return (data && data.publicUrl) || "";
+    return Cloud.toPublicStorageUrl((data && data.publicUrl) || "");
   };
 
   Cloud.removeFile = async function (id, share) {
