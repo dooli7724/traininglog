@@ -261,7 +261,8 @@
     .ex-order button:disabled { opacity: .28; }
     .ex-rename { margin: 8px 0; }
     .ex-rename svg, .ex-order svg { width: 18px; height: 18px; display: block; margin: 0 auto; }
-    .ex-name-input { flex: 1; min-width: 0; margin: 8px 6px; font-size: 1.2rem; font-weight: 800; min-height: 44px; }
+    .ex-name-input { flex: 1 1 100%; width: 100%; min-width: 0; margin: 8px 10px 10px; padding: 16px 18px; font-size: 1.45rem; font-weight: 800; line-height: 1.3; letter-spacing: -.03em; min-height: 64px; }
+    #logWork .ex-top:has(.ex-name-input) { flex-wrap: wrap; }
     .ex-top .acc-h { padding-right: 8px; }
     .ex-top .ex-title { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
     .ex-top .ex-title b { font-size: 1.02rem; }
@@ -705,6 +706,27 @@
     .viewer { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 24px; }
     .viewer img, .viewer video { max-width: 100%; max-height: 80dvh; border-radius: 12px; }
     #dayLogBg { z-index: 55; }
+    .mini-cal { padding: 14px 12px 10px; margin-bottom: 14px; }
+    .mini-cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .mini-cal-nav b { flex: 1; margin: 0; text-align: center; font-size: .98rem; letter-spacing: -.02em; }
+    .mini-cal-nav .btn { min-height: 36px; min-width: 40px; padding: 0 10px; font-size: 1.1rem; }
+    .mini-cal-week, .mini-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+    .mini-cal-week span { text-align: center; font-size: .68rem; font-weight: 800; color: var(--muted); padding: 2px 0 6px; }
+    .mini-cal-week span.sun { color: var(--danger); }
+    .mini-cal-grid button {
+      position: relative; min-height: 40px; border: 0; border-radius: 10px; background: transparent;
+      font-weight: 700; font-size: .84rem; color: var(--text); padding: 0 0 6px;
+    }
+    .mini-cal-grid button.sun { color: var(--danger); }
+    .mini-cal-grid button.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+    .mini-cal-grid button.on { background: var(--accent); color: #fff; }
+    .mini-cal-grid button.on.sun { color: #fff; }
+    .mini-cal-grid button.has::after {
+      content: ""; position: absolute; left: 50%; bottom: 5px; width: 5px; height: 5px;
+      border-radius: 99px; background: var(--accent); transform: translateX(-50%);
+    }
+    .mini-cal-grid button.on.has::after { background: #fff; }
+    .mini-cal-legend { margin: 8px 2px 0; }
     .day-log-modal { width: min(560px, 100%); max-height: min(90dvh, 100%); }
     .day-log-modal .media-view { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .day-log-modal .media-view .thumb,
@@ -1024,6 +1046,7 @@
     <section id="pageLog" class="page hidden">
       <div id="logPicker" class="page-stack"></div>
       <div id="logArchive" class="hidden">
+        <div class="card mini-cal" id="logCalArchive"></div>
         <p class="hint">날짜별 일지를 고르거나, 새 날짜를 추가해 작성하세요.</p>
         <div class="add">
           <input class="field" id="newLogDate" type="date" />
@@ -1032,6 +1055,7 @@
         <div id="logDateList"></div>
       </div>
       <div id="logWork" class="hidden">
+        <div class="card mini-cal" id="logCalWork"></div>
         <p class="label" id="logDay"></p>
         <p class="hint" id="logPrevHint"></p>
         <button class="btn danger wide" id="logDeleteDay" type="button">이 날짜 일지 삭제</button>
@@ -1861,6 +1885,7 @@
     let fromCal = false;
     let currentId = null;
     let logDate = null;
+    let logCalMonth = "";
     let calMode = "week";
     let calIso = null;
     let calDragging = false;
@@ -3375,6 +3400,8 @@
               return `<button class="tile" type="button" data-open-date="${d}"><span><b>${prettyDate(d)} · ${d.slice(5).replace("-", "/")}</b><small>${st.exercises}종목${names ? " · " + esc(names) : ""}</small></span><span class="chev">›</span></button>`;
             }).join("")
           : '<div class="empty">저장된 날짜가 없습니다. 위에서 새 날짜를 추가하세요.</div>';
+        if (!logCalMonth) logCalMonth = today().slice(0, 7);
+        paintLogCalendars();
         return;
       }
       $("logName").textContent = m.name;
@@ -3393,6 +3420,53 @@
         if (box) box.classList.toggle("open", !logSessionCollapsed.has(key));
       });
       renderExercises();
+      paintLogCalendars();
+    }
+    function shiftMonth(ym, delta) {
+      const parts = String(ym || today().slice(0, 7)).split("-").map(Number);
+      const d = new Date(parts[0], (parts[1] || 1) - 1 + delta, 1);
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    }
+    function miniCalHtml(ym, logged, active) {
+      const parts = ym.split("-").map(Number);
+      const year = parts[0];
+      const month = parts[1];
+      const startPad = new Date(year, month - 1, 1).getDay();
+      const days = new Date(year, month, 0).getDate();
+      const todayIso = today();
+      const cells = [];
+      for (let i = 0; i < startPad; i++) cells.push("<span></span>");
+      for (let day = 1; day <= days; day++) {
+        const iso = ym + "-" + String(day).padStart(2, "0");
+        const has = logged.has(iso);
+        const cls = ["mini-day"];
+        if (has) cls.push("has");
+        if (iso === todayIso) cls.push("today");
+        if (active && iso === active) cls.push("on");
+        if (new Date(year, month - 1, day).getDay() === 0) cls.push("sun");
+        cells.push(`<button type="button" class="${cls.join(" ")}" data-log-cal-day="${iso}" aria-label="${iso}${has ? ", 일지 있음" : ""}">${day}</button>`);
+      }
+      return `<div class="mini-cal-nav">
+        <button class="btn soft" type="button" data-log-cal-nav="-1" aria-label="이전 달">‹</button>
+        <b>${year}년 ${month}월</b>
+        <button class="btn soft" type="button" data-log-cal-nav="1" aria-label="다음 달">›</button>
+      </div>
+      <div class="mini-cal-week"><span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+      <div class="mini-cal-grid">${cells.join("")}</div>
+      <p class="hint mini-cal-legend">점이 있는 날은 일지가 있습니다. 날짜를 누르면 내용을 봅니다.</p>`;
+    }
+    function paintLogCalendars() {
+      const m = currentMember();
+      const hosts = [$("logCalArchive"), $("logCalWork")].filter(Boolean);
+      if (!hosts.length) return;
+      if (!m) {
+        hosts.forEach((el) => { el.innerHTML = ""; });
+        return;
+      }
+      if (!logCalMonth) logCalMonth = (logDate || today()).slice(0, 7);
+      const logged = new Set(archivedDates(m));
+      const html = miniCalHtml(logCalMonth, logged, logDate || "");
+      hosts.forEach((el) => { el.innerHTML = html; });
     }
     async function mediaHtml(ex) {
       const parts = [];
@@ -3548,7 +3622,7 @@
     }
     async function renderExercises() {
       const m = currentMember(); const s = sessionOf(m); const box = $("exercises");
-      if (!s || !s.exercises.length) { box.innerHTML = '<div class="empty">종목을 추가한 뒤 기록을 적으세요.</div>'; return; }
+      if (!s || !s.exercises.length) { box.innerHTML = '<div class="empty">종목을 추가한 뒤 기록을 적으세요.</div>'; paintLogCalendars(); return; }
       const cards = [];
       const last = s.exercises.length - 1;
       for (let index = 0; index < s.exercises.length; index++) {
@@ -3578,6 +3652,7 @@
           </div></article>`);
       }
       box.innerHTML = cards.join("");
+      paintLogCalendars();
     }
     function findEx(id) { const s = sessionOf(); return s ? s.exercises.find((e) => e.id === id) : null; }
     let memberFilter = "active";
@@ -4257,7 +4332,7 @@
       if (!(window.Cloud && Cloud.ready)) throw new Error("클라우드에 연결되지 않았습니다. 네트워크를 확인해 주세요.");
       await Cloud.upsertLog(code, "diet", row);
     }
-    async function mediaViewHtml(ex) {
+    async function mediaViewHtml(ex, share) {
       const parts = [];
       for (const media of ex.media || []) {
         if (!media) continue;
@@ -4265,7 +4340,7 @@
           if (media.url) parts.push(`<a class="btn soft" href="${esc(media.url)}" target="_blank" rel="noopener">링크 열기</a>`);
           continue;
         }
-        const url = await fileUrl(media.id, shareCtx.code, { url: media.url, video_url: media.video_url, path: media.path, kind: media.kind });
+        const url = await fileUrl(media.id, share || (shareCtx && shareCtx.code) || "", { url: media.url, video_url: media.video_url, path: media.path, kind: media.kind });
         if (!url) continue;
         if (media.kind === "video") {
           parts.push(`<div class="thumb lg"><video src="${url}" controls playsinline preload="metadata"></video></div>`);
@@ -4296,7 +4371,7 @@
       for (const ex of exercises) {
         const record = exerciseRecord(ex).trim();
         const fb = ex.feedback || "";
-        const media = await mediaViewHtml(ex);
+        const media = await mediaViewHtml(ex, data.share || "");
         const packedSketch = packSketch(ex.sketch);
         const sketch = packedSketch
           ? `<canvas class="sketch-view" data-sketch="${esc(encodeURIComponent(JSON.stringify(packedSketch)))}"></canvas>`
@@ -4418,6 +4493,22 @@
     function closeDayLog() {
       const bg = $("dayLogBg");
       if (bg) bg.classList.add("hidden");
+    }
+    async function openMemberDayLog(date) {
+      const m = currentMember();
+      date = isoDate(date) || date;
+      const title = $("dayLogTitle");
+      const body = $("dayLogBody");
+      const bg = $("dayLogBg");
+      if (!m || !date || !title || !body || !bg) return;
+      title.textContent = prettyDate(date) + " · " + date;
+      body.innerHTML = '<p class="hint">기록을 불러오는 중…</p>';
+      bg.classList.remove("hidden");
+      const s = sessionForDate(m.sessions, date);
+      const html = s ? await trainerDayHtml(Object.assign({ date, share: m.share || "" }, s), true) : "";
+      const edit = `<button class="btn wide" type="button" data-open-cal-date="${esc(date)}" style="margin-top:12px">이 날짜 일지 열기</button>`;
+      body.innerHTML = (html || '<p class="hint">이 날짜에는 작성된 일지가 없습니다.</p>') + edit;
+      paintSketches(body);
     }
     async function renderShare(data) {
       shareCtx.code = data.share || "";
@@ -4866,10 +4957,12 @@
       if (tab !== "log") fromTab = tab;
       currentId = id;
       logDate = date || null;
+      if (logDate) logCalMonth = String(logDate).slice(0, 7);
       setTab("log", true);
     }
     function openArchive(id) {
       fromCal = false;
+      logCalMonth = today().slice(0, 7);
       openLog(id, null);
     }
     function openDetail(id) {
@@ -5082,14 +5175,27 @@
       const b = e.target.closest("[data-goto-detail]");
       if (b) openDetail(b.dataset.gotoDetail);
     });
-    $("logPicker").addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) { fromTab = "log"; currentId = b.dataset.open; logDate = null; renderLog(); } });
-    $("logDateList").addEventListener("click", (e) => { const b = e.target.closest("[data-open-date]"); if (b) { logDate = b.dataset.openDate; renderLog(); } });
+    $("pageLog").addEventListener("click", async (e) => {
+      const nav = e.target.closest("[data-log-cal-nav]");
+      if (nav) {
+        logCalMonth = shiftMonth(logCalMonth || (logDate || today()).slice(0, 7), Number(nav.dataset.logCalNav) || 0);
+        paintLogCalendars();
+        return;
+      }
+      const day = e.target.closest("[data-log-cal-day]");
+      if (day) {
+        await openMemberDayLog(day.dataset.logCalDay);
+      }
+    });
+    $("logPicker").addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) { fromTab = "log"; currentId = b.dataset.open; logDate = null; logCalMonth = today().slice(0, 7); renderLog(); } });
+    $("logDateList").addEventListener("click", (e) => { const b = e.target.closest("[data-open-date]"); if (b) { logDate = b.dataset.openDate; logCalMonth = String(logDate).slice(0, 7); renderLog(); } });
     $("addLogDate").onclick = () => {
       const d = $("newLogDate").value || today();
       if (!currentMember()) return;
       sessionOf(currentMember(), d);
       saveData();
       logDate = d;
+      logCalMonth = String(d).slice(0, 7);
       renderLog();
     };
     
@@ -6220,6 +6326,14 @@
     $("closeDayLog").onclick = () => closeDayLog();
     $("dayLogBg").addEventListener("click", async (e) => {
       if (e.target.id === "dayLogBg") { closeDayLog(); return; }
+      const openDate = e.target.closest("[data-open-cal-date]");
+      if (openDate && currentMember()) {
+        closeDayLog();
+        logDate = openDate.dataset.openCalDate;
+        logCalMonth = String(logDate).slice(0, 7);
+        renderLog();
+        return;
+      }
       const view = e.target.closest("[data-view]");
       if (view) {
         const [id, kind] = (view.dataset.view || "").split(":");
