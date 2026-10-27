@@ -1608,6 +1608,16 @@
         ownerId: m.ownerId || m.owner_id || ""
       };
     }
+    function compareMemberName(a, b) {
+      const an = String((a && a.name) || "").trim();
+      const bn = String((b && b.name) || "").trim();
+      const byName = an.localeCompare(bn, "ko", { sensitivity: "base" });
+      if (byName) return byName;
+      return String((a && a.id) || "").localeCompare(String((b && b.id) || ""));
+    }
+    function sortMembers() {
+      if (state && Array.isArray(state.members)) state.members.sort(compareMemberName);
+    }
     function dataKey() {
       const uid = window.Cloud && Cloud.user && Cloud.user.id;
       return uid ? DATA_KEY + ":" + uid : DATA_KEY + ":guest";
@@ -1676,6 +1686,7 @@
     function setCloudState(next) {
       if (window.Cloud && Cloud.isBusy && Cloud.isBusy()) return;
       state = { members: ((next && next.members) || []).map(normalizeMember) };
+      sortMembers();
       try { cacheLocal(); } catch (_) {}
     }
     function toastCloud(msg, err) {
@@ -1707,16 +1718,19 @@
         if (!busy) renderShareLive();
       }
       if (tab === "home") renderHome();
+      if (tab === "members") renderMembers();
     }
     window.addEventListener("storage", (e) => {
       if (!e.key || e.key.indexOf(DATA_KEY) !== 0 || !e.newValue) return;
       if (e.key !== dataKey()) return;
       try { state = { members: (JSON.parse(e.newValue).members || []).map(normalizeMember) }; }
       catch { return; }
+      sortMembers();
       refreshLiveViews();
     });
     if (liveCh) liveCh.onmessage = () => {
       try { state = { members: loadData().members }; } catch { return; }
+      sortMembers();
       refreshLiveViews();
     };
     function openDb() {
@@ -2243,7 +2257,7 @@
     }
     function memberPickListHtml(slotId) {
       if (!state.members.length) return '<p class="hint" style="margin:8px 12px">등록된 회원이 없습니다. 이름과 연락처를 직접 입력하세요.</p>';
-      return state.members.map((m) => {
+      return state.members.slice().sort(compareMemberName).map((m) => {
         const contact = memberContact(m);
         const slotAttr = slotId ? ` data-pick-slot="${esc(slotId)}"` : "";
         return `<button type="button" data-pick-member="${esc(m.id)}"${slotAttr}><b>${esc(m.name)}</b><small>${contact ? esc(contact) : "연락처 없음 · 선택 후 입력"}</small></button>`;
@@ -3380,7 +3394,7 @@
       show("logWork", mode === "work");
       if (mode === "pick") {
         $("logPicker").innerHTML = state.members.length
-          ? state.members.map((x) => {
+          ? state.members.slice().sort(compareMemberName).map((x) => {
               const dates = archivedDates(x);
               const st = dayStats(x, today()); const prev = prevSession(x, today());
               const sub = dates.length ? dates.length + "개 일지" : "아직 일지 없음";
@@ -3714,9 +3728,7 @@
       $("memberFilterHint").textContent = memberFilter === "expired"
         ? "잔여 0회이거나 이용 종료일이 지난 회원입니다. 회차 충전·종료일 연장 시 진행 중으로 복구됩니다."
         : "잔여 횟수가 있거나 이용 기간 중인 회원입니다.";
-      const list = (memberFilter === "expired" ? expired : active)
-        .slice()
-        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko", { sensitivity: "base" }));
+      const list = (memberFilter === "expired" ? expired : active).slice().sort(compareMemberName);
       $("memberList").innerHTML = list.length
         ? list.map(memberTileHtml).join("")
         : `<div class="empty">${memberFilter === "expired" ? "만료된 회원이 없습니다." : "진행 중인 회원이 없습니다."}</div>`;
@@ -4875,8 +4887,9 @@
       $("classTitle").textContent = editing ? "수업 수정" : "수업 추가";
       $("classFromId").value = opts.id || "";
       $("classFromDate").value = opts.date || "";
-      $("classMember").innerHTML = state.members.map((m) => '<option value="' + m.id + '">' + esc(m.name) + "</option>").join("");
-      $("classMember").value = opts.id || state.members[0].id;
+      const roster = state.members.slice().sort(compareMemberName);
+      $("classMember").innerHTML = roster.map((m) => '<option value="' + m.id + '">' + esc(m.name) + "</option>").join("");
+      $("classMember").value = opts.id || roster[0].id;
       $("classDate").value = opts.date || calIso || today();
       $("classStart").value = opts.start || "16:00";
       $("classMins").value = String(opts.minutes || 60);
@@ -5403,6 +5416,7 @@
         state.members.push(m);
         currentId = m.id;
       }
+      sortMembers();
       const ok = await persistCloud({ notify: true });
       if (!ok) return;
       closeModal();
