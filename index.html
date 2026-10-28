@@ -286,6 +286,13 @@
     .media-card .thumb { width: 132px; height: 132px; }
     .media-ops { display: flex; gap: 4px; margin-top: 4px; }
     .media-ops .btn, .media-ops .file { flex: 1; min-height: 32px; padding: 0 4px; font-size: .72rem; font-weight: 700; }
+    .media-dl {
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      width: 100%; min-height: 34px; margin-top: 4px; padding: 0 8px; font-size: .75rem;
+    }
+    .media-dl svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .media-shot { width: 100%; max-width: 420px; }
+    .media-shot .media-dl { margin-top: 6px; }
     .media-kind {
       position: absolute; left: 6px; bottom: 6px; pointer-events: none;
       background: rgba(15, 23, 42, .72); color: #fff; border-radius: 999px;
@@ -706,8 +713,16 @@
     .tag.wait { background: var(--warn-soft); color: var(--warn); }
     .tag.closed { background: #F1F5F9; color: #475569; }
     .book-slot { padding-left: 22px; }
-    .viewer { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .viewer {
+      position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.88);
+      display: flex; align-items: center; justify-content: center;
+      padding: calc(64px + env(safe-area-inset-top, 0px)) 16px 24px;
+    }
     .viewer img, .viewer video { max-width: 100%; max-height: 80dvh; border-radius: 12px; }
+    .viewer-bar {
+      position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 16px;
+      display: flex; gap: 8px; z-index: 2;
+    }
     #dayLogBg { z-index: 55; }
     .mini-cal { padding: 14px 12px 10px; margin-bottom: 14px; }
     .mini-cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
@@ -743,7 +758,7 @@
     .day-combo .media-view img { width: 100%; height: auto; max-height: 52dvh; object-fit: contain; display: block; background: #111; }
     .hist-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
     .client-cal-day.has { font-weight: 800; }
-    #closeViewer { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 16px; }
+    #closeViewer, #downloadViewer { position: static; }
     .modal-bg {
       position: fixed; inset: 0; z-index: 40; background: rgba(44,42,38,.45);
       display: flex; align-items: center; justify-content: center;
@@ -1497,7 +1512,10 @@
   </div>
 
   <div id="viewer" class="viewer hidden">
-    <button class="btn" id="closeViewer" type="button">닫기</button>
+    <div class="viewer-bar">
+      <button class="btn soft" id="downloadViewer" type="button">다운로드</button>
+      <button class="btn" id="closeViewer" type="button">닫기</button>
+    </div>
     <div id="viewerBody"></div>
   </div>
 
@@ -3506,6 +3524,7 @@
         const label = media.kind === "video" ? "영상" : "사진";
         parts.push(`<div class="media-card">
           <button class="thumb" type="button" data-view="${media.id}:${media.kind}">${inner}<span class="media-kind">${label}</span></button>
+          <button class="btn soft media-dl" type="button" data-download-media="${esc(url)}" data-download-kind="${esc(media.kind)}" aria-label="다운로드"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>다운로드</button>
           <div class="media-ops">
             <label class="btn soft file">교체<input type="file" accept="image/*,video/*" data-replace-ex="${esc(ex.id)}" data-replace-id="${esc(media.id)}" /></label>
             <button class="btn danger" type="button" data-del-media="${esc(ex.id)}:${esc(media.id)}">삭제</button>
@@ -4364,10 +4383,11 @@
         }
         const url = await fileUrl(media.id, share || (shareCtx && shareCtx.code) || "", { url: media.url, video_url: media.video_url, path: media.path, kind: media.kind });
         if (!url) continue;
+        const dl = `<button class="btn soft media-dl" type="button" data-download-media="${esc(url)}" data-download-kind="${esc(media.kind)}" aria-label="다운로드"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>다운로드</button>`;
         if (media.kind === "video") {
-          parts.push(`<div class="thumb lg"><video src="${url}" controls playsinline preload="metadata"></video></div>`);
+          parts.push(`<div class="media-shot"><div class="thumb lg"><video src="${url}" controls playsinline preload="metadata"></video></div>${dl}</div>`);
         } else {
-          parts.push(`<button class="thumb lg" type="button" data-view="${esc(media.id)}:image"><img src="${url}" alt="" /></button>`);
+          parts.push(`<div class="media-shot"><button class="thumb lg" type="button" data-view="${esc(media.id)}:image"><img src="${url}" alt="" /></button>${dl}</div>`);
         }
       }
       return parts.length ? `<div class="media media-view">${parts.join("")}</div>` : "";
@@ -5129,15 +5149,72 @@
       }
       return null;
     }
+    function mediaDownloadName(url, kind) {
+      let ext = kind === "video" ? "mp4" : "jpg";
+      try {
+        const base = new URL(url, location.href).pathname.split("/").pop() || "";
+        const dot = base.lastIndexOf(".");
+        if (dot > 0) ext = base.slice(dot + 1).toLowerCase();
+      } catch (_) {}
+      ext = ext.replace(/[^a-z0-9]/g, "") || (kind === "video" ? "mp4" : "jpg");
+      return (kind === "video" ? "pt-video-" : "pt-photo-") + Date.now().toString(36) + "." + ext;
+    }
+    function saveBlobFile(blob, name) {
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = name;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    }
+    async function downloadMediaFile(url, kind) {
+      if (!url) return;
+      const name = mediaDownloadName(url, kind);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("download failed");
+        saveBlobFile(await res.blob(), name);
+        return;
+      } catch (_) {}
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    function openViewer(url, kind) {
+      if (!url) return;
+      const safe = esc(url);
+      $("viewerBody").innerHTML = kind === "video"
+        ? `<video src="${safe}" controls autoplay playsinline></video>`
+        : `<img src="${safe}" alt="" />`;
+      const btn = $("downloadViewer");
+      if (btn) {
+        btn.dataset.downloadMedia = url;
+        btn.dataset.downloadKind = kind === "video" ? "video" : "image";
+      }
+      $("viewer").classList.remove("hidden");
+    }
     async function showViewer(id, kind) {
       const media = findMediaRecord(id);
       const url = await fileUrl(id, (shareCtx && shareCtx.code) || "", media ? {
         url: media.url, video_url: media.video_url, path: media.path, kind: media.kind || kind
       } : { kind: kind });
       if (!url) return;
-      $("viewerBody").innerHTML = kind === "video" ? `<video src="${url}" controls autoplay playsinline></video>` : `<img src="${url}" alt="" />`;
-      $("viewer").classList.remove("hidden");
+      openViewer(url, kind === "video" ? "video" : "image");
     }
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-download-media]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      downloadMediaFile(btn.dataset.downloadMedia, btn.dataset.downloadKind || "image");
+    });
 
     document.querySelector(".tabbar").addEventListener("click", (e) => {
       const b = e.target.closest("[data-tab]");
@@ -5949,7 +6026,7 @@
       if (view && !e.target.closest(".x")) { showViewer(view.dataset.view.split(":")[0], "image"); return; }
       if (srcView) {
         const img = srcView.querySelector("img");
-        if (img) { $("viewerBody").innerHTML = `<img src="${img.src}" alt="" />`; $("viewer").classList.remove("hidden"); }
+        if (img) openViewer(img.src, "image");
       }
     });
     async function addPhoto(kind, file) {
@@ -6443,10 +6520,18 @@
       const src = e.target.closest("[data-src-view]");
       if (src) {
         const img = src.querySelector("img");
-        if (img) { $("viewerBody").innerHTML = `<img src="${img.src}" alt="" />`; $("viewer").classList.remove("hidden"); }
+        if (img) openViewer(img.src, "image");
       }
     });
-    $("closeViewer").onclick = () => { $("viewer").classList.add("hidden"); $("viewerBody").innerHTML = ""; };
+    $("closeViewer").onclick = () => {
+      $("viewer").classList.add("hidden");
+      $("viewerBody").innerHTML = "";
+      const dl = $("downloadViewer");
+      if (dl) {
+        delete dl.dataset.downloadMedia;
+        delete dl.dataset.downloadKind;
+      }
+    };
     $("viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") $("closeViewer").click(); });
     $("closeDayLog").onclick = () => closeDayLog();
     $("dayLogBg").addEventListener("click", async (e) => {
