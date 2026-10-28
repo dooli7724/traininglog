@@ -581,6 +581,9 @@
     #logWork > #logDay {
       margin: 0 0 6px; font-size: 1.08rem; font-weight: 800; color: var(--text); letter-spacing: -.02em;
     }
+    .log-date-field { margin: 0 0 12px; }
+    .log-date-field .cap { margin: 0 0 8px; }
+    #logWorkDate { font-size: 1.08rem; font-weight: 700; }
     #logWork > .acc,
     #logWork > .log-block {
       background: #EEF0F6;
@@ -1056,6 +1059,11 @@
       </div>
       <div id="logWork" class="hidden">
         <div class="card mini-cal" id="logCalWork"></div>
+        <div class="log-date-field">
+          <label class="cap" for="logWorkDate">수업 날짜</label>
+          <input class="field" id="logWorkDate" type="date" />
+          <p class="hint">기본은 오늘입니다. 과거나 미래 날짜로 바꿀 수 있습니다.</p>
+        </div>
         <p class="label" id="logDay"></p>
         <p class="hint" id="logPrevHint"></p>
         <button class="btn danger wide" id="logDeleteDay" type="button">이 날짜 일지 삭제</button>
@@ -3420,6 +3428,8 @@
       }
       $("logName").textContent = m.name;
       $("logDay").textContent = prettyDate(logDate) + " · " + logDate + " 수업";
+      const dateInput = $("logWorkDate");
+      if (dateInput) dateInput.value = logDate || today();
       const prev = prevSession(m, logDate); const lw = lastWeekSession(m);
       let hint = "";
       if (prev) hint += "직전 수업 " + prettyDate(prev.date);
@@ -5202,6 +5212,78 @@
     });
     $("logPicker").addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) { fromTab = "log"; currentId = b.dataset.open; logDate = null; logCalMonth = today().slice(0, 7); renderLog(); } });
     $("logDateList").addEventListener("click", (e) => { const b = e.target.closest("[data-open-date]"); if (b) { logDate = b.dataset.openDate; logCalMonth = String(logDate).slice(0, 7); renderLog(); } });
+    function sessionHasContent(s) {
+      if (!s) return false;
+      if ((s.exercises || []).some((ex) => ex && ((ex.media || []).length || String(ex.name || "").trim() || String(exerciseRecord(ex) || "").trim()))) return true;
+      return !!(String(s.program || "").trim() || String(s.feedback || "").trim() || String(s.memo || "").trim());
+    }
+    function syncLogForm(s) {
+      if (!s) return;
+      const program = $("logProgram");
+      const feedback = $("logFeedback");
+      const memo = $("logMemo");
+      if (program) s.program = program.value;
+      if (feedback) s.feedback = feedback.value;
+      if (memo) s.memo = memo.value;
+      document.querySelectorAll("#exercises [data-ex-record]").forEach((el) => {
+        const row = (s.exercises || []).find((x) => x.id === el.dataset.exRecord);
+        if (row) row.record = el.value;
+      });
+    }
+    async function retargetSessionVideos(member, session, date) {
+      if (!(window.Cloud && Cloud.ready) || !member || !member.share || !session) return;
+      for (const ex of session.exercises || []) {
+        for (const media of ex.media || []) {
+          if (!media || media.kind !== "video" || !media.video_url) continue;
+          try {
+            await Cloud.upsertLog(member.share, "video", {
+              id: media.id,
+              member_id: member.id,
+              date: date,
+              exerciseId: ex.id,
+              video_url: media.video_url,
+              path: media.path || ""
+            });
+          } catch (err) {
+            console.warn(err);
+          }
+        }
+      }
+    }
+    $("logWorkDate").addEventListener("change", async () => {
+      const input = $("logWorkDate");
+      const next = isoDate(input.value);
+      const prev = logDate;
+      if (!next || !/^\d{4}-\d{2}-\d{2}$/.test(next)) {
+        input.value = prev || today();
+        return;
+      }
+      if (!prev || next === prev) return;
+      const m = currentMember();
+      if (!m) return;
+      m.sessions = m.sessions || {};
+      const current = m.sessions[prev];
+      if (current) syncLogForm(current);
+      const dest = m.sessions[next];
+      if (dest && dest !== current && sessionHasContent(dest)) {
+        if (!confirm(prettyDate(next) + "에 이미 일지가 있습니다.\n지금 일지를 그 날짜로 옮기면 기존 일지가 대체됩니다.")) {
+          input.value = prev;
+          return;
+        }
+        for (const ex of dest.exercises || []) {
+          for (const media of ex.media || []) await forgetExerciseMedia(media, m.share || "");
+        }
+      }
+      if (current) {
+        m.sessions[next] = current;
+        delete m.sessions[prev];
+      }
+      logDate = next;
+      logCalMonth = next.slice(0, 7);
+      const ok = await persistCloud({ notify: true });
+      if (ok) await retargetSessionVideos(m, m.sessions[next], next);
+      renderLog();
+    });
     $("addLogDate").onclick = () => {
       const d = $("newLogDate").value || today();
       if (!currentMember()) return;
