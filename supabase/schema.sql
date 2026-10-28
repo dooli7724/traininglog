@@ -188,32 +188,34 @@ returns table (gym_id uuid, data jsonb, rev bigint)
 language plpgsql
 security definer
 set search_path = public
-as '
+as $fn$
+#variable_conflict use_column
 declare
   gid uuid;
   uid uuid;
 begin
   uid := auth.uid();
   if uid is null then
-    raise exception ''not authenticated'';
+    raise exception 'not authenticated';
   end if;
   select g.id into gid from public.gyms g where g.owner_id = uid;
   if gid is null then
     insert into public.gyms (owner_id) values (uid) returning id into gid;
   end if;
-  insert into public.gym_state (gym_id, user_id, data)
-    values (gid, uid, ''{"members":[]}''::jsonb)
+  insert into public.gym_state as gs (gym_id, user_id, data)
+    values (gid, uid, '{"members":[]}'::jsonb)
   on conflict (gym_id) do update
-    set user_id = coalesce(public.gym_state.user_id, excluded.user_id);
+    set user_id = coalesce(gs.user_id, excluded.user_id);
   update public.member_logs
     set user_id = uid
-    where member_logs.gym_id = gid and member_logs.user_id is null;
+    where public.member_logs.gym_id = gid
+      and public.member_logs.user_id is null;
   return query
     select s.gym_id, s.data, s.rev
     from public.gym_state s
     where s.gym_id = gid;
 end;
-';
+$fn$;
 
 create or replace function public.load_trainer_state()
 returns jsonb
