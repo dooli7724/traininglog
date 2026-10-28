@@ -1513,7 +1513,7 @@
 
   <div id="viewer" class="viewer hidden">
     <div class="viewer-bar">
-      <button class="btn soft" id="downloadViewer" type="button">다운로드</button>
+      <button class="btn soft" id="downloadViewer" type="button">저장</button>
       <button class="btn" id="closeViewer" type="button">닫기</button>
     </div>
     <div id="viewerBody"></div>
@@ -1715,14 +1715,14 @@
       sortMembers();
       try { cacheLocal(); } catch (_) {}
     }
-    function toastCloud(msg, err) {
+    function toastCloud(msg, err, ms) {
       const el = $("cloudToast");
       if (!el) return;
       el.textContent = msg;
       el.classList.toggle("err", !!err);
       el.classList.add("on");
       clearTimeout(toastCloud._t);
-      toastCloud._t = setTimeout(() => el.classList.remove("on"), err ? 5200 : 1800);
+      toastCloud._t = setTimeout(() => el.classList.remove("on"), ms || (err ? 5200 : 1800));
     }
     function setSyncDot(mode) {
       const d = $("syncDot");
@@ -3524,7 +3524,7 @@
         const label = media.kind === "video" ? "영상" : "사진";
         parts.push(`<div class="media-card">
           <button class="thumb" type="button" data-view="${media.id}:${media.kind}">${inner}<span class="media-kind">${label}</span></button>
-          <button class="btn soft media-dl" type="button" data-download-media="${esc(url)}" data-download-kind="${esc(media.kind)}" aria-label="다운로드"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>다운로드</button>
+          <button class="btn soft media-dl" type="button" data-download-media="${esc(url)}" data-download-kind="${esc(media.kind)}" aria-label="사진첩에 저장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>저장</button>
           <div class="media-ops">
             <label class="btn soft file">교체<input type="file" accept="image/*,video/*" data-replace-ex="${esc(ex.id)}" data-replace-id="${esc(media.id)}" /></label>
             <button class="btn danger" type="button" data-del-media="${esc(ex.id)}:${esc(media.id)}">삭제</button>
@@ -4383,7 +4383,7 @@
         }
         const url = await fileUrl(media.id, share || (shareCtx && shareCtx.code) || "", { url: media.url, video_url: media.video_url, path: media.path, kind: media.kind });
         if (!url) continue;
-        const dl = `<button class="btn soft media-dl" type="button" data-download-media="${esc(url)}" data-download-kind="${esc(media.kind)}" aria-label="다운로드"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>다운로드</button>`;
+        const dl = `<button class="btn soft media-dl" type="button" data-download-media="${esc(url)}" data-download-kind="${esc(media.kind)}" aria-label="사진첩에 저장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>저장</button>`;
         if (media.kind === "video") {
           parts.push(`<div class="media-shot"><div class="thumb lg"><video src="${url}" controls playsinline preload="metadata"></video></div>${dl}</div>`);
         } else {
@@ -5149,6 +5149,24 @@
       }
       return null;
     }
+    function wantsGalleryShare() {
+      const ua = navigator.userAgent || "";
+      if (/iPhone|iPad|iPod|Android/i.test(ua)) return true;
+      return navigator.maxTouchPoints > 1 && /Macintosh/i.test(ua);
+    }
+    function mediaMime(blob, kind, name) {
+      const t = (blob && blob.type ? blob.type : "").toLowerCase();
+      if (t.indexOf("image/") === 0 || t.indexOf("video/") === 0) return t;
+      if (kind === "video") {
+        if (/\.mov$/i.test(name)) return "video/quicktime";
+        if (/\.webm$/i.test(name)) return "video/webm";
+        return "video/mp4";
+      }
+      if (/\.png$/i.test(name)) return "image/png";
+      if (/\.webp$/i.test(name)) return "image/webp";
+      if (/\.gif$/i.test(name)) return "image/gif";
+      return "image/jpeg";
+    }
     function mediaDownloadName(url, kind) {
       let ext = kind === "video" ? "mp4" : "jpg";
       try {
@@ -5170,22 +5188,50 @@
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
     }
+    function openOriginalMedia(url, kind) {
+      const opened = window.open(url, "_blank", "noopener");
+      if (!wantsGalleryShare()) {
+        if (!opened) toastCloud("원본 파일을 열지 못했습니다.", true);
+        return;
+      }
+      const hint = kind === "video"
+        ? "영상을 새 탭에서 열었습니다. 재생 화면의 공유 버튼으로 사진 앱에 저장해 주세요."
+        : "사진을 새 탭에서 열었습니다. 이미지를 길게 눌러 ‘사진 앱에 저장’을 눌러 주세요.";
+      toastCloud(opened ? hint : "팝업이 막혀 원본을 열지 못했습니다. 브라우저 팝업을 허용한 뒤 다시 눌러 주세요.", !opened, 6500);
+    }
+    async function shareToGallery(file) {
+      if (!file || !navigator.share || !navigator.canShare || !navigator.canShare({ files: [file] })) return "unsupported";
+      try {
+        await navigator.share({ files: [file], title: file.name });
+        return "shared";
+      } catch (err) {
+        if (err && err.name === "AbortError") return "cancel";
+        return "unsupported";
+      }
+    }
     async function downloadMediaFile(url, kind) {
       if (!url) return;
       const name = mediaDownloadName(url, kind);
+      const gallery = wantsGalleryShare();
+      let blob = null;
       try {
         const res = await fetch(url);
         if (!res.ok) throw new Error("download failed");
-        saveBlobFile(await res.blob(), name);
-        return;
+        blob = await res.blob();
       } catch (_) {}
-      const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      if (blob && gallery) {
+        let file = null;
+        try { file = new File([blob], name, { type: mediaMime(blob, kind, name) }); } catch (_) {}
+        const shared = await shareToGallery(file);
+        if (shared === "shared" || shared === "cancel") return;
+        openOriginalMedia(url, kind);
+        return;
+      }
+      if (blob) {
+        saveBlobFile(blob, name);
+        return;
+      }
+      openOriginalMedia(url, kind);
     }
     function openViewer(url, kind) {
       if (!url) return;
