@@ -5504,21 +5504,54 @@
       closeModal();
       if (currentId) setTab("detail", true); else renderMembers();
     });
-    $("addEx").onclick = async () => {
-      const name = $("exName").value.trim(); const s = sessionOf();
-      if (!name || !s) return;
-      s.exercises.push({ id: uid(), name, record: "", media: [], feedback: "" });
-      $("exName").value = "";
+    let exNameComposing = false;
+    let exNameEnterDuringCompose = false;
+    let exAddGuard = { name: "", at: 0 };
+    async function addExerciseFromField() {
+      const input = $("exName");
+      if (!input) return;
+      const name = input.value.trim();
+      input.value = "";
+      if (!name) return;
+      const now = Date.now();
+      if (exAddGuard.name && now - exAddGuard.at < 400) {
+        if (name === exAddGuard.name) return;
+        if (exAddGuard.name.endsWith(name) && name.length < exAddGuard.name.length) return;
+      }
+      const s = sessionOf();
+      if (!s) { input.value = name; return; }
+      exAddGuard = { name: name, at: now };
+      s.exercises.push({ id: uid(), name: name, record: "", media: [], feedback: "" });
       await persistCloud({ silent: true });
       await renderExercises();
-    };
+    }
+    $("addEx").onclick = () => { addExerciseFromField(); };
+    $("exName").addEventListener("compositionstart", () => { exNameComposing = true; });
+    $("exName").addEventListener("compositionend", (ev) => {
+      exNameComposing = false;
+      if (!exNameEnterDuringCompose) return;
+      exNameEnterDuringCompose = false;
+      const composed = ev && ev.data ? String(ev.data).trim() : "";
+      const input = $("exName");
+      if (input && composed && composed !== input.value.trim()) input.value = composed;
+      addExerciseFromField();
+    });
+    $("exName").addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      if (e.isComposing || exNameComposing || e.keyCode === 229) {
+        exNameEnterDuringCompose = true;
+        return;
+      }
+      e.preventDefault();
+      exNameEnterDuringCompose = false;
+      addExerciseFromField();
+    });
     $("logSave").onclick = async () => {
       const btn = $("logSave");
       btn.disabled = true;
       try { await persistCloud({ notify: true }); }
       finally { btn.disabled = false; }
     };
-    $("exName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addEx").click(); });
     $("logWork").addEventListener("click", (e) => {
       const toggle = e.target.closest("[data-log-toggle]");
       if (!toggle) return;
