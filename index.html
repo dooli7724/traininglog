@@ -5505,19 +5505,23 @@
       if (currentId) setTab("detail", true); else renderMembers();
     });
     let exNameComposing = false;
-    let exNameEnterDuringCompose = false;
     let exAddGuard = { name: "", at: 0 };
+    function imeKey(e) {
+      return !!(e && (e.isComposing || e.keyCode === 229));
+    }
     async function addExerciseFromField() {
       const input = $("exName");
-      if (!input) return;
+      if (!input || exNameComposing) return;
       const name = input.value.trim();
-      input.value = "";
       if (!name) return;
       const now = Date.now();
       if (exAddGuard.name && now - exAddGuard.at < 400) {
-        if (name === exAddGuard.name) return;
-        if (exAddGuard.name.endsWith(name) && name.length < exAddGuard.name.length) return;
+        if (name === exAddGuard.name || (exAddGuard.name.endsWith(name) && name.length < exAddGuard.name.length)) {
+          input.value = "";
+          return;
+        }
       }
+      input.value = "";
       const s = sessionOf();
       if (!s) { input.value = name; return; }
       exAddGuard = { name: name, at: now };
@@ -5527,23 +5531,11 @@
     }
     $("addEx").onclick = () => { addExerciseFromField(); };
     $("exName").addEventListener("compositionstart", () => { exNameComposing = true; });
-    $("exName").addEventListener("compositionend", (ev) => {
-      exNameComposing = false;
-      if (!exNameEnterDuringCompose) return;
-      exNameEnterDuringCompose = false;
-      const composed = ev && ev.data ? String(ev.data).trim() : "";
-      const input = $("exName");
-      if (input && composed && composed !== input.value.trim()) input.value = composed;
-      addExerciseFromField();
-    });
+    $("exName").addEventListener("compositionend", () => { exNameComposing = false; });
     $("exName").addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
-      if (e.isComposing || exNameComposing || e.keyCode === 229) {
-        exNameEnterDuringCompose = true;
-        return;
-      }
+      if (imeKey(e) || exNameComposing) return;
       e.preventDefault();
-      exNameEnterDuringCompose = false;
       addExerciseFromField();
     });
     $("logSave").onclick = async () => {
@@ -5666,7 +5658,11 @@
           saveData();
           renderExercises();
         };
+        let renamingCompose = false;
+        input.addEventListener("compositionstart", () => { renamingCompose = true; });
+        input.addEventListener("compositionend", () => { renamingCompose = false; });
         input.addEventListener("keydown", (ev) => {
+          if (ev.isComposing || ev.keyCode === 229 || renamingCompose) return;
           if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
           if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
         });
